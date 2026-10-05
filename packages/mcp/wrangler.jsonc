@@ -45,7 +45,8 @@
       "routes": [],
       "vars": {
         "API_BASE_URL": "https://spacecontext-backend-staging.finikos.workers.dev/v1",
-        "PUBLIC_URL": "https://spacecontext-mcp-staging.finikos.workers.dev"
+        "PUBLIC_URL": "https://spacecontext-mcp-staging.finikos.workers.dev",
+        "APPLE_SERVICES_ID": "it.spacecontext.ai.web"
       },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "21f82a0549ce432fa7aadf47c5a2d415" }],
       "services": [{ "binding": "BACKEND", "service": "spacecontext-backend-staging" }]
