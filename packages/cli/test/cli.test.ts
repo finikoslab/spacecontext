@@ -144,7 +144,7 @@ describe('spacecontext CLI', () => {
           : undefined,
       (call) =>
         call.path === `/spaces/${SPACE_ID}/ask`
-          ? json({ object: 'answer', space_id: SPACE_ID, scan_id: SCAN_ID, question: JSON.parse(String(call.body)).question, answer: 'Under the bathroom sink.', documented: true, citations: [{ record_type: 'item', record_id: 'itm_1', title: 'Stopcock', area: 'Bathroom', evidence: [] }] })
+          ? json({ object: 'answer', space_id: SPACE_ID, scan_id: SCAN_ID, question: JSON.parse(String(call.body)).question, answer: 'Under the bathroom sink.', documented: true, citations: [{ record_type: 'item', record_id: 'itm_1', title: 'Stopcock', area: 'Bathroom', evidence: [] }, { record_type: 'area', record_id: 'area_1', title: 'Bathroom', area: 'Bathroom', evidence: [] }] })
           : undefined,
     ], { SPACECONTEXT_API_KEY: KEY });
 
@@ -155,6 +155,10 @@ describe('spacecontext CLI', () => {
 
     expect(await main(['ask', SPACE_ID, 'where is the stopcock?', '--json'], h.io)).toBe(0);
     expect(JSON.parse(h.stdout().slice(h.stdout().indexOf('{')))).toMatchObject({ answer: 'Under the bathroom sink.', question: 'where is the stopcock?' });
+
+    expect(await main(['ask', SPACE_ID, 'where is the stopcock?'], h.io)).toBe(0);
+    // An area cited as a source is not followed by its own name.
+    expect(h.stdout()).toContain('Sources:\n  - Stopcock (Bathroom)\n  - Bathroom\n');
 
     expect(await main(['search', 'x', '--limit', 'ten'], h.io)).toBe(2);
     expect(await main(['ask', SPACE_ID], h.io)).toBe(2);

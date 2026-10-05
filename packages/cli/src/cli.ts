@@ -217,9 +217,14 @@ async function search(context: Context): Promise<void> {
     results.data.length === 0
       ? 'Nothing found.\n'
       : results.data
-          .map((hit) => `${hit.title}${hit.area ? ` — ${hit.area}` : ''}  [${hit.space_name}, ${hit.record_type} ${hit.record_id}]\n  ${hit.text}`)
+          .map((hit) => `${hit.title}${inArea(hit.title, hit.area, ' — ')}  [${hit.space_name}, ${hit.record_type} ${hit.record_id}]\n  ${hit.text}`)
           .join('\n') + '\n'
   );
+}
+
+/** The area after a record's title, left out when the record is the area itself. */
+function inArea(title: string, area: string | null | undefined, before: string, after = ''): string {
+  return area && area !== title ? `${before}${area}${after}` : '';
 }
 
 async function ask(context: Context): Promise<void> {
@@ -227,7 +232,7 @@ async function ask(context: Context): Promise<void> {
   if (!id) throw new UsageError('Missing space id');
   const answer = await (await client(context)).spaces.ask(id, words(rest, 'question'));
   print(context.io, context.values, answer, () => {
-    const sources = answer.citations.map((citation) => `  - ${citation.title}${citation.area ? ` (${citation.area})` : ''}`);
+    const sources = answer.citations.map((citation) => `  - ${citation.title}${inArea(citation.title, citation.area, ' (', ')')}`);
     return `${answer.answer}\n${sources.length > 0 ? `\nSources:\n${sources.join('\n')}\n` : ''}`;
   });
 }
