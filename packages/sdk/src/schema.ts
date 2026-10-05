@@ -73,6 +73,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The sign-in methods of this deployment, for the console and the MCP sign-in page */
+        get: operations["listSignInProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign in to the console with a Google ID token (web client) */
+        post: operations["signInWithGoogle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/apple": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign in to the console with an Apple identity token (web Services ID) */
+        post: operations["signInWithApple"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/session": {
         parameters: {
             query?: never;
@@ -343,6 +394,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the invoices of the top-ups, newest first
+         * @description Stripe invoices, with their hosted page and PDF. Issued for every top-up when invoicing is on (`invoicing`), with the billing address and tax ID given at checkout.
+         */
+        get: operations["listInvoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/ledger": {
         parameters: {
             query?: never;
@@ -448,6 +519,46 @@ export interface paths {
         put?: never;
         /** Stripe webhook endpoint (called by Stripe, authenticated by its signature) */
         post: operations["receiveStripeWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything the console dashboard shows: holdings, the last 30 days, spend and usage per key
+         * @description Counts of spaces, scans, documented items and open issues; daily series of scans, questions, searches, spend and API requests; per-key spend and request metrics. Request metrics come from Workers Analytics Engine and are null when not available.
+         */
+        get: operations["getConsoleOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The account audit log: keys, webhooks, billing, sign-ins and deletions, newest first
+         * @description Kept 400 days. Actors: `console` (the signed-in owner), `key:<id>`, `stripe`, `system`.
+         */
+        get: operations["listAuditLog"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -690,6 +801,29 @@ export interface components {
         ApiKeyCreateResponse: components["schemas"]["ApiKey"] & {
             key: string;
         };
+        SignInProviders: {
+            /** @constant */
+            email: true;
+            google: {
+                client_id: string;
+            } | null;
+            apple: {
+                services_id: string;
+                redirect_uri: string | null;
+            } | null;
+        };
+        GoogleSignInRequest: {
+            /** @description Google ID token from Google Identity Services, issued to the web client. */
+            id_token: string;
+        };
+        AppleSignInRequest: {
+            /** @description Apple identity token, issued to the web Services ID. */
+            id_token: string;
+            /** @description The raw nonce; Apple was given its SHA-256 (hex). */
+            nonce: string;
+            /** @description The name Apple shares on the first sign-in only. */
+            name?: string;
+        };
         MeResponse: {
             user: {
                 id: string;
@@ -698,7 +832,8 @@ export interface components {
                 is_pro: boolean;
             };
             key: {
-                id: string;
+                /** @description Null when the caller is the developer console, signed in as the owner. */
+                id: string | null;
                 /** @enum {string} */
                 mode: "live" | "test";
                 scopes: components["schemas"]["ApiKeyScope"][];
@@ -1261,6 +1396,20 @@ export interface components {
                 }[];
             };
         };
+        InvoiceList: {
+            invoicing: boolean;
+            data: {
+                id: string;
+                number: string | null;
+                status: string | null;
+                amount_paid_cents: number;
+                currency: string;
+                /** Format: date-time */
+                created_at: string;
+                hosted_invoice_url: string | null;
+                invoice_pdf_url: string | null;
+            }[];
+        };
         Wallet: {
             /** @constant */
             object: "wallet";
@@ -1311,6 +1460,86 @@ export interface components {
             enabled: boolean;
             threshold_cents?: number;
             amount_cents?: number;
+        };
+        AuditLogPage: {
+            data: {
+                id: string;
+                actor: string;
+                /** @enum {string} */
+                action: "session.created" | "session.revoked" | "key.created" | "key.revoked" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.disabled" | "billing.checkout_created" | "billing.topup_received" | "billing.auto_recharge_updated" | "billing.auto_recharge_failed" | "billing.payment_method_saved" | "billing.payment_method_removed" | "billing.refund_received" | "space.deleted";
+                target: string | null;
+                detail: Record<string, never> | null;
+                /** Format: date-time */
+                created_at: string;
+            }[];
+            next_cursor: string | null;
+        };
+        ConsoleOverview: {
+            /** @constant */
+            object: "console_overview";
+            /** @enum {string} */
+            mode: "live" | "test";
+            /** Format: date-time */
+            generated_at: string;
+            wallet: {
+                balance_cents: number;
+                free_scans_remaining: number;
+                scan_price_cents: number;
+                spent_this_month_cents: number;
+                auto_recharge_enabled: boolean;
+            };
+            totals: {
+                spaces: number;
+                /** @description Spaces scanned with the app; null when the account is not Pro, or in test mode. */
+                app_spaces: number | null;
+                scans: number;
+                scans_this_month: number;
+                items_documented: number;
+                open_issues: number;
+                questions_this_month: number;
+                searches_this_month: number;
+                active_keys: number;
+            };
+            /** @description One entry per UTC day, oldest first. */
+            series: {
+                days: string[];
+                scans: number[];
+                failed_scans: number[];
+                questions: number[];
+                searches: number[];
+                spend_cents: number[];
+                requests: number[] | null;
+                errors: number[] | null;
+            };
+            keys: {
+                id: string;
+                name: string;
+                prefix: string;
+                /** @enum {string} */
+                mode: "live" | "test";
+                /** @enum {string} */
+                source: "console" | "oauth";
+                /** Format: date-time */
+                last_used_at: string | null;
+                spent_this_month_cents: number;
+                requests_30d: number | null;
+                errors_30d: number | null;
+                avg_latency_ms: number | null;
+            }[];
+            console_requests_30d: number | null;
+            recent_scans: {
+                id: string;
+                space_id: string;
+                space_name: string;
+                status: string;
+                stage: string | null;
+                charge_kind: string | null;
+                error_code: string | null;
+                /** Format: date-time */
+                created_at: string;
+                /** Format: date-time */
+                completed_at: string | null;
+            }[];
         };
         SpaceCreateRequest: {
             name: string;
@@ -1617,6 +1846,82 @@ export interface operations {
             400: components["responses"]["ErrorResponse"];
             401: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    listSignInProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sign-in providers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignInProviders"];
+                };
+            };
+        };
+    };
+    signInWithGoogle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleSignInRequest"];
+            };
+        };
+        responses: {
+            /** @description Console session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailVerifyResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ErrorResponse"];
+        };
+    };
+    signInWithApple: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppleSignInRequest"];
+            };
+        };
+        responses: {
+            /** @description Console session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailVerifyResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ErrorResponse"];
         };
     };
     getConsoleSession: {
@@ -2174,6 +2479,31 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    listInvoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invoices */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceList"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+        };
+    };
     listLedgerEntries: {
         parameters: {
             query?: {
@@ -2326,6 +2656,58 @@ export interface operations {
             };
             400: components["responses"]["ErrorResponse"];
             503: components["responses"]["ErrorResponse"];
+        };
+    };
+    getConsoleOverview: {
+        parameters: {
+            query?: {
+                mode?: "live" | "test";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Overview */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleOverview"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listAuditLog: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit log page */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogPage"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getScan: {

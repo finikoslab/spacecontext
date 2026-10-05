@@ -107,6 +107,107 @@
         }
       }
     },
+    "/auth/providers": {
+      "get": {
+        "operationId": "listSignInProviders",
+        "security": [],
+        "summary": "The sign-in methods of this deployment, for the console and the MCP sign-in page",
+        "responses": {
+          "200": {
+            "description": "Sign-in providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInProviders"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/google": {
+      "post": {
+        "operationId": "signInWithGoogle",
+        "security": [],
+        "summary": "Sign in to the console with a Google ID token (web client)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleSignInRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Console session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/auth/apple": {
+      "post": {
+        "operationId": "signInWithApple",
+        "security": [],
+        "summary": "Sign in to the console with an Apple identity token (web Services ID)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleSignInRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Console session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
     "/auth/session": {
       "get": {
         "operationId": "getConsoleSession",
@@ -1242,6 +1343,49 @@
         }
       }
     },
+    "/billing/invoices": {
+      "get": {
+        "operationId": "listInvoices",
+        "summary": "List the invoices of the top-ups, newest first",
+        "description": "Stripe invoices, with their hosted page and PDF. Issued for every top-up when invoicing is on (`invoicing`), with the billing address and tax ID given at checkout.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoices",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
     "/billing/ledger": {
       "get": {
         "operationId": "listLedgerEntries",
@@ -1509,6 +1653,119 @@
           },
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/console/overview": {
+      "get": {
+        "operationId": "getConsoleOverview",
+        "summary": "Everything the console dashboard shows: holdings, the last 30 days, spend and usage per key",
+        "description": "Counts of spaces, scans, documented items and open issues; daily series of scans, questions, searches, spend and API requests; per-key spend and request metrics. Request metrics come from Workers Analytics Engine and are null when not available.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ],
+              "default": "live"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Overview",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleOverview"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/console/audit-log": {
+      "get": {
+        "operationId": "listAuditLog",
+        "summary": "The account audit log: keys, webhooks, billing, sign-ins and deletions, newest first",
+        "description": "Kept 400 days. Actors: `console` (the signed-in owner), `key:<id>`, `stripe`, `system`.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit log page",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           }
         }
       }
@@ -2466,6 +2723,98 @@
           }
         ]
       },
+      "SignInProviders": {
+        "type": "object",
+        "required": [
+          "email",
+          "google",
+          "apple"
+        ],
+        "properties": {
+          "email": {
+            "type": "boolean",
+            "const": true
+          },
+          "google": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "client_id"
+                ],
+                "properties": {
+                  "client_id": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "apple": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "services_id",
+                  "redirect_uri"
+                ],
+                "properties": {
+                  "services_id": {
+                    "type": "string"
+                  },
+                  "redirect_uri": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GoogleSignInRequest": {
+        "type": "object",
+        "required": [
+          "id_token"
+        ],
+        "properties": {
+          "id_token": {
+            "type": "string",
+            "description": "Google ID token from Google Identity Services, issued to the web client."
+          }
+        }
+      },
+      "AppleSignInRequest": {
+        "type": "object",
+        "required": [
+          "id_token",
+          "nonce"
+        ],
+        "properties": {
+          "id_token": {
+            "type": "string",
+            "description": "Apple identity token, issued to the web Services ID."
+          },
+          "nonce": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128,
+            "description": "The raw nonce; Apple was given its SHA-256 (hex)."
+          },
+          "name": {
+            "type": "string",
+            "description": "The name Apple shares on the first sign-in only."
+          }
+        }
+      },
       "MeResponse": {
         "type": "object",
         "required": [
@@ -2502,8 +2851,12 @@
             ],
             "properties": {
               "id": {
-                "type": "string",
-                "pattern": "^key_"
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^key_",
+                "description": "Null when the caller is the developer console, signed in as the owner."
               },
               "mode": {
                 "type": "string",
@@ -5338,6 +5691,74 @@
           }
         }
       },
+      "InvoiceList": {
+        "type": "object",
+        "required": [
+          "invoicing",
+          "data"
+        ],
+        "properties": {
+          "invoicing": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "number",
+                "status",
+                "amount_paid_cents",
+                "currency",
+                "created_at",
+                "hosted_invoice_url",
+                "invoice_pdf_url"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "number": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "amount_paid_cents": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "hosted_invoice_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "invoice_pdf_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "Wallet": {
         "type": "object",
         "required": [
@@ -5544,6 +5965,418 @@
             "type": "integer",
             "minimum": 500,
             "maximum": 50000
+          }
+        }
+      },
+      "AuditLogPage": {
+        "type": "object",
+        "required": [
+          "data",
+          "next_cursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "actor",
+                "action",
+                "target",
+                "detail",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^aud_"
+                },
+                "actor": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "session.created",
+                    "session.revoked",
+                    "key.created",
+                    "key.revoked",
+                    "webhook.created",
+                    "webhook.updated",
+                    "webhook.deleted",
+                    "webhook.disabled",
+                    "billing.checkout_created",
+                    "billing.topup_received",
+                    "billing.auto_recharge_updated",
+                    "billing.auto_recharge_failed",
+                    "billing.payment_method_saved",
+                    "billing.payment_method_removed",
+                    "billing.refund_received",
+                    "space.deleted"
+                  ]
+                },
+                "target": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "detail": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ConsoleOverview": {
+        "type": "object",
+        "required": [
+          "object",
+          "mode",
+          "generated_at",
+          "wallet",
+          "totals",
+          "series",
+          "keys",
+          "console_requests_30d",
+          "recent_scans"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "console_overview"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ]
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "wallet": {
+            "type": "object",
+            "required": [
+              "balance_cents",
+              "free_scans_remaining",
+              "scan_price_cents",
+              "spent_this_month_cents",
+              "auto_recharge_enabled"
+            ],
+            "properties": {
+              "balance_cents": {
+                "type": "integer"
+              },
+              "free_scans_remaining": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "scan_price_cents": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "spent_this_month_cents": {
+                "type": "integer"
+              },
+              "auto_recharge_enabled": {
+                "type": "boolean"
+              }
+            }
+          },
+          "totals": {
+            "type": "object",
+            "required": [
+              "spaces",
+              "app_spaces",
+              "scans",
+              "scans_this_month",
+              "items_documented",
+              "open_issues",
+              "questions_this_month",
+              "searches_this_month",
+              "active_keys"
+            ],
+            "properties": {
+              "spaces": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "app_spaces": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "description": "Spaces scanned with the app; null when the account is not Pro, or in test mode."
+              },
+              "scans": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "scans_this_month": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "items_documented": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "open_issues": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "questions_this_month": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "searches_this_month": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "active_keys": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "series": {
+            "type": "object",
+            "description": "One entry per UTC day, oldest first.",
+            "required": [
+              "days",
+              "scans",
+              "failed_scans",
+              "questions",
+              "searches",
+              "spend_cents",
+              "requests",
+              "errors"
+            ],
+            "properties": {
+              "days": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "date"
+                }
+              },
+              "scans": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "failed_scans": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "searches": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "spend_cents": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "requests": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "errors": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "prefix",
+                "mode",
+                "source",
+                "last_used_at",
+                "spent_this_month_cents",
+                "requests_30d",
+                "errors_30d",
+                "avg_latency_ms"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^key_"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "live",
+                    "test"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "console",
+                    "oauth"
+                  ]
+                },
+                "last_used_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "spent_this_month_cents": {
+                  "type": "integer"
+                },
+                "requests_30d": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "errors_30d": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "avg_latency_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "console_requests_30d": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "recent_scans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "space_id",
+                "space_name",
+                "status",
+                "stage",
+                "charge_kind",
+                "error_code",
+                "created_at",
+                "completed_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^scn_"
+                },
+                "space_id": {
+                  "type": "string",
+                  "pattern": "^spc_"
+                },
+                "space_name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "stage": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "charge_kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "error_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "completed_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              }
+            }
           }
         }
       },
