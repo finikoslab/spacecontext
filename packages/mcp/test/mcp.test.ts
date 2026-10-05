@@ -1,6 +1,6 @@
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import type { Env } from '../src/env';
 import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/html';
@@ -78,10 +78,12 @@ function fakeBackend(overrides: Partial<Record<string, (call: BackendCall) => Re
 }
 
 let backend: ReturnType<typeof fakeBackend>;
+/** Configuration added to the Worker's env by a test (sign-in providers). */
+let extraEnv: Partial<Env> = {};
 
 async function call(request: Request): Promise<Response> {
   const ctx = createExecutionContext();
-  const response = await worker.fetch(request, { ...(env as unknown as Env), BACKEND: backend.backend }, ctx);
+  const response = await worker.fetch(request, { ...(env as unknown as Env), BACKEND: backend.backend, ...extraEnv }, ctx);
   await waitOnExecutionContext(ctx);
   return response;
 }
@@ -207,6 +209,8 @@ async function tool(accessToken: string, name: string, args: Record<string, unkn
 
 beforeEach(() => {
   backend = fakeBackend();
+  extraEnv = {};
+  vi.unstubAllGlobals();
 });
 
 describe('authorization', () => {
@@ -460,5 +464,150 @@ describe('MCP tools', () => {
     const invalid = await rpc(accessToken, 'tools/call', { name: 'get_space', arguments: { space_id: '../../keys' } });
     expect(invalid.error ?? invalid.result?.isError).toBeTruthy();
     expect(backend.calls.some((entry) => entry.path.includes('keys') && entry.method === 'GET')).toBe(false);
+  });
+});
+
+describe('sign-in with Google and Apple', () => {
+  const PROVIDERS = { GOOGLE_WEB_CLIENT_ID: 'web.apps.googleusercontent.com', GOOGLE_WEB_CLIENT_SECRET: 'secret', APPLE_SERVICES_ID: 'it.example.web' };
+  const SESSION = { session_token: 'scs_social', expires_at: '2026-10-06T00:00:00.000Z', is_new_user: false, user: { id: 'user_9', email: 'relay@privaterelay.appleid.com', name: null, is_pro: true } };
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+  async function sha256Hex(text: string) {
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+    return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  it('offers the providers that are configured, and lets their redirect through the CSP', async () => {
+    const plain = await openAuthorize(await registerClient());
+    expect(plain.html).not.toContain('Continue with Google');
+
+    extraEnv = PROVIDERS;
+    const page = await openAuthorize(await registerClient());
+    expect(page.html).toContain('action="/authorize/apple"');
+    expect(page.html).toContain('action="/authorize/google"');
+    expect(page.headers.get('Content-Security-Policy')).toContain("form-action 'self' https://accounts.google.com https://appleid.apple.com;");
+
+    extraEnv = { APPLE_SERVICES_ID: 'it.example.web' };
+    const appleOnly = await openAuthorize(await registerClient());
+    expect(appleOnly.html).not.toContain('Continue with Google');
+    expect(appleOnly.headers.get('Content-Security-Policy')).toContain("form-action 'self' https://appleid.apple.com;");
+  });
+
+  it('signs in with Google, then asks for consent on its own page, with a ticket that works once', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    const tokenCalls: URLSearchParams[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      expect(String(url)).toBe('https://oauth2.googleapis.com/token');
+      tokenCalls.push(new URLSearchParams(String(init.body)));
+      return json({ id_token: 'google.id.token' });
+    });
+    const clientId = await registerClient();
+    const page = await openAuthorize(clientId);
+
+    const start = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    expect(start.status).toBe(302);
+    const google = new URL(start.headers.get('Location')!);
+    expect(google.origin + google.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+    expect(google.searchParams.get('client_id')).toBe('web.apps.googleusercontent.com');
+    expect(google.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/authorize/google/callback`);
+    const state = google.searchParams.get('state')!;
+
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`, { headers: { Cookie: page.cookie } }));
+    expect(back.status).toBe(200);
+    const consent = await back.text();
+    expect(consent).toContain('Signed in with Google as <strong>relay@privaterelay.appleid.com</strong>');
+    expect(consent).not.toContain('name="code"');
+    expect(tokenCalls[0]!.get('code')).toBe('auth-code');
+    expect(tokenCalls[0]!.get('client_secret')).toBe('secret');
+    expect(backend.calls.find((entry) => entry.path === '/auth/google')!.body).toEqual({ id_token: 'google.id.token' });
+    const ticket = /name="ticket" value="([^"]+)"/.exec(consent)![1]!;
+
+    // The state works once.
+    const replayed = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`));
+    expect(replayed.status).toBe(400);
+
+    const approved = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
+    expect(approved.status).toBe(302);
+    expect(new URL(approved.headers.get('Location')!).searchParams.get('code')).toBeTruthy();
+    expect(backend.calls.find((entry) => entry.path === '/keys')!.headers.get('Authorization')).toBe('Bearer scs_social');
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session' && entry.headers.get('Authorization') === 'Bearer scs_social')).toBe(true);
+
+    // And so does the ticket.
+    const again = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
+    expect(again.status).toBe(400);
+  });
+
+  it('signs in with Apple through its form post, with the nonce of this attempt', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/apple': () => json(SESSION) });
+    const page = await openAuthorize(await registerClient());
+
+    const start = await post('/authorize/apple', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const apple = new URL(start.headers.get('Location')!);
+    expect(apple.origin + apple.pathname).toBe('https://appleid.apple.com/auth/authorize');
+    expect(apple.searchParams.get('response_mode')).toBe('form_post');
+    expect(apple.searchParams.get('client_id')).toBe('it.example.web');
+    const hashedNonce = apple.searchParams.get('nonce')!;
+
+    // Posted by Apple's page: another origin, no cookie.
+    const back = await call(
+      new Request(`${ORIGIN}/authorize/apple/callback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://appleid.apple.com' },
+        body: new URLSearchParams({ state: apple.searchParams.get('state')!, code: 'c', id_token: 'apple.id.token', user: JSON.stringify({ name: { firstName: 'Grace', lastName: 'Hopper' } }) }).toString(),
+      })
+    );
+    expect(back.status).toBe(200);
+    expect(await back.text()).toContain('Signed in with Apple');
+    const sent = backend.calls.find((entry) => entry.path === '/auth/apple')!.body as { id_token: string; nonce: string; name: string };
+    expect(sent.id_token).toBe('apple.id.token');
+    expect(sent.name).toBe('Grace Hopper');
+    // Apple was given the hash of the nonce the API receives.
+    expect(await sha256Hex(sent.nonce)).toBe(hashedNonce);
+  });
+
+  it('goes back to the email page when the provider is cancelled or refused, and ends the session on deny', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json({ error: { code: 'INVALID_CREDENTIALS', message: 'no', request_id: 'r' } }, 401), 'POST /auth/apple': () => json(SESSION) });
+    vi.stubGlobal('fetch', async () => json({ id_token: 'google.id.token' }));
+    const page = await openAuthorize(await registerClient());
+
+    const cancelled = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const cancelState = new URL(cancelled.headers.get('Location')!).searchParams.get('state')!;
+    const backFromCancel = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${cancelState}&error=access_denied`));
+    expect(await backFromCancel.text()).toContain('Sign-in with Google was cancelled.');
+
+    const refusedStart = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const refusedState = new URL(refusedStart.headers.get('Location')!).searchParams.get('state')!;
+    const refusedBack = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${refusedState}&code=x`));
+    expect(await refusedBack.text()).toContain('Sign-in with Google failed');
+    expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
+
+    const appleStart = await post('/authorize/apple', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const appleState = new URL(appleStart.headers.get('Location')!).searchParams.get('state')!;
+    const consent = await (
+      await call(new Request(`${ORIGIN}/authorize/apple/callback`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ state: appleState, id_token: 'apple.id.token' }).toString() }))
+    ).text();
+    const ticket = /name="ticket" value="([^"]+)"/.exec(consent)![1]!;
+    const denied = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'deny' }, page.cookie);
+    expect(denied.status).toBe(302);
+    expect(new URL(denied.headers.get('Location')!).searchParams.get('error')).toBe('access_denied');
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session' && entry.headers.get('Authorization') === 'Bearer scs_social')).toBe(true);
+  });
+
+  it('refuses provider sign-ins started from another site, unknown states, and unconfigured providers', async () => {
+    const page = await openAuthorize(await registerClient());
+    expect((await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie)).status).toBe(404);
+
+    extraEnv = PROVIDERS;
+    expect((await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie, { Origin: 'https://evil.example' })).status).toBe(403);
+    expect((await call(new Request(`${ORIGIN}/authorize/google/callback?state=${'x'.repeat(43)}&code=c`))).status).toBe(400);
+    expect((await call(new Request(`${ORIGIN}/authorize/google/callback?state=short&code=c`))).status).toBe(400);
+    // A made-up ticket is refused outright, even next to a valid email code.
+    await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    const forgedTicket = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket: 'y'.repeat(43), email: 'owner@example.com', code: CODE, action: 'approve' }, page.cookie);
+    expect(forgedTicket.status).toBe(400);
+    expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
   });
 });

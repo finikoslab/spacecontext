@@ -16,7 +16,9 @@ label{display:block;margin:16px 0 6px;font-weight:600}input[type=email],input[ty
 .actions{display:flex;gap:10px;margin-top:20px}button{flex:1;padding:11px;border-radius:10px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}code{font-size:.9em}
 button.link{flex:none;padding:0;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;background:none}.resend{margin-top:8px}
-.who{border:1px solid var(--line);border-radius:10px;padding:12px;margin:16px 0}.warn{color:var(--error);font-size:.9rem}`;
+.who{border:1px solid var(--line);border-radius:10px;padding:12px;margin:16px 0}.warn{color:var(--error);font-size:.9rem}
+.providers{display:grid;gap:10px;margin:18px 0 6px}.providers form{margin:0}.providers button{width:100%;font-weight:600}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.85rem;margin:14px 0 0}.or:before,.or:after{content:"";flex:1;border-top:1px solid var(--line)}`;
 
 /**
  * Sends each form once: a second click while the first post is on its way would
@@ -72,12 +74,30 @@ function hidden(fields: Record<string, string>): string {
     .join('');
 }
 
-export function emailPage(input: { consent: ConsentDescription; handle: string; oauth: string; error?: string; email?: string }, headers?: Headers): Response {
+/** Which providers this server can sign in with. */
+export type SignInProviders = { google: boolean; apple: boolean };
+
+/** Where a provider button's post ends up: its redirect to the provider is a form action too. */
+const PROVIDER_ORIGINS = { google: 'https://accounts.google.com', apple: 'https://appleid.apple.com' } as const;
+
+function providerButtons(input: { handle: string; oauth: string }, providers: SignInProviders): string {
+  const button = (provider: 'google' | 'apple', label: string) =>
+    `<form method="post" action="/authorize/${provider}">${hidden({ handle: input.handle, oauth: input.oauth })}<button type="submit">${label}</button></form>`;
+  const buttons = [providers.apple ? button('apple', 'Continue with Apple') : '', providers.google ? button('google', 'Continue with Google') : ''].join('');
+  return buttons ? `<div class="providers">${buttons}</div><p class="or">or with your email</p>` : '';
+}
+
+export function emailPage(
+  input: { consent: ConsentDescription; handle: string; oauth: string; error?: string; email?: string; providers?: SignInProviders },
+  headers?: Headers
+): Response {
+  const providers = input.providers ?? { google: false, apple: false };
   return page(
     'Connect',
     `<h1>Connect Space Context</h1>
 <p>An AI assistant asks to read your spaces.</p>
 ${requester(input.consent)}
+${providerButtons(input, providers)}
 <form method="post" action="/authorize/code">
 ${hidden({ handle: input.handle, oauth: input.oauth })}
 <label for="email">Your Space Context email</label>
@@ -87,30 +107,54 @@ ${input.error ? `<p class="error">${escapeHtml(input.error)}</p>` : ''}
 <div class="actions"><button class="primary" type="submit">Send code</button></div>
 </form>`,
     input.error ? 400 : 200,
-    headers
+    headers,
+    (['google', 'apple'] as const).filter((provider) => providers[provider]).map((provider) => PROVIDER_ORIGINS[provider])
   );
 }
 
-export function consentPage(input: { consent: ConsentDescription; handle: string; oauth: string; email: string; error?: string }): Response {
+export function consentPage(input: {
+  consent: ConsentDescription;
+  handle: string;
+  oauth: string;
+  email: string;
+  error?: string;
+  /** Signed in with a provider: no code to type, the identity travels as a one-time ticket. */
+  ticket?: string;
+  signedInWith?: string;
+}): Response {
+  const signedIn = Boolean(input.ticket);
   return page(
     'Approve access',
-    `<h1>Check your email</h1>
-<p>We sent a code to <strong>${escapeHtml(input.email)}</strong>.</p>
+    `${
+      signedIn
+        ? `<h1>Approve access</h1>
+<p>Signed in with ${escapeHtml(input.signedInWith ?? 'your account')} as <strong>${escapeHtml(input.email)}</strong>.</p>`
+        : `<h1>Check your email</h1>
+<p>We sent a code to <strong>${escapeHtml(input.email)}</strong>.</p>`
+    }
 ${requester(input.consent)}
 <form method="post" action="/authorize/approve">
-${hidden({ handle: input.handle, oauth: input.oauth, email: input.email })}
-<label for="code">Code</label>
-<input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12">
+${hidden(signedIn ? { handle: input.handle, oauth: input.oauth, ticket: input.ticket! } : { handle: input.handle, oauth: input.oauth, email: input.email })}
+${
+  signedIn
+    ? ''
+    : `<label for="code">Code</label>
+<input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12">`
+}
 ${input.error ? `<p class="error">${escapeHtml(input.error)}</p>` : ''}
 <p><strong>It will be able to:</strong> read your spaces (areas, items, issues, key locations, instructions, facts and photos), search them and ask them questions. It cannot change or delete anything, and cannot spend money.</p>
 <label class="check"><input type="checkbox" name="sensitive" value="1"><span>Also show <strong>sensitive values</strong> such as Wi-Fi passwords, door and alarm codes, and the narration of your videos.</span></label>
 <p class="muted">You can revoke this access at any time from the console (API keys).</p>
 <div class="actions"><button type="submit" name="action" value="deny">Deny</button><button class="primary" type="submit" name="action" value="approve">Approve</button></div>
 </form>
-<form method="post" action="/authorize/code" class="resend">
+${
+  signedIn
+    ? ''
+    : `<form method="post" action="/authorize/code" class="resend">
 ${hidden({ handle: input.handle, oauth: input.oauth, email: input.email })}
 <p class="muted">No email? <button type="submit" class="link">Send a new code</button></p>
-</form>`,
+</form>`
+}`,
     input.error ? 400 : 200,
     undefined,
     // Approve and Deny both end with a redirect to the client.

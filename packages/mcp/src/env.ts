@@ -11,6 +11,11 @@ export interface Env {
   API_BASE_URL: string;
   /** This server's own origin, for links and the Origin check of the sign-in forms. */
   PUBLIC_URL: string;
+  /** Sign-in with Google: the web OAuth client (redirect URI `${PUBLIC_URL}/authorize/google/callback`). */
+  GOOGLE_WEB_CLIENT_ID?: string;
+  GOOGLE_WEB_CLIENT_SECRET?: string;
+  /** Sign in with Apple: the Services ID (return URL `${PUBLIC_URL}/authorize/apple/callback`). */
+  APPLE_SERVICES_ID?: string;
 }
 
 /** What a grant carries, encrypted by the OAuth library with the token. */
