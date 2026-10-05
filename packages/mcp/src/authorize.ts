@@ -24,7 +24,9 @@ function clientIp(request: Request): string | null {
  */
 function sameOrigin(request: Request, env: Env): boolean {
   const origin = request.headers.get('Origin');
-  if (origin !== null) return origin === new URL(env.PUBLIC_URL).origin || origin === new URL(request.url).origin;
+  // Browsers send "null" (opaque) under some referrer policies and privacy
+  // settings: then Sec-Fetch-Site, set by the browser itself, decides.
+  if (origin !== null && origin !== 'null') return origin === new URL(env.PUBLIC_URL).origin || origin === new URL(request.url).origin;
   return request.headers.get('Sec-Fetch-Site') === 'same-origin';
 }
 

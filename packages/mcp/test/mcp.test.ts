@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import worker from '../src/index';
 import type { Env } from '../src/env';
+import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/html';
 
 const ORIGIN = 'https://mcp.example.test';
 const REDIRECT = 'https://claude.example/api/mcp/auth_callback';
@@ -257,6 +258,13 @@ describe('authorization', () => {
     expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
   });
 
+  it('accepts its own form posted with an opaque origin, as browsers do under some policies', async () => {
+    const page = await openAuthorize(await registerClient());
+    expect(page.headers.get('Referrer-Policy')).toBe('same-origin');
+    const sent = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie, { Origin: 'null', 'Sec-Fetch-Site': 'same-origin' });
+    expect(sent.status).toBe(200);
+  });
+
   it('refuses forms from other sites and handles bound to another browser', async () => {
     const clientId = await registerClient();
     const page = await openAuthorize(clientId);
@@ -265,12 +273,37 @@ describe('authorization', () => {
     expect(forged.status).toBe(403);
     const noOrigin = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie, {});
     expect(noOrigin.status).toBe(403);
+    const opaqueElsewhere = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie, { Origin: 'null', 'Sec-Fetch-Site': 'cross-site' });
+    expect(opaqueElsewhere.status).toBe(403);
     expect(backend.calls.some((entry) => entry.path === '/auth/email/send')).toBe(false);
 
     // Signed in, but in a browser without the binding cookie: no grant, no key kept.
     const stolen = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com', code: CODE, action: 'approve' }, '');
     expect(stolen.status).toBe(400);
     expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
+  });
+
+  it('lets the consent form redirect to the client, and only to it', async () => {
+    const page = await openAuthorize(await registerClient());
+    const consent = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    const csp = consent.headers.get('Content-Security-Policy')!;
+    expect(csp).toContain(`form-action 'self' ${new URL(REDIRECT).origin};`);
+    // The email step posts to this server only.
+    expect(page.headers.get('Content-Security-Policy')).toContain("form-action 'self';");
+  });
+
+  it('expresses native-app redirects by their scheme, and nothing else', () => {
+    expect(redirectSource('https://claude.ai/api/mcp/auth_callback')).toBe('https://claude.ai');
+    expect(redirectSource('http://127.0.0.1:6274/oauth/callback')).toBe('http://127.0.0.1:6274');
+    expect(redirectSource('cursor://anysphere.cursor-mcp/oauth/callback')).toBe('cursor:');
+    expect(redirectSource('not a url')).toBeNull();
+  });
+
+  it('sends each form once, with a script the CSP allows by its exact hash', async () => {
+    const page = await openAuthorize(await registerClient());
+    expect(page.html).toContain(`<script>${SUBMIT_ONCE_SCRIPT}</script>`);
+    const digest = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SUBMIT_ONCE_SCRIPT)))));
+    expect(page.headers.get('Content-Security-Policy')).toContain(`script-src 'sha256-${digest}'`);
   });
 
   it('escapes what the client chose to call itself', async () => {

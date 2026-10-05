@@ -6,7 +6,10 @@
   "name": "spacecontext-mcp",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-22",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public: the server fetches client metadata documents
+  // (CIMD) from URLs chosen by clients, so plain fetch must never reach private
+  // addresses. The API is reached through the BACKEND service binding.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
   "routes": [{ "pattern": "mcp.spacecontext.finikos.it", "custom_domain": true }],
   "vars": {
@@ -23,6 +26,9 @@
   "env": {
     "dev": {
       "name": "spacecontext-mcp-dev",
+      // Local only: the API runs on 127.0.0.1 without a service binding, which
+      // the strictly-public fetch would refuse (CIMD is then off locally).
+      "compatibility_flags": ["nodejs_compat"],
       "workers_dev": false,
       "routes": [],
       "vars": {
