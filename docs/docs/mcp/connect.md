@@ -13,12 +13,12 @@ The Space Context MCP server gives an AI assistant **read-only** access to your 
 https://mcp.spacecontext.finikos.it/mcp
 ```
 
-It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client registration and client ID metadata documents), so any client that supports remote MCP servers with OAuth can connect. There is no key to paste: you sign in with your email.
+It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client registration and client ID metadata documents), so any client that supports remote MCP servers with OAuth can connect. There is no key to paste: you sign in with Apple, Google or your email.
 
 ## What happens when you connect
 
 1. Your assistant opens a Space Context page in the browser.
-2. You enter the email of your Space Context account and the one-time code we send you.
+2. You sign in with Apple, with Google, or with your email and the one-time code we send you. It is the same account as the iPhone app.
 3. You choose whether the assistant may also see **sensitive values** (Wi-Fi passwords, door and alarm codes, the narration of your videos). By default it may not.
 4. You approve. Space Context creates an API key for this connection only, named after your assistant and marked **MCP** in the [console](../account/api-keys.md).
 

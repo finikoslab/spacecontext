@@ -5,11 +5,13 @@ description: 'From zero to a searchable space in five minutes, with a free test 
 
 # Quickstart
 
-This takes about five minutes and costs nothing: it uses a **test key**, which works on a demo space.
+**No code at all?** Open the [console](https://spacecontext.finikos.it/developers/console), sign in with Apple, Google or your email, switch to **Test** and open the demo space: inventory, photos, questions and a comparison of two scans. Then switch to **Live**, open **New scan** and drop a video of a room: the first live scan is free. **Connect AI** adds your spaces to Claude or ChatGPT in a minute.
+
+The rest of this page does the same from the terminal. It takes about five minutes and costs nothing: it uses a **test key**, which works on the demo space.
 
 ## 1. Create a test key
 
-1. Open the [console](https://spacecontext.finikos.it/developers/console) and sign in with your email. You receive a one-time code; it is the same account as the iPhone app. → [Console and sign-in](account/console-and-login.md)
+1. Open the [console](https://spacecontext.finikos.it/developers/console) and sign in with Apple, Google or your email: it is the same account as the iPhone app. → [Console and sign-in](account/console-and-login.md)
 2. In **API keys**, create a key with mode **Test**. Copy it: it is shown only once.
 
 ## 2. Use it from the terminal

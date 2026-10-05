@@ -23,6 +23,7 @@ A sign, a sticker or a sentence said on camera can try to give orders to the age
 - API keys and console sessions are stored hashed; a key is shown once.
 - Keys cannot manage keys, billing or webhooks; console sessions cannot be used as keys.
 - Each MCP connection has its own read-only key, revocable from the console.
+- Every sign-in, key, webhook change, payment, refund and deletion is recorded in the account's **audit log** (console → Security, `GET /v1/console/audit-log`), with who did it: you in the console, an API key, Stripe, or Space Context itself. Secrets are never written there. Entries are kept 400 days and erased with the account.
 
 ## Where data lives
 

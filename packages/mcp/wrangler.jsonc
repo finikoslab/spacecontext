@@ -37,6 +37,18 @@
       },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "spacecontext-mcp-dev-oauth" }],
       "services": []
+    },
+    // Staging: the public API's staging Worker, on workers.dev only.
+    "staging": {
+      "name": "spacecontext-mcp-staging",
+      "workers_dev": true,
+      "routes": [],
+      "vars": {
+        "API_BASE_URL": "https://spacecontext-backend-staging.finikos.workers.dev/v1",
+        "PUBLIC_URL": "https://spacecontext-mcp-staging.finikos.workers.dev"
+      },
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "21f82a0549ce432fa7aadf47c5a2d415" }],
+      "services": [{ "binding": "BACKEND", "service": "spacecontext-backend-staging" }]
     }
   }
 }

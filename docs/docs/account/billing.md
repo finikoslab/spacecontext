@@ -49,4 +49,4 @@ If you ask your bank or Stripe for a refund of a top-up, the refunded amount is 
 
 ## Taxes and invoices
 
-Payments are processed by Stripe on behalf of Finikos S.r.l. (Italy). For invoices, write to [support](https://spacecontext.finikos.it/support) with the email of your account.
+Payments are processed by Stripe on behalf of Finikos S.r.l. (Italy). Every top-up comes with an **invoice**: at checkout you give your billing address and, for a business, your tax ID (VAT number). The console lists your invoices under **Billing → Invoices**, each with its page and PDF; the API returns them at `GET /v1/billing/invoices`.
