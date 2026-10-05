@@ -35,6 +35,9 @@ function advice(error: SpaceContextError): string {
       return 'The user did not grant this access when connecting; they can reconnect and grant it.';
     case 'NOT_FOUND':
       return 'Check the id with list_spaces or search_spaces.';
+    case 'SIGNED_URL_EXPIRED':
+    case 'SIGNED_URL_INVALID':
+      return 'Evidence links expire: read the record again with get_space (include_evidence) or ask_space for a fresh link.';
     case 'RATE_LIMIT_EXCEEDED':
       return `Too many requests; wait ${error.retryAfter ?? 60} seconds before retrying.`;
     case 'SEARCH_UNAVAILABLE':
@@ -43,6 +46,9 @@ function advice(error: SpaceContextError): string {
       return '';
   }
 }
+
+/** What the API answers when the key of the grant is revoked, or its account deleted. */
+const KEY_REFUSED: ReadonlySet<string> = new Set(['INVALID_TOKEN', 'USER_NOT_FOUND']);
 
 export type ServerHooks = {
   /** The API refused the grant's key (revoked in the console): end the grant so the client signs in again. */
@@ -53,7 +59,9 @@ async function run(hooks: ServerHooks, action: () => Promise<ToolResult>): Promi
   try {
     return await action();
   } catch (error) {
-    if (error instanceof SpaceContextError && error.status === 401) {
+    // Only the API's verdict on the key itself ends the grant. Other 401s (an
+    // expired or forged evidence link) must never disconnect the user.
+    if (error instanceof SpaceContextError && error.status === 401 && KEY_REFUSED.has(error.code)) {
       await hooks.onUnauthorized?.().catch(() => undefined);
       return {
         isError: true,

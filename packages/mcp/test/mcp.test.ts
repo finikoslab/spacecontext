@@ -402,6 +402,20 @@ describe('MCP tools', () => {
     expect(after.status).toBe(401);
   });
 
+  it('keeps the grant on a 401 that is not about the key (an expired evidence link)', async () => {
+    const { accessToken } = await connect();
+    await initialize(accessToken);
+    backend = fakeBackend({
+      'GET /media/frames/u1/p1/frame-0.jpg': () => new Response(JSON.stringify({ error: { code: 'SIGNED_URL_EXPIRED', message: 'Signed URL expired', request_id: 'r' } }), { status: 401 }),
+    });
+    const photo = await tool(accessToken, 'get_evidence_photo', { url: 'https://api.example.test/v1/media/frames/u1/p1/frame-0.jpg?token=old&expires=1' });
+    expect(photo.isError).toBe(true);
+    expect(photo.content[0]!.text).toContain('fresh link');
+    // Still connected.
+    const search = await tool(accessToken, 'search_spaces', { query: 'oven' });
+    expect(search.isError).toBeUndefined();
+  });
+
   it('turns API errors into tool errors with advice', async () => {
     const { accessToken } = await connect();
     await initialize(accessToken);
