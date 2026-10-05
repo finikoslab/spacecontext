@@ -1,0 +1,26 @@
+{
+  "name": "spacecontext",
+  "version": "0.1.0",
+  "description": "Space Context from the terminal: scan a video of a space, then search it, ask it, and export it as an Agent Skill.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "spacecontext": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@spacecontext/sdk": "0.1.0"
+  },
+  "keywords": ["spacecontext", "cli", "agents", "skill", "video", "inventory"]
+}

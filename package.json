@@ -1,0 +1,27 @@
+{
+  "name": "spacecontext-monorepo",
+  "private": true,
+  "type": "module",
+  "description": "Space Context for developers and agents: TypeScript SDK, CLI and MCP server.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "workspaces": [
+    "packages/sdk",
+    "packages/cli",
+    "packages/mcp"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "check": "npm run build && npm run typecheck && npm run test",
+    "openapi:sync": "node scripts/sync-openapi.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

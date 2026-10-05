@@ -1,0 +1,5488 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Space Context API",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.spacecontext.finikos.it/v1"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "getApiInfo",
+        "security": [],
+        "summary": "API metadata",
+        "responses": {
+          "200": {
+            "description": "API metadata"
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApiDocument",
+        "security": [],
+        "summary": "OpenAPI document",
+        "responses": {
+          "200": {
+            "description": "OpenAPI document"
+          }
+        }
+      }
+    },
+    "/auth/email/send": {
+      "post": {
+        "operationId": "sendEmailLoginCode",
+        "security": [],
+        "summary": "Send an email login code",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailSendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login code send result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailSendResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/auth/email/verify": {
+      "post": {
+        "operationId": "verifyEmailLoginCode",
+        "security": [],
+        "summary": "Verify an email login code",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Console session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "operationId": "getConsoleSession",
+        "summary": "Get the current console session",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current console session",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeConsoleSession",
+        "summary": "Revoke the current console session",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session revoked"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/keys": {
+      "get": {
+        "operationId": "listApiKeys",
+        "summary": "List API keys",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API keys",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createApiKey",
+        "summary": "Create an API key",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created API key. The plaintext key is returned once.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/keys/{id}": {
+      "delete": {
+        "operationId": "revokeApiKey",
+        "summary": "Revoke an API key",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^key_"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "API key revoked"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "operationId": "getCurrentKey",
+        "summary": "Get the current API key user",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current API key user",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/media/{key}": {
+      "get": {
+        "operationId": "getEvidenceFrame",
+        "security": [],
+        "summary": "Serve a signed v1 evidence frame",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Storage key of the frame, exactly as in the signed URL: `frames/…` for spaces scanned with the app, `api/…` for scans made through the API.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(frames|api)/"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expires",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original evidence frame bytes",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/heic": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/spaces": {
+      "get": {
+        "operationId": "listSpaces",
+        "summary": "List the spaces this key can read: scanned with the app (Pro, live keys) and created through the API",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "app",
+                "api"
+              ],
+              "default": "app"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Spaces page",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSpace",
+        "summary": "Create a space to scan through the API",
+        "description": "Creates a space in the key's mode (test or live). With an `external_id` already used in that mode, returns the existing space with 200 instead of creating another. Needs `spaces:read` and `scans:write`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpaceCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The space with this external_id",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiSpace"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Space created",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiSpace"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/spaces/{id}": {
+      "get": {
+        "operationId": "getSpace",
+        "summary": "Get the current document for a space",
+        "description": "Keys without the `spaces:sensitive` scope only read what the deep pass has screened for sensitive values. Until it has (`enrichment.level` is `base`), the document has the same shape with its content withheld: the lists are empty and `stats` gives the counts. Once `enrichment.level` is `deep`, sensitive facts are redacted, their values are removed from every other text, and images are given only for the frames that non-sensitive records cite as evidence. Fields the deep pass does not read (project description, summary, area layout) and raw first-hand sources (transcript, owner answers, narrator quotes) always require the scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "description": "Adds the transcript. Requires the `spaces:sensitive` scope; without it the request is refused with 403 `INSUFFICIENT_SCOPE`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transcript"
+              ]
+            }
+          },
+          {
+            "name": "enrich",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "none"
+              ],
+              "default": "auto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Space document",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSpace",
+        "summary": "Delete a space created through the API, with its scans and files",
+        "description": "Not possible while one of its scans is processing (409). App spaces are deleted in the app. Needs `scans:write`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/spaces/{id}/scans": {
+      "get": {
+        "operationId": "listSpaceScans",
+        "summary": "List scans for a space",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scan summaries",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createScan",
+        "summary": "Create a scan of a space created through the API",
+        "description": "Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. Needs `scans:write`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The scan created with this Idempotency-Key",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scan"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Scan created",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scan"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/spaces/{id}/scans/{scan_id}": {
+      "get": {
+        "operationId": "getSpaceScan",
+        "summary": "Get a base document for a specific scan",
+        "description": "A scan read by id is the snapshot as it was recorded. Past scans are not screened for sensitive values, so this operation requires the `spaces:sensitive` scope and answers 403 `INSUFFICIENT_SCOPE` without it.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          },
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "description": "Adds the transcript. Requires the `spaces:sensitive` scope; without it the request is refused with 403 `INSUFFICIENT_SCOPE`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transcript"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Space document for the scan",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/spaces/{id}/skill": {
+      "get": {
+        "operationId": "getSpaceSkill",
+        "summary": "Export a space as a multi-file Agent Skill",
+        "description": "Returns the files of a ready-to-use skill built from the current document, exactly as this key may read it: a redacted document gives a redacted skill. `SKILL.md` is a short static guide; the knowledge is in `references/` and `space.json`, which an agent opens only when needed. A key without `spaces:sensitive` gets 409 `ENRICHMENT_PENDING` until the deep pass has screened the analysis.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "description": "Adds `references/transcript.md`. Requires the `spaces:sensitive` scope; without it the request is refused with 403 `INSUFFICIENT_SCOPE`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transcript"
+              ]
+            }
+          },
+          {
+            "name": "enrich",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "none"
+              ],
+              "default": "auto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill bundle",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillBundle"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/spaces/{id}/ask": {
+      "post": {
+        "operationId": "askSpace",
+        "summary": "Ask a question about a space",
+        "description": "Answers from the records of the current document this key may read, in one to three sentences, with the records it relies on and their evidence images. Says so when the answer is not documented, and never reveals a redacted value. Test keys get the best-matching record of the demo, without a model. A key without `spaces:sensitive` gets 409 `ENRICHMENT_PENDING` until the space is screened. Limits: 20 a minute and, by default, 200 a day per account.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "question"
+                ],
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answer",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/spaces/{id}/diff": {
+      "get": {
+        "operationId": "getSpaceDiff",
+        "summary": "Compare two scans of a space",
+        "description": "What changed from the scan `from` to the scan `to` (the current one when omitted): areas, items added, removed, moved or changed, issues new or resolved. Computed without a model, by matching records by content. For a space scanned with the app, past scans are not screened for sensitive values, so this operation requires the `spaces:sensitive` scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Id of the earlier scan.",
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Id of the later scan. Defaults to the current one.",
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Differences between the two scans",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceDiff"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "searchSpaces",
+        "summary": "Search across all your spaces",
+        "description": "Finds the records (items, areas, issues, key locations, instructions, facts, questions and answers) that best match a question in natural language, across every space this key can read, in any of 100+ languages: \"where did I see a ladder?\". Each result names its space, scan and record, so it can be opened with the other operations. The index holds only screened, redacted content: no result ever contains a sensitive value, whatever the key's scopes. A space appears once its current scan has been indexed: after a scan completes, or after the deep pass of a space scanned with the app (spaces scanned with the app require Pro). Test keys search the demo space, without a model. Limits: 20 a minute and, by default, 1000 a day per account.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          {
+            "name": "space_id",
+            "in": "query",
+            "required": false,
+            "description": "Searches one space only.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Best matches first",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/billing": {
+      "get": {
+        "operationId": "getBilling",
+        "summary": "Get the wallet, the price of a scan and the automatic recharge settings",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wallet",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wallet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/billing/ledger": {
+      "get": {
+        "operationId": "listLedgerEntries",
+        "summary": "List the movements of the wallet, newest first",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ledger page",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/billing/checkout": {
+      "post": {
+        "operationId": "createTopUpCheckout",
+        "summary": "Open a Stripe Checkout page to add credit to the wallet",
+        "description": "The wallet is credited when Stripe confirms the payment, never by this call. Send an `Idempotency-Key` header to make retries return the same page.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Checkout page",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/billing/auto-recharge": {
+      "put": {
+        "operationId": "setAutoRecharge",
+        "summary": "Turn automatic recharge on or off",
+        "description": "When on, the saved card is charged `amount_cents` whenever the balance falls below `threshold_cents`, at most three times a day. A declined card turns it off and leaves the reason in `auto_recharge.last_error`.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoRechargeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Wallet",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wallet"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/billing/payment-method": {
+      "delete": {
+        "operationId": "removePaymentMethod",
+        "summary": "Forget the saved card and turn automatic recharge off",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wallet",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wallet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/wallet": {
+      "get": {
+        "operationId": "getWallet",
+        "summary": "What this key has to spend",
+        "description": "For agents: the balance, the free scans left and the price of a scan. Needs the `scans:read` scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wallet",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wallet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/webhooks/stripe": {
+      "post": {
+        "operationId": "receiveStripeWebhook",
+        "summary": "Stripe webhook endpoint (called by Stripe, authenticated by its signature)",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Event received"
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/scans/{id}": {
+      "get": {
+        "operationId": "getScan",
+        "summary": "Status of a scan",
+        "description": "Poll until `status` is `complete` or `failed`. A failed scan is never charged: `charge.refunded` says so. Needs `scans:read`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scan",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scan"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelScan",
+        "summary": "Cancel a scan that has not started",
+        "description": "Nothing was charged; its uploads are deleted. Needs `scans:write`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cancelled"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/scans/{id}/frames/{index}": {
+      "put": {
+        "operationId": "uploadScanFrame",
+        "summary": "Upload one frame of a frames scan",
+        "description": "The raw image as the body: JPEG, PNG or WebP (recognised by its bytes), at most 2 MB. Sending a frame again replaces it. Needs `scans:write`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_[0-9a-f]{32}$"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 119
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Frame stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanUpload"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/scans/{id}/video": {
+      "put": {
+        "operationId": "uploadScanVideo",
+        "summary": "Upload the video of a video scan through the API",
+        "description": "Only when `upload.url` points here (no direct upload link available). `Content-Length` and `Content-Type` must match what was declared. Needs `scans:write`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "video/mp4": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "video/quicktime": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "video/x-m4v": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Video stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanUpload"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/scans/{id}/start": {
+      "post": {
+        "operationId": "startScan",
+        "summary": "Charge the scan and start the analysis",
+        "description": "Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`. Test keys are never charged and get the demo result. Needs `scans:write`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Already started",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scan"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Started",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scan"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "402": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/webhook-endpoints": {
+      "get": {
+        "operationId": "listWebhookEndpoints",
+        "summary": "List webhook endpoints",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Endpoints",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEndpointList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWebhookEndpoint",
+        "summary": "Register a webhook endpoint",
+        "description": "The URL must be https on port 443 with a public host name. Deliveries are signed: `SpaceContext-Signature: t=<seconds>,v1=<hex HMAC-SHA256 of \"<t>.<body>\">` with the `secret` returned here, once. Failed deliveries are retried with backoff up to 8 times; 20 failed deliveries in a row turn the endpoint off.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookEndpointCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Endpoint, with its secret",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEndpointCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/webhook-endpoints/{id}": {
+      "patch": {
+        "operationId": "updateWebhookEndpoint",
+        "summary": "Turn an endpoint on or off",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Endpoint",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEndpoint"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWebhookEndpoint",
+        "summary": "Delete an endpoint and its delivery log",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/webhook-endpoints/{id}/deliveries": {
+      "get": {
+        "operationId": "listWebhookDeliveries",
+        "summary": "The last 50 deliveries to an endpoint",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deliveries",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/webhook-endpoints/{id}/test": {
+      "post": {
+        "operationId": "testWebhookEndpoint",
+        "summary": "Send a test event to an endpoint now",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The delivery",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDelivery"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "consoleSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "scs"
+      },
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "sc_live or sc_test"
+      }
+    },
+    "responses": {
+      "RateLimited": {
+        "description": "Too many requests. Retry after the number of seconds in `Retry-After`.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "description": "Error response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ConsoleUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "is_pro"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_pro": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EmailSendRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmailSendResponse": {
+        "type": "object",
+        "required": [
+          "sent"
+        ],
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "debug_code": {
+            "type": "string"
+          }
+        }
+      },
+      "EmailVerifyRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmailVerifyResponse": {
+        "type": "object",
+        "required": [
+          "session_token",
+          "expires_at",
+          "is_new_user",
+          "user"
+        ],
+        "properties": {
+          "session_token": {
+            "type": "string",
+            "pattern": "^scs_"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_new_user": {
+            "type": "boolean"
+          },
+          "user": {
+            "$ref": "#/components/schemas/ConsoleUser"
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "session"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/ConsoleUser"
+          },
+          "session": {
+            "type": "object",
+            "required": [
+              "expires_at"
+            ],
+            "properties": {
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "ApiKeyScope": {
+        "type": "string",
+        "enum": [
+          "spaces:read",
+          "scans:read",
+          "scans:write",
+          "spaces:sensitive"
+        ]
+      },
+      "ApiKey": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "mode",
+          "prefix",
+          "scopes",
+          "monthly_cap_cents",
+          "source",
+          "created_at",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^key_"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ]
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiKeyScope"
+            }
+          },
+          "monthly_cap_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "console",
+              "oauth"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ApiKeyListResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiKey"
+            }
+          }
+        }
+      },
+      "ApiKeyCreateRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ],
+            "default": "live"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiKeyScope"
+            }
+          },
+          "monthly_cap_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "console",
+              "oauth"
+            ],
+            "default": "console",
+            "description": "Who the key is for. `oauth` marks a key a connector (such as the MCP server) created for an authorization the user granted."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApiKeyCreateResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiKey"
+          },
+          {
+            "type": "object",
+            "required": [
+              "key"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^sc_(live|test)_[A-Za-z0-9_-]{43}$"
+              }
+            }
+          }
+        ]
+      },
+      "MeResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "key"
+        ],
+        "properties": {
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "email",
+              "is_pro"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "is_pro": {
+                "type": "boolean"
+              }
+            }
+          },
+          "key": {
+            "type": "object",
+            "required": [
+              "id",
+              "mode",
+              "scopes"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^key_"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "live",
+                  "test"
+                ]
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ApiKeyScope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ConditionCode": {
+        "type": "string",
+        "enum": [
+          "new",
+          "excellent",
+          "good",
+          "fair",
+          "poor",
+          "damaged",
+          "not_working",
+          "unknown"
+        ]
+      },
+      "AreaType": {
+        "type": "string",
+        "enum": [
+          "entrance",
+          "hallway",
+          "living_room",
+          "kitchen",
+          "dining_room",
+          "bedroom",
+          "bathroom",
+          "laundry",
+          "office",
+          "storage",
+          "garage",
+          "balcony_terrace",
+          "garden_exterior",
+          "stairs",
+          "technical_room",
+          "sales_floor",
+          "warehouse_floor",
+          "vehicle_cabin",
+          "vehicle_exterior",
+          "engine_bay",
+          "boat_deck",
+          "boat_cabin",
+          "appliance_view",
+          "other"
+        ]
+      },
+      "ItemCategory": {
+        "type": "string",
+        "enum": [
+          "furniture",
+          "appliance",
+          "electronics",
+          "lighting",
+          "fixture",
+          "kitchenware",
+          "textile",
+          "decor",
+          "storage",
+          "tool",
+          "safety",
+          "utility",
+          "climate",
+          "plumbing",
+          "document",
+          "consumable",
+          "vehicle_part",
+          "structural",
+          "other"
+        ]
+      },
+      "IssueCategory": {
+        "type": "string",
+        "enum": [
+          "damage",
+          "wear",
+          "malfunction",
+          "missing",
+          "cleanliness",
+          "safety",
+          "maintenance",
+          "other"
+        ]
+      },
+      "IssueSeverity": {
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high",
+          "critical"
+        ]
+      },
+      "KeyLocationKind": {
+        "type": "string",
+        "enum": [
+          "electrical_panel",
+          "water_shutoff",
+          "gas_shutoff",
+          "water_heater",
+          "heating_control",
+          "air_conditioning_control",
+          "router",
+          "fire_extinguisher",
+          "smoke_detector",
+          "first_aid",
+          "emergency_exit",
+          "keys",
+          "waste_recycling",
+          "electricity_meter",
+          "gas_meter",
+          "water_meter",
+          "alarm_panel",
+          "spare_supplies",
+          "other"
+        ]
+      },
+      "FactKind": {
+        "type": "string",
+        "enum": [
+          "access",
+          "wifi",
+          "rule",
+          "contact",
+          "schedule",
+          "quirk",
+          "measurement",
+          "history",
+          "other"
+        ]
+      },
+      "SpaceType": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "apartment",
+          "house",
+          "office",
+          "warehouse",
+          "vehicle",
+          "boat",
+          "camper",
+          "shop",
+          "garage",
+          "appliance",
+          "other",
+          null
+        ]
+      },
+      "SpaceEvidenceRef": {
+        "type": "object",
+        "required": [
+          "frame_id",
+          "timestamp_ms"
+        ],
+        "properties": {
+          "frame_id": {
+            "type": "string"
+          },
+          "timestamp_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "SpaceFrame": {
+        "type": "object",
+        "required": [
+          "id",
+          "index",
+          "timestamp_ms",
+          "url",
+          "url_expires_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "timestamp_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "url_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "SpaceCondition": {
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "notes"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ConditionCode"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SpaceArea": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "level",
+          "condition",
+          "description",
+          "layout",
+          "features",
+          "access_from",
+          "item_ids",
+          "issue_ids",
+          "evidence",
+          "confidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AreaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "condition": {
+            "$ref": "#/components/schemas/SpaceCondition"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layout": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "access_from": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issue_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceEvidenceRef"
+            }
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "SpaceItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "area_id",
+          "name",
+          "canonical_name",
+          "category",
+          "subcategory",
+          "quantity",
+          "location",
+          "condition",
+          "brand",
+          "model",
+          "attributes",
+          "visible_text",
+          "aliases",
+          "note",
+          "issue_ids",
+          "evidence",
+          "confidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "canonical_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subcategory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaceCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "visible_text": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceEvidenceRef"
+            }
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "SpaceIssue": {
+        "type": "object",
+        "required": [
+          "id",
+          "area_id",
+          "item_id",
+          "title",
+          "description",
+          "category",
+          "severity",
+          "suggested_action",
+          "evidence",
+          "confidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssueCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssueSeverity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggested_action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceEvidenceRef"
+            }
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "SpaceKeyLocation": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "area_id",
+          "location",
+          "notes",
+          "evidence",
+          "confidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/KeyLocationKind"
+          },
+          "label": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceEvidenceRef"
+            }
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "SpaceInstruction": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "area_id",
+          "item_id",
+          "steps",
+          "source_quote",
+          "transcript_segment_ids",
+          "confidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_quote": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transcript_segment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "SpaceFact": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "statement",
+          "value",
+          "area_id",
+          "sensitive",
+          "redacted",
+          "transcript_segment_ids",
+          "evidence",
+          "confidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FactKind"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "area_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "redacted": {
+            "type": "boolean"
+          },
+          "transcript_segment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceEvidenceRef"
+            }
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "SpaceQA": {
+        "type": "object",
+        "required": [
+          "id",
+          "question",
+          "answer",
+          "source",
+          "category",
+          "area_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "generated"
+            ]
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "area_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SpaceTranscriptSegment": {
+        "type": "object",
+        "required": [
+          "id",
+          "start_ms",
+          "end_ms",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "integer"
+          },
+          "end_ms": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "SpaceDocument": {
+        "type": "object",
+        "required": [
+          "object",
+          "schema_version",
+          "space",
+          "scan",
+          "enrichment",
+          "summary",
+          "confidence",
+          "stats",
+          "features",
+          "areas",
+          "items",
+          "issues",
+          "key_locations",
+          "instructions",
+          "facts",
+          "qa",
+          "frames",
+          "coverage"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "space_document"
+            ]
+          },
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "1.0"
+            ]
+          },
+          "space": {
+            "type": "object",
+            "required": [
+              "id",
+              "source",
+              "name",
+              "description",
+              "space_type",
+              "created_at",
+              "updated_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^(app|spc)_"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "app",
+                  "api"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "space_type": {
+                "$ref": "#/components/schemas/SpaceType"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "scan": {
+            "type": "object",
+            "required": [
+              "id",
+              "analyzed_at",
+              "recorded_at",
+              "duration_seconds",
+              "device",
+              "video_sha256",
+              "frame_count"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^scn_"
+              },
+              "analyzed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "recorded_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "duration_seconds": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "device": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "video_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "frame_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "enrichment": {
+            "type": "object",
+            "required": [
+              "level",
+              "status",
+              "updated_at"
+            ],
+            "properties": {
+              "level": {
+                "type": "string",
+                "enum": [
+                  "base",
+                  "deep"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "not_requested",
+                  "pending",
+                  "complete",
+                  "failed"
+                ]
+              },
+              "updated_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "stats": {
+            "type": "object",
+            "required": [
+              "areas",
+              "items",
+              "issues",
+              "key_locations",
+              "instructions",
+              "facts"
+            ],
+            "properties": {
+              "areas": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "integer"
+              },
+              "issues": {
+                "type": "integer"
+              },
+              "key_locations": {
+                "type": "integer"
+              },
+              "instructions": {
+                "type": "integer"
+              },
+              "facts": {
+                "type": "integer"
+              }
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceArea"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceItem"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceIssue"
+            }
+          },
+          "key_locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceKeyLocation"
+            }
+          },
+          "instructions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceInstruction"
+            }
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceFact"
+            }
+          },
+          "qa": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceQA"
+            }
+          },
+          "transcript": {
+            "type": "object",
+            "required": [
+              "text",
+              "segments"
+            ],
+            "properties": {
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "segments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SpaceTranscriptSegment"
+                }
+              }
+            }
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceFrame"
+            }
+          },
+          "coverage": {
+            "type": "object",
+            "required": [
+              "warnings",
+              "not_documented"
+            ],
+            "properties": {
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "not_documented": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SpaceSummary": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "source",
+          "name",
+          "space_type",
+          "created_at",
+          "updated_at",
+          "latest_scan"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "space"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^(app|spc)_"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "app",
+              "api"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "space_type": {
+            "$ref": "#/components/schemas/SpaceType"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "latest_scan": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "analyzed_at",
+                  "areas",
+                  "items",
+                  "issues"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^scn_"
+                  },
+                  "analyzed_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "areas": {
+                    "type": "integer"
+                  },
+                  "items": {
+                    "type": "integer"
+                  },
+                  "issues": {
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SpaceListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "next_cursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpaceSummary"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ScanSummary": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "space_id",
+          "analyzed_at",
+          "areas",
+          "items",
+          "issues",
+          "current"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "scan"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^scn_"
+          },
+          "space_id": {
+            "type": "string",
+            "pattern": "^(app|spc)_"
+          },
+          "analyzed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "areas": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "integer"
+          },
+          "issues": {
+            "type": "integer"
+          },
+          "current": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ScanListResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScanSummary"
+            }
+          }
+        }
+      },
+      "SearchResults": {
+        "type": "object",
+        "required": [
+          "object",
+          "query",
+          "data"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "search_results"
+          },
+          "query": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "required": [
+                "space_id",
+                "space_name",
+                "scan_id",
+                "record_type",
+                "record_id",
+                "title",
+                "area",
+                "text",
+                "score"
+              ],
+              "properties": {
+                "space_id": {
+                  "type": "string"
+                },
+                "space_name": {
+                  "type": "string"
+                },
+                "scan_id": {
+                  "type": "string"
+                },
+                "record_type": {
+                  "type": "string",
+                  "enum": [
+                    "area",
+                    "item",
+                    "issue",
+                    "key_location",
+                    "instruction",
+                    "fact",
+                    "qa"
+                  ]
+                },
+                "record_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "area": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number",
+                  "description": "Relevance; higher is better. Comparable within one response only."
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SpaceAnswer": {
+        "type": "object",
+        "required": [
+          "object",
+          "space_id",
+          "scan_id",
+          "question",
+          "answer",
+          "documented",
+          "citations"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "answer"
+          },
+          "space_id": {
+            "type": "string"
+          },
+          "scan_id": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "documented": {
+            "type": "boolean"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "record_type",
+                "record_id",
+                "title",
+                "area",
+                "evidence"
+              ],
+              "properties": {
+                "record_type": {
+                  "type": "string",
+                  "enum": [
+                    "area",
+                    "item",
+                    "issue",
+                    "key_location",
+                    "instruction",
+                    "fact",
+                    "qa"
+                  ]
+                },
+                "record_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "area": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "frame_id",
+                      "timestamp_ms",
+                      "url"
+                    ],
+                    "properties": {
+                      "frame_id": {
+                        "type": "string"
+                      },
+                      "timestamp_ms": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "url": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SkillFile": {
+        "type": "object",
+        "required": [
+          "path",
+          "media_type",
+          "content"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string",
+            "enum": [
+              "text/markdown",
+              "application/json"
+            ]
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "SkillBundle": {
+        "type": "object",
+        "required": [
+          "object",
+          "name",
+          "space_id",
+          "scan_id",
+          "files"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "skill"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "maxLength": 64
+          },
+          "space_id": {
+            "type": "string"
+          },
+          "scan_id": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkillFile"
+            }
+          }
+        }
+      },
+      "SpaceDiff": {
+        "type": "object",
+        "required": [
+          "object",
+          "space_id",
+          "from",
+          "to",
+          "level",
+          "summary",
+          "areas",
+          "items",
+          "issues"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "space_diff"
+          },
+          "space_id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "object",
+            "required": [
+              "scan_id",
+              "analyzed_at"
+            ],
+            "properties": {
+              "scan_id": {
+                "type": "string"
+              },
+              "analyzed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "to": {
+            "type": "object",
+            "required": [
+              "scan_id",
+              "analyzed_at"
+            ],
+            "properties": {
+              "scan_id": {
+                "type": "string"
+              },
+              "analyzed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "base",
+              "deep"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "areas_added",
+              "areas_removed",
+              "items_added",
+              "items_removed",
+              "items_moved",
+              "items_changed",
+              "issues_new",
+              "issues_resolved"
+            ],
+            "properties": {
+              "areas_added": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "areas_removed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "items_added": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "items_removed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "items_moved": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "items_changed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "issues_new": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "issues_resolved": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "areas": {
+            "type": "object",
+            "required": [
+              "added",
+              "removed",
+              "condition_changed"
+            ],
+            "properties": {
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "condition_changed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "area",
+                    "from",
+                    "to"
+                  ],
+                  "properties": {
+                    "area": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "excellent",
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "not_working",
+                        "unknown"
+                      ]
+                    },
+                    "to": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "excellent",
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "not_working",
+                        "unknown"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "items": {
+            "type": "object",
+            "required": [
+              "added",
+              "removed",
+              "moved",
+              "quantity_changed",
+              "condition_changed"
+            ],
+            "properties": {
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "canonical_name",
+                    "area",
+                    "quantity"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "canonical_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "quantity": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "canonical_name",
+                    "area",
+                    "quantity"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "canonical_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "quantity": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "moved": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "canonical_name",
+                    "area",
+                    "quantity",
+                    "from_area"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "canonical_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "quantity": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "from_area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "quantity_changed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "canonical_name",
+                    "area",
+                    "quantity",
+                    "from_quantity"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "canonical_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "quantity": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "from_quantity": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "condition_changed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "canonical_name",
+                    "area",
+                    "quantity",
+                    "from_condition",
+                    "to_condition"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "canonical_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "quantity": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "from_condition": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "excellent",
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "not_working",
+                        "unknown"
+                      ]
+                    },
+                    "to_condition": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "excellent",
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "not_working",
+                        "unknown"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "issues": {
+            "type": "object",
+            "required": [
+              "new",
+              "resolved"
+            ],
+            "properties": {
+              "new": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "title",
+                    "area",
+                    "severity"
+                  ],
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "severity": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "critical",
+                        null
+                      ]
+                    }
+                  }
+                }
+              },
+              "resolved": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "title",
+                    "area",
+                    "severity"
+                  ],
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "severity": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "critical",
+                        null
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Wallet": {
+        "type": "object",
+        "required": [
+          "object",
+          "currency",
+          "balance_cents",
+          "free_scans_remaining",
+          "scan_price_cents",
+          "auto_recharge"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "wallet"
+          },
+          "currency": {
+            "type": "string",
+            "const": "usd"
+          },
+          "balance_cents": {
+            "type": "integer"
+          },
+          "free_scans_remaining": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scan_price_cents": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "auto_recharge": {
+            "type": "object",
+            "required": [
+              "enabled"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "threshold_cents": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "amount_cents": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "payment_method_saved": {
+                "type": "boolean"
+              },
+              "last_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "LedgerEntry": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "kind",
+          "amount_cents",
+          "balance_after_cents",
+          "reference",
+          "api_key_id",
+          "description",
+          "created_at"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "ledger_entry"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "topup",
+              "scan_charge",
+              "scan_refund",
+              "free_scan",
+              "free_scan_refund",
+              "stripe_refund",
+              "dispute",
+              "dispute_won",
+              "adjustment"
+            ]
+          },
+          "amount_cents": {
+            "type": "integer"
+          },
+          "balance_after_cents": {
+            "type": "integer"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "api_key_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "LedgerListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "next_cursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntry"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CheckoutRequest": {
+        "type": "object",
+        "required": [
+          "amount_cents"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 50000
+          },
+          "save_for_auto_recharge": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "CheckoutSession": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "url"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "checkout_session"
+          },
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "AutoRechargeRequest": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "threshold_cents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50000
+          },
+          "amount_cents": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 50000
+          }
+        }
+      },
+      "SpaceCreateRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          },
+          "space_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "apartment",
+              "house",
+              "office",
+              "warehouse",
+              "vehicle",
+              "boat",
+              "camper",
+              "shop",
+              "garage",
+              "appliance",
+              "other",
+              null
+            ]
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          }
+        }
+      },
+      "ApiSpace": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "source",
+          "livemode",
+          "name",
+          "description",
+          "space_type",
+          "external_id",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "space"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^spc_[0-9a-f]{32}$"
+          },
+          "source": {
+            "type": "string",
+            "const": "api"
+          },
+          "livemode": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "space_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ScanCreateRequest": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "frames",
+                  "video"
+                ]
+              },
+              "language": {
+                "type": "string",
+                "enum": [
+                  "en",
+                  "it"
+                ],
+                "default": "en"
+              },
+              "frames": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 120,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp_ms": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    }
+                  }
+                }
+              },
+              "video": {
+                "type": "object",
+                "required": [
+                  "content_type",
+                  "content_length"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "video/mp4",
+                      "video/quicktime",
+                      "video/x-m4v"
+                    ]
+                  },
+                  "content_length": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 524288000
+                  }
+                }
+              },
+              "transcript": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "text": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "segments": {
+                    "type": "array",
+                    "maxItems": 600,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "start_ms",
+                        "end_ms",
+                        "text"
+                      ],
+                      "properties": {
+                        "start_ms": {
+                          "type": "integer"
+                        },
+                        "end_ms": {
+                          "type": "integer"
+                        },
+                        "text": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "recorded_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "device": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "duration_seconds": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "Scan": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "space_id",
+          "livemode",
+          "status",
+          "stage",
+          "input",
+          "charge",
+          "error",
+          "upload",
+          "created_at",
+          "started_at",
+          "completed_at"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "scan"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^scn_[0-9a-f]{32}$"
+          },
+          "space_id": {
+            "type": "string"
+          },
+          "livemode": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "awaiting_upload",
+              "queued",
+              "processing",
+              "complete",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "ingesting",
+              "observing",
+              "fusing",
+              "enriching",
+              "saving",
+              null
+            ]
+          },
+          "input": {
+            "type": "object",
+            "required": [
+              "kind",
+              "language",
+              "frame_count",
+              "video",
+              "has_transcript"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "frames",
+                  "video"
+                ]
+              },
+              "language": {
+                "type": "string",
+                "enum": [
+                  "en",
+                  "it"
+                ]
+              },
+              "frame_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "video": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string"
+                  },
+                  "content_length": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "has_transcript": {
+                "type": "boolean"
+              }
+            }
+          },
+          "charge": {
+            "type": "object",
+            "required": [
+              "kind",
+              "price_cents",
+              "refunded"
+            ],
+            "properties": {
+              "kind": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "free_scan",
+                  "scan_charge",
+                  null
+                ]
+              },
+              "price_cents": {
+                "type": "integer"
+              },
+              "refunded": {
+                "type": "boolean"
+              }
+            }
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "upload": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "frames",
+                  "video"
+                ]
+              },
+              "method": {
+                "type": "string",
+                "const": "PUT"
+              },
+              "url": {
+                "type": "string"
+              },
+              "url_template": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "description": "Headers the PUT must carry. Content-Length must equal the declared size (HTTP clients set it from the body).",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "frame_count": {
+                "type": "integer"
+              },
+              "max_bytes": {
+                "type": "integer"
+              },
+              "content_types": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ScanUpload": {
+        "type": "object",
+        "required": [
+          "object",
+          "scan_id",
+          "bytes"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "scan_frame",
+              "scan_video"
+            ]
+          },
+          "scan_id": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "content_type": {
+            "type": "string"
+          }
+        }
+      },
+      "WebhookEndpointCreateRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "scan.completed",
+                "scan.failed",
+                "wallet.auto_recharge_failed"
+              ]
+            },
+            "minItems": 1
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ],
+            "default": "live"
+          }
+        }
+      },
+      "WebhookEndpoint": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "livemode",
+          "url",
+          "events",
+          "secret_prefix",
+          "enabled",
+          "disabled_reason",
+          "created_at"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "webhook_endpoint"
+          },
+          "id": {
+            "type": "string"
+          },
+          "livemode": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "scan.completed",
+                "scan.failed",
+                "wallet.auto_recharge_failed"
+              ]
+            }
+          },
+          "secret_prefix": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "disabled_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookEndpointCreated": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "livemode",
+          "url",
+          "events",
+          "secret_prefix",
+          "enabled",
+          "disabled_reason",
+          "created_at",
+          "secret"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "webhook_endpoint"
+          },
+          "id": {
+            "type": "string"
+          },
+          "livemode": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "scan.completed",
+                "scan.failed",
+                "wallet.auto_recharge_failed"
+              ]
+            }
+          },
+          "secret_prefix": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "disabled_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "secret": {
+            "type": "string",
+            "pattern": "^whsec_"
+          }
+        }
+      },
+      "WebhookEndpointList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEndpoint"
+            }
+          }
+        }
+      },
+      "WebhookDelivery": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "event_id",
+          "event_type",
+          "status",
+          "attempts",
+          "last_status",
+          "last_error",
+          "created_at",
+          "delivered_at"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "webhook_delivery"
+          },
+          "id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "scan.completed",
+              "scan.failed",
+              "wallet.auto_recharge_failed"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "delivered",
+              "failed"
+            ]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "last_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "delivered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookDeliveryList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDelivery"
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "request_id"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

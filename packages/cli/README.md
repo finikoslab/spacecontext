@@ -1,0 +1,30 @@
+# spacecontext
+
+Space Context from the terminal. Film a space once, then search it, ask it questions and hand it to your agents as a Skill.
+
+```bash
+npx spacecontext login                            # paste a key from https://spacecontext.finikos.it/developers/console
+npx spacecontext scan tour.mp4 --name "Seaside flat" --type apartment
+npx spacecontext search "where is the fuse box?"
+npx spacecontext ask spc_… "is there a hair dryer?"
+npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
+```
+
+| Command | |
+| --- | --- |
+| `login [--key …]` / `logout` / `whoami` | Save, forget, check the API key |
+| `wallet` | Balance, free scans left, price per scan |
+| `spaces [--source app\|api]` | List your spaces |
+| `space <id> [--transcript]` | Show a space; `--json` for the full document |
+| `search <question…> [--space id] [--limit n]` | Search every space |
+| `ask <space-id> <question…>` | A short answer with its sources |
+| `skill <space-id> [--out dir] [--transcript]` | Write the space as an Agent Skill folder |
+| `diff <space-id> --from <scan> [--to <scan>]` | What changed between two scans |
+| `scan <video\|frames-dir> (--space id \| --name …)` | Upload (`.mp4 .mov .m4v`, or a folder of `.jpg .png .webp`), analyse, wait |
+| `scan-status <scan-id>` | Where a scan is |
+
+Every command accepts `--json`, `--api-key` and `--base-url`. The key is read from `--api-key`, then `SPACECONTEXT_API_KEY`, then the file written by `login` (`~/.config/spacecontext/config.json`, readable by you only). Exit codes: `0` success, `1` failure, `2` wrong usage.
+
+Videos are analysed on the server: no ffmpeg needed. A test key (`sc_test_…`) runs the whole flow for free and returns the demo space.
+
+MIT © Finikos S.r.l.

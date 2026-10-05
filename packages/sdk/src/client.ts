@@ -1,0 +1,542 @@
+import type { components } from './schema.js';
+import { errorFromResponse, SpaceContextError } from './errors.js';
+
+type Schemas = components['schemas'];
+export type SpaceDocument = Schemas['SpaceDocument'];
+export type SpaceSummary = Schemas['SpaceSummary'];
+export type SpaceListResponse = Schemas['SpaceListResponse'];
+export type ScanSummary = Schemas['ScanSummary'];
+export type ScanListResponse = Schemas['ScanListResponse'];
+export type SearchResults = Schemas['SearchResults'];
+export type SearchResult = SearchResults['data'][number];
+export type SpaceAnswer = Schemas['SpaceAnswer'];
+export type SkillBundle = Schemas['SkillBundle'];
+export type SpaceDiff = Schemas['SpaceDiff'];
+export type ApiSpace = Schemas['ApiSpace'];
+export type SpaceCreateRequest = Schemas['SpaceCreateRequest'];
+export type Scan = Schemas['Scan'];
+export type ScanInput = Schemas['ScanCreateRequest']['input'];
+export type ScanUpload = Schemas['ScanUpload'];
+export type Wallet = Schemas['Wallet'];
+export type MeResponse = Schemas['MeResponse'];
+export type SpaceType = NonNullable<SpaceCreateRequest['space_type']>;
+
+export const DEFAULT_BASE_URL = 'https://api.spacecontext.finikos.it/v1';
+
+/** Statuses after which a scan no longer changes. */
+export const FINAL_SCAN_STATUSES: ReadonlySet<Scan['status']> = new Set(['complete', 'failed', 'cancelled']);
+
+export type FrameContentType = 'image/jpeg' | 'image/png' | 'image/webp';
+export type VideoContentType = 'video/mp4' | 'video/quicktime' | 'video/x-m4v';
+/**
+ * Bytes to upload. A `Blob` is read lazily: in Node, `fs.openAsBlob(path)`
+ * uploads a 500 MB video without loading it in memory.
+ */
+export type UploadBody = Blob | ArrayBuffer | Uint8Array;
+
+export interface SpaceContextOptions {
+  /** `sc_live_…` or `sc_test_…`. Defaults to the `SPACECONTEXT_API_KEY` environment variable. */
+  apiKey?: string;
+  /** Defaults to `SPACECONTEXT_BASE_URL`, then the production API. */
+  baseUrl?: string;
+  /** A custom `fetch`, for tests or proxies. */
+  fetch?: typeof fetch;
+  /** Retries of a request the API rejected for load (429, 502–504) or that failed on the network. Default 2. */
+  maxRetries?: number;
+  /** Per request, uploads excluded. Default 60 s. */
+  timeoutMs?: number;
+}
+
+export interface RequestOptions {
+  signal?: AbortSignal;
+}
+
+type Query = Record<string, string | number | undefined | null>;
+
+type RequestSpec = {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  query?: Query;
+  json?: unknown;
+  body?: UploadBody;
+  headers?: Record<string, string>;
+  /** Safe to send twice: a retry after a network error or a 5xx cannot do the work twice. */
+  idempotent: boolean;
+  /** Uploads can take minutes: no client timeout. */
+  noTimeout?: boolean;
+  signal?: AbortSignal | undefined;
+};
+
+function environment(name: string): string | undefined {
+  const value = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[name];
+  return value && value.trim() ? value.trim() : undefined;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** Gateway failures: retried for idempotent requests. A 429 has its own rule. */
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+
+function idempotencyKey(): string {
+  return crypto.randomUUID().replaceAll('-', '');
+}
+
+function byteLength(body: UploadBody): number {
+  return body instanceof Blob ? body.size : body.byteLength;
+}
+
+/**
+ * Client for the Space Context API (`/v1`). Every method maps to one documented
+ * operation, except the helpers `scans.fromVideo`, `scans.fromFrames` and
+ * `scans.wait`, which chain them.
+ *
+ * ```ts
+ * const sc = new SpaceContext({ apiKey: process.env.SPACECONTEXT_API_KEY });
+ * const { data } = await sc.search('where is the stopcock?');
+ * ```
+ */
+export class SpaceContext {
+  readonly baseUrl: string;
+  readonly mode: 'live' | 'test';
+  private readonly apiKey: string;
+  private readonly fetcher: typeof fetch;
+  private readonly maxRetries: number;
+  private readonly timeoutMs: number;
+
+  constructor(options: SpaceContextOptions = {}) {
+    const apiKey = options.apiKey ?? environment('SPACECONTEXT_API_KEY');
+    if (!apiKey || !/^sc_(live|test)_[A-Za-z0-9_-]+$/.test(apiKey)) {
+      throw new SpaceContextError(
+        'An API key (sc_live_… or sc_test_…) is required: pass apiKey or set SPACECONTEXT_API_KEY',
+        0,
+        'MISSING_API_KEY',
+        null
+      );
+    }
+    this.apiKey = apiKey;
+    this.mode = apiKey.startsWith('sc_test_') ? 'test' : 'live';
+    const baseUrl = (options.baseUrl ?? environment('SPACECONTEXT_BASE_URL') ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    const parsed = new URL(baseUrl);
+    const local = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+    if (parsed.protocol !== 'https:' && !local) {
+      throw new SpaceContextError('baseUrl must use https', 0, 'INVALID_BASE_URL', null);
+    }
+    this.baseUrl = baseUrl;
+    this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.maxRetries = Math.max(0, Math.min(options.maxRetries ?? 2, 5));
+    this.timeoutMs = options.timeoutMs ?? 60_000;
+  }
+
+  // ---------------------------------------------------------------- spaces
+
+  readonly spaces = {
+    /** One page of spaces. `source: 'api'` lists the spaces created through the API. */
+    list: (params: { limit?: number; cursor?: string; source?: 'app' | 'api' } = {}, options: RequestOptions = {}) =>
+      this.json<SpaceListResponse>({
+        method: 'GET',
+        path: '/spaces',
+        query: { limit: params.limit, cursor: params.cursor, source: params.source },
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    /** Every space, page after page: `for await (const space of sc.spaces.iterate()) …`. */
+    iterate: (params: { source?: 'app' | 'api'; pageSize?: number } = {}, options: RequestOptions = {}) =>
+      this.iterateSpaces(params, options),
+
+    /**
+     * The current document of a space. A key without `spaces:sensitive` gets a
+     * redacted document; `include: 'transcript'` requires the scope.
+     */
+    get: (id: string, params: { include?: 'transcript'; enrich?: 'auto' | 'none' } = {}, options: RequestOptions = {}) =>
+      this.json<SpaceDocument>({
+        method: 'GET',
+        path: `/spaces/${encodeURIComponent(id)}`,
+        query: { include: params.include, enrich: params.enrich },
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    create: (space: SpaceCreateRequest, options: RequestOptions = {}) =>
+      this.json<ApiSpace>({ method: 'POST', path: '/spaces', json: space, idempotent: false, signal: options.signal }),
+
+    /** Deletes a space created through the API, with its scans and files. */
+    delete: (id: string, options: RequestOptions = {}) =>
+      this.empty({ method: 'DELETE', path: `/spaces/${encodeURIComponent(id)}`, idempotent: true, signal: options.signal }),
+
+    scans: (id: string, options: RequestOptions = {}) =>
+      this.json<ScanListResponse>({
+        method: 'GET',
+        path: `/spaces/${encodeURIComponent(id)}/scans`,
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    /** One past scan as it was recorded. Spaces scanned with the app require `spaces:sensitive`. */
+    scan: (id: string, scanId: string, params: { include?: 'transcript' } = {}, options: RequestOptions = {}) =>
+      this.json<SpaceDocument>({
+        method: 'GET',
+        path: `/spaces/${encodeURIComponent(id)}/scans/${encodeURIComponent(scanId)}`,
+        query: { include: params.include },
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    /** The space as a multi-file Agent Skill (`SKILL.md`, `space.json`, `references/…`). */
+    skill: (id: string, params: { include?: 'transcript'; enrich?: 'auto' | 'none' } = {}, options: RequestOptions = {}) =>
+      this.json<SkillBundle>({
+        method: 'GET',
+        path: `/spaces/${encodeURIComponent(id)}/skill`,
+        query: { include: params.include, enrich: params.enrich },
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    /** A short answer from the space's records, with citations and evidence frames. */
+    ask: (id: string, question: string, options: RequestOptions = {}) =>
+      this.json<SpaceAnswer>({
+        method: 'POST',
+        path: `/spaces/${encodeURIComponent(id)}/ask`,
+        json: { question },
+        // Answering twice costs a question of the daily allowance, never money.
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    /** What changed between two scans (`to` defaults to the current one). */
+    diff: (id: string, params: { from: string; to?: string }, options: RequestOptions = {}) =>
+      this.json<SpaceDiff>({
+        method: 'GET',
+        path: `/spaces/${encodeURIComponent(id)}/diff`,
+        query: { from: params.from, to: params.to },
+        idempotent: true,
+        signal: options.signal,
+      }),
+  };
+
+  // ---------------------------------------------------------------- search
+
+  /** Records matching a question across every space this key can read, best first. */
+  search(query: string, params: { spaceId?: string; limit?: number } = {}, options: RequestOptions = {}): Promise<SearchResults> {
+    return this.json<SearchResults>({
+      method: 'GET',
+      path: '/search',
+      query: { q: query, space_id: params.spaceId, limit: params.limit },
+      idempotent: true,
+      signal: options.signal,
+    });
+  }
+
+  // ---------------------------------------------------------------- scans
+
+  readonly scans = {
+    /**
+     * Declares a scan. Retried safely: the same `idempotencyKey` (one is generated
+     * when omitted) returns the scan already created.
+     */
+    create: (spaceId: string, input: ScanInput, options: RequestOptions & { idempotencyKey?: string } = {}) =>
+      this.json<Scan>({
+        method: 'POST',
+        path: `/spaces/${encodeURIComponent(spaceId)}/scans`,
+        json: { input },
+        headers: { 'Idempotency-Key': options.idempotencyKey ?? idempotencyKey() },
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    get: (id: string, options: RequestOptions = {}) =>
+      this.json<Scan>({ method: 'GET', path: `/scans/${encodeURIComponent(id)}`, idempotent: true, signal: options.signal }),
+
+    /** Cancels a scan that has not started. Nothing is charged. */
+    cancel: (id: string, options: RequestOptions = {}) =>
+      this.json<Scan>({ method: 'DELETE', path: `/scans/${encodeURIComponent(id)}`, idempotent: true, signal: options.signal }),
+
+    uploadFrame: (id: string, index: number, data: UploadBody, contentType: FrameContentType, options: RequestOptions = {}) =>
+      this.json<ScanUpload>({
+        method: 'PUT',
+        path: `/scans/${encodeURIComponent(id)}/frames/${index}`,
+        body: data,
+        headers: { 'Content-Type': contentType },
+        idempotent: true,
+        noTimeout: true,
+        signal: options.signal,
+      }),
+
+    /**
+     * Uploads the video of a scan, following the scan's `upload` instructions:
+     * straight to storage when the API offers a signed URL, otherwise through the
+     * API. The API key is only ever sent to the API itself.
+     */
+    uploadVideo: (scan: Scan, data: UploadBody, options: RequestOptions = {}) => this.uploadVideo(scan, data, options),
+
+    /** Starts the analysis and charges the scan (the free scan first, then the wallet). */
+    start: (id: string, options: RequestOptions = {}) =>
+      this.json<Scan>({
+        method: 'POST',
+        path: `/scans/${encodeURIComponent(id)}/start`,
+        json: {},
+        // A second start answers 200 with the scan already started.
+        idempotent: true,
+        signal: options.signal,
+      }),
+
+    /** Polls a scan until it is complete, failed or cancelled. */
+    wait: (id: string, params: { intervalMs?: number; timeoutMs?: number; onProgress?: (scan: Scan) => void } = {}, options: RequestOptions = {}) =>
+      this.waitForScan(id, params, options),
+
+    /** Creates, uploads and starts a video scan. Does not wait for the result. */
+    fromVideo: (
+      spaceId: string,
+      video: { data: UploadBody; contentType: VideoContentType; language?: 'en' | 'it'; recordedAt?: string; device?: string },
+      options: RequestOptions = {}
+    ) => this.scanFromVideo(spaceId, video, options),
+
+    /** Creates, uploads and starts a scan from still frames. Does not wait for the result. */
+    fromFrames: (
+      spaceId: string,
+      frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
+      params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript'] } = {},
+      options: RequestOptions = {}
+    ) => this.scanFromFrames(spaceId, frames, params, options),
+  };
+
+  // ---------------------------------------------------------------- account
+
+  /** The key in use: its user, mode and scopes. */
+  me(options: RequestOptions = {}): Promise<MeResponse> {
+    return this.json<MeResponse>({ method: 'GET', path: '/me', idempotent: true, signal: options.signal });
+  }
+
+  /** Prepaid balance and spending of this key. */
+  wallet(options: RequestOptions = {}): Promise<Wallet> {
+    return this.json<Wallet>({ method: 'GET', path: '/wallet', idempotent: true, signal: options.signal });
+  }
+
+  /**
+   * Downloads an evidence frame from the signed URL of a document. Only URLs of
+   * this API are fetched.
+   */
+  async evidenceFrame(url: string, options: RequestOptions = {}): Promise<{ contentType: string; data: ArrayBuffer }> {
+    if (!this.isApiUrl(url)) {
+      throw new SpaceContextError('Not an evidence URL of this API', 0, 'INVALID_URL', null);
+    }
+    // The URL is signed: the key is not needed, so it is not sent.
+    const response = await this.send(url, { method: 'GET', path: '', headers: {}, withAuth: false, idempotent: true, signal: options.signal });
+    return { contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', data: await response.arrayBuffer() };
+  }
+
+  // ---------------------------------------------------------------- internals
+
+  private async *iterateSpaces(
+    params: { source?: 'app' | 'api'; pageSize?: number },
+    options: RequestOptions
+  ): AsyncGenerator<SpaceSummary> {
+    let cursor: string | undefined;
+    do {
+      const page = await this.spaces.list({ source: params.source, limit: params.pageSize ?? 50, cursor }, options);
+      yield* page.data;
+      cursor = page.next_cursor ?? undefined;
+    } while (cursor);
+  }
+
+  private async uploadVideo(scan: Scan, data: UploadBody, options: RequestOptions): Promise<void> {
+    const upload = scan.upload;
+    if (!upload || upload.kind !== 'video' || !upload.url) {
+      throw new SpaceContextError('This scan is not waiting for a video', 0, 'INVALID_STATE', null);
+    }
+    const declared = scan.input.video?.content_length;
+    if (declared !== undefined && byteLength(data) !== declared) {
+      throw new SpaceContextError(
+        `The video is ${byteLength(data)} bytes but the scan declared ${declared}`,
+        0,
+        'VALIDATION_ERROR',
+        null
+      );
+    }
+    if (typeof upload.max_bytes === 'number' && byteLength(data) > upload.max_bytes) {
+      throw new SpaceContextError(
+        `The video is larger than this upload accepts (${upload.max_bytes} bytes)`,
+        413,
+        'PAYLOAD_TOO_LARGE',
+        null
+      );
+    }
+    const contentType = (upload.headers as Record<string, string> | undefined)?.['Content-Type'] ?? scan.input.video?.content_type;
+    const toApi = this.isApiUrl(upload.url);
+    const headers: Record<string, string> = contentType ? { 'Content-Type': contentType } : {};
+    const response = await this.send(upload.url, {
+      method: 'PUT',
+      path: '',
+      body: data,
+      headers,
+      withAuth: toApi,
+      idempotent: true,
+      noTimeout: true,
+      signal: options.signal,
+    });
+    // Storage answers with an empty body; the API with a ScanUpload.
+    await response.arrayBuffer();
+  }
+
+  private async waitForScan(
+    id: string,
+    params: { intervalMs?: number; timeoutMs?: number; onProgress?: (scan: Scan) => void },
+    options: RequestOptions
+  ): Promise<Scan> {
+    const interval = Math.max(1000, params.intervalMs ?? 3000);
+    const deadline = Date.now() + (params.timeoutMs ?? 20 * 60_000);
+    for (;;) {
+      const scan = await this.scans.get(id, options);
+      params.onProgress?.(scan);
+      if (FINAL_SCAN_STATUSES.has(scan.status)) return scan;
+      if (Date.now() + interval > deadline) {
+        throw new SpaceContextError(`Scan ${id} is still ${scan.status}`, 0, 'TIMEOUT', null, { scan });
+      }
+      await sleep(interval, options.signal);
+    }
+  }
+
+  private async scanFromVideo(
+    spaceId: string,
+    video: { data: UploadBody; contentType: VideoContentType; language?: 'en' | 'it'; recordedAt?: string; device?: string },
+    options: RequestOptions
+  ): Promise<Scan> {
+    const scan = await this.scans.create(
+      spaceId,
+      {
+        kind: 'video',
+        language: video.language ?? 'en',
+        video: { content_type: video.contentType, content_length: byteLength(video.data) },
+        ...(video.recordedAt ? { recorded_at: video.recordedAt } : {}),
+        ...(video.device ? { device: video.device } : {}),
+      },
+      options
+    );
+    await this.uploadVideo(scan, video.data, options);
+    return this.scans.start(scan.id, options);
+  }
+
+  private async scanFromFrames(
+    spaceId: string,
+    frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
+    params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript'] },
+    options: RequestOptions
+  ): Promise<Scan> {
+    if (frames.length === 0) throw new SpaceContextError('At least one frame is required', 0, 'VALIDATION_ERROR', null);
+    const scan = await this.scans.create(
+      spaceId,
+      {
+        kind: 'frames',
+        language: params.language ?? 'en',
+        frames: frames.map((frame) => ({ timestamp_ms: frame.timestampMs ?? null })),
+        ...(params.transcript ? { transcript: params.transcript } : {}),
+      },
+      options
+    );
+    for (const [index, frame] of frames.entries()) {
+      await this.scans.uploadFrame(scan.id, index, frame.data, frame.contentType, options);
+    }
+    return this.scans.start(scan.id, options);
+  }
+
+  private isApiUrl(url: string): boolean {
+    try {
+      const target = new URL(url);
+      const api = new URL(this.baseUrl);
+      return target.origin === api.origin && target.pathname.startsWith(`${api.pathname.replace(/\/+$/, '')}/`);
+    } catch {
+      return false;
+    }
+  }
+
+  private async json<T>(spec: RequestSpec): Promise<T> {
+    const response = await this.send(this.url(spec.path, spec.query), spec);
+    return (await response.json()) as T;
+  }
+
+  private async empty(spec: RequestSpec): Promise<void> {
+    const response = await this.send(this.url(spec.path, spec.query), spec);
+    await response.arrayBuffer();
+  }
+
+  private url(path: string, query?: Query): string {
+    const url = new URL(`${this.baseUrl}${path}`);
+    for (const [name, value] of Object.entries(query ?? {})) {
+      if (value !== undefined && value !== null) url.searchParams.set(name, String(value));
+    }
+    return url.toString();
+  }
+
+  private async send(url: string, spec: RequestSpec & { withAuth?: boolean }): Promise<Response> {
+    const headers: Record<string, string> = { Accept: 'application/json', ...spec.headers };
+    if (spec.withAuth !== false && this.isApiUrl(url)) headers.Authorization = `Bearer ${this.apiKey}`;
+    let body: BodyInit | undefined;
+    if (spec.json !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(spec.json);
+    } else if (spec.body !== undefined) {
+      body = spec.body as BodyInit;
+    }
+
+    for (let attempt = 0; ; attempt++) {
+      const signals = [spec.signal, spec.noTimeout ? undefined : AbortSignal.timeout(this.timeoutMs)].filter(
+        (signal): signal is AbortSignal => signal !== undefined
+      );
+      let response: Response;
+      try {
+        response = await this.fetcher(url, {
+          method: spec.method,
+          headers,
+          ...(body !== undefined ? { body } : {}),
+          ...(signals.length > 0 ? { signal: AbortSignal.any(signals) } : {}),
+          // Never followed: a redirect is answered as an error. ('error' is not supported by Workers.)
+          redirect: 'manual',
+        });
+      } catch (error) {
+        if (spec.signal?.aborted) throw spec.signal.reason;
+        const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+        if (spec.idempotent && attempt < this.maxRetries) {
+          await sleep(this.backoff(attempt, null), spec.signal);
+          continue;
+        }
+        throw new SpaceContextError(
+          timedOut ? 'The request timed out' : `The request failed: ${error instanceof Error ? error.message : String(error)}`,
+          0,
+          timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
+          null
+        );
+      }
+
+      if (response.ok) return response;
+      const error = await errorFromResponse(response);
+      // A 429 was refused before any work: always safe to retry, unless the wait is
+      // long (a daily limit). A 5xx only when the request is idempotent.
+      const wait = error.retryAfter ?? (typeof error.details.retry_after === 'number' ? error.details.retry_after : null);
+      const retryable =
+        (response.status === 429 && (wait === null || wait <= 60)) || (spec.idempotent && RETRYABLE_STATUSES.has(response.status));
+      if (retryable && attempt < this.maxRetries) {
+        await sleep(this.backoff(attempt, wait), spec.signal);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  private backoff(attempt: number, retryAfter: number | null): number {
+    if (retryAfter !== null) return Math.min(retryAfter, 60) * 1000;
+    return Math.round(500 * 2 ** attempt * (0.75 + Math.random() * 0.5));
+  }
+}

@@ -1,0 +1,36 @@
+// Remote MCP server for Space Context. Deploying it is a separate step from the
+// API (see README): create the KV namespace, set the ids below, then
+// `npm run deploy -w @spacecontext/mcp`.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "spacecontext-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "mcp.spacecontext.finikos.it", "custom_domain": true }],
+  "vars": {
+    "API_BASE_URL": "https://api.spacecontext.finikos.it/v1",
+    "PUBLIC_URL": "https://mcp.spacecontext.finikos.it"
+  },
+  // OAuth clients, grants and tokens (encrypted by the library).
+  // Create with: wrangler kv namespace create OAUTH_KV
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_OAUTH_KV_ID" }],
+  // The API reached inside Cloudflare: each user keeps their own IP for rate
+  // limits and sign-in protection. Without it the Worker calls API_BASE_URL.
+  "services": [{ "binding": "BACKEND", "service": "spacecontext-backend" }],
+  "observability": { "enabled": true },
+  "env": {
+    "dev": {
+      "name": "spacecontext-mcp-dev",
+      "workers_dev": false,
+      "routes": [],
+      "vars": {
+        "API_BASE_URL": "http://127.0.0.1:8787/v1",
+        "PUBLIC_URL": "http://localhost:8788"
+      },
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "spacecontext-mcp-dev-oauth" }],
+      "services": []
+    }
+  }
+}
