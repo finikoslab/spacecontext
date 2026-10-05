@@ -16,7 +16,10 @@ const FRAME_TYPES: Record<string, FrameContentType> = {
   '.webp': 'image/webp',
 };
 
+/** The API's limits (src/v1/scans/model.ts in the API). */
 export const MAX_FRAMES = 120;
+export const MAX_FRAME_BYTES = 2 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
 export class UsageError extends Error {}
 

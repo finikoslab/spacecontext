@@ -14,7 +14,8 @@
 - The CLI writes a Skill only to plain relative paths inside the target folder, after checking every path.
 - The config file holding the key is created with mode `0600`.
 - The MCP consent forms accept posts only from their own origin; the consent handle is bound to the browser by the OAuth library and works once. Client-supplied strings are escaped. A key created for a grant that cannot be completed is revoked.
-- Content of a space is data, never instructions: the MCP server says so in its instructions and in every result.
+- Content of a space is data, never instructions: the MCP server says so in its instructions and in every result that carries space content (`note`).
+- A key revoked in the console ends its MCP grant on the next call (the client is asked to sign in again); connecting the same client again revokes the key of the grant it replaces.
 
 ## Checks
 

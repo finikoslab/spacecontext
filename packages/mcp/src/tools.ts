@@ -36,7 +36,7 @@ function advice(error: SpaceContextError): string {
     case 'NOT_FOUND':
       return 'Check the id with list_spaces or search_spaces.';
     case 'RATE_LIMIT_EXCEEDED':
-      return 'Too many requests; wait before retrying.';
+      return `Too many requests; wait ${error.retryAfter ?? 60} seconds before retrying.`;
     case 'SEARCH_UNAVAILABLE':
       return 'Search is not available right now; use list_spaces and get_space instead.';
     default:
@@ -44,10 +44,22 @@ function advice(error: SpaceContextError): string {
   }
 }
 
-async function run(action: () => Promise<ToolResult>): Promise<ToolResult> {
+export type ServerHooks = {
+  /** The API refused the grant's key (revoked in the console): end the grant so the client signs in again. */
+  onUnauthorized?: () => Promise<void>;
+};
+
+async function run(hooks: ServerHooks, action: () => Promise<ToolResult>): Promise<ToolResult> {
   try {
     return await action();
   } catch (error) {
+    if (error instanceof SpaceContextError && error.status === 401) {
+      await hooks.onUnauthorized?.().catch(() => undefined);
+      return {
+        isError: true,
+        content: [{ type: 'text', text: 'This connection to Space Context is no longer authorized (its access was revoked). Reconnect Space Context in your assistant to continue.' }],
+      };
+    }
     if (error instanceof SpaceContextError) {
       const hint = advice(error);
       return { isError: true, content: [{ type: 'text', text: `${error.code}: ${error.message}${hint ? `\n${hint}` : ''}` }] };
@@ -57,33 +69,28 @@ async function run(action: () => Promise<ToolResult>): Promise<ToolResult> {
 }
 
 /** The MCP server for one request, acting with the API key of the caller's grant. */
-export function createServer(api: SpaceContext): McpServer {
+export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: INSTRUCTIONS });
 
   server.registerTool(
     'list_spaces',
     {
       title: 'List spaces',
-      description: 'Lists the spaces of the user (scanned with the app or through the API) with their latest scan: counts of areas, items and issues.',
-      inputSchema: z.object({ source: z.enum(['app', 'api']).optional().describe('Only spaces from this source. Omit for both.') }),
+      description:
+        'Lists the spaces this connection can read (scanned with the app, for Space Context Pro users, or through the API), newest first, with their latest scan: counts of areas, items and issues. Pass the returned next_cursor to get the next page.',
+      inputSchema: z.object({
+        source: z.enum(['app', 'api']).optional().describe('Only spaces from this source. Omit for all.'),
+        cursor: z.string().max(500).optional().describe('next_cursor from a previous call.'),
+      }),
       annotations: { title: 'List spaces', ...READ_ONLY },
     },
-    ({ source }) =>
-      run(async () => {
-        const sources = source ? [source] : (['app', 'api'] as const);
-        const pages = await Promise.all(
-          sources.map((entry) =>
-            api.spaces.list({ source: entry, limit: 50 }).catch((error: unknown) => {
-              // App spaces need Pro: a user without it still has API spaces.
-              if (error instanceof SpaceContextError && error.code === 'PRO_REQUIRED' && !source) return { data: [], next_cursor: null };
-              throw error;
-            })
-          )
-        );
-        const spaces = pages.flatMap((page) => page.data);
+    ({ source, cursor }) =>
+      run(hooks, async () => {
+        const page = await api.spaces.list({ limit: 50, ...(source ? { source } : {}), ...(cursor ? { cursor } : {}) });
         return text({
-          spaces: spaces.map((space) => compact({ id: space.id, name: space.name, source: space.source, space_type: space.space_type, latest_scan: space.latest_scan })),
-          more: pages.some((page) => page.next_cursor !== null) || undefined,
+          note: DATA_NOTE,
+          spaces: page.data.map((space) => compact({ id: space.id, name: space.name, source: space.source, space_type: space.space_type, latest_scan: space.latest_scan })),
+          next_cursor: page.next_cursor ?? undefined,
         });
       })
   );
@@ -102,7 +109,7 @@ export function createServer(api: SpaceContext): McpServer {
       annotations: { title: 'Search spaces', ...READ_ONLY },
     },
     ({ query, space_id, limit }) =>
-      run(async () => {
+      run(hooks, async () => {
         const results = await api.search(query, { ...(space_id ? { spaceId: space_id } : {}), ...(limit ? { limit } : {}) });
         return text({ note: DATA_NOTE, results: results.data.map((hit) => compact({ ...hit })) });
       })
@@ -122,7 +129,7 @@ export function createServer(api: SpaceContext): McpServer {
       annotations: { title: 'Read a space', ...READ_ONLY },
     },
     ({ space_id, sections, include_evidence }) =>
-      run(async () => text(compactDocument(await api.spaces.get(space_id), { ...(sections ? { sections } : {}), evidence: include_evidence ?? false })))
+      run(hooks, async () => text(compactDocument(await api.spaces.get(space_id), { ...(sections ? { sections } : {}), evidence: include_evidence ?? false })))
   );
 
   server.registerTool(
@@ -135,7 +142,7 @@ export function createServer(api: SpaceContext): McpServer {
       annotations: { title: 'Ask a space', ...READ_ONLY },
     },
     ({ space_id, question }) =>
-      run(async () => {
+      run(hooks, async () => {
         const answer = await api.spaces.ask(space_id, question);
         return text({ note: DATA_NOTE, answer: answer.answer, documented: answer.documented, citations: answer.citations, scan_id: answer.scan_id });
       })
@@ -149,7 +156,7 @@ export function createServer(api: SpaceContext): McpServer {
       inputSchema: z.object({ space_id: spaceId }),
       annotations: { title: 'List scans of a space', ...READ_ONLY },
     },
-    ({ space_id }) => run(async () => text((await api.spaces.scans(space_id)).data))
+    ({ space_id }) => run(hooks, async () => text({ scans: (await api.spaces.scans(space_id)).data }))
   );
 
   server.registerTool(
@@ -166,7 +173,7 @@ export function createServer(api: SpaceContext): McpServer {
       annotations: { title: 'Compare two scans', ...READ_ONLY },
     },
     ({ space_id, from_scan_id, to_scan_id }) =>
-      run(async () => text(await api.spaces.diff(space_id, { from: from_scan_id, ...(to_scan_id ? { to: to_scan_id } : {}) })))
+      run(hooks, async () => text({ note: DATA_NOTE, ...(await api.spaces.diff(space_id, { from: from_scan_id, ...(to_scan_id ? { to: to_scan_id } : {}) })) }))
   );
 
   server.registerTool(
@@ -178,7 +185,7 @@ export function createServer(api: SpaceContext): McpServer {
       annotations: { title: 'Get an evidence photo', ...READ_ONLY },
     },
     ({ url }) =>
-      run(async () => {
+      run(hooks, async () => {
         const frame = await api.evidenceFrame(url);
         if (!/^image\/(jpeg|png|webp)$/.test(frame.contentType)) {
           return { isError: true, content: [{ type: 'text', text: 'The URL did not return an image.' }] };
@@ -196,7 +203,7 @@ export function createServer(api: SpaceContext): McpServer {
       annotations: { title: 'Scan status', ...READ_ONLY },
     },
     ({ scan_id }) =>
-      run(async () => {
+      run(hooks, async () => {
         const scan = await api.scans.get(scan_id);
         return text(compact({ id: scan.id, space_id: scan.space_id, status: scan.status, stage: scan.stage, error: scan.error, completed_at: scan.completed_at }));
       })

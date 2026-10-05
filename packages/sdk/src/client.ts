@@ -45,6 +45,11 @@ export interface SpaceContextOptions {
   maxRetries?: number;
   /** Per request, uploads excluded. Default 60 s. */
   timeoutMs?: number;
+  /**
+   * Longest wait before a retry. A 429 asking to wait longer is returned at once
+   * as an error. Default 60 s; interactive callers (an MCP tool) want a few seconds.
+   */
+  maxRetryDelayMs?: number;
 }
 
 export interface RequestOptions {
@@ -115,6 +120,7 @@ export class SpaceContext {
   private readonly fetcher: typeof fetch;
   private readonly maxRetries: number;
   private readonly timeoutMs: number;
+  private readonly maxRetryDelayMs: number;
 
   constructor(options: SpaceContextOptions = {}) {
     const apiKey = options.apiKey ?? environment('SPACECONTEXT_API_KEY');
@@ -138,6 +144,7 @@ export class SpaceContext {
     this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.maxRetries = Math.max(0, Math.min(options.maxRetries ?? 2, 5));
     this.timeoutMs = options.timeoutMs ?? 60_000;
+    this.maxRetryDelayMs = Math.max(0, options.maxRetryDelayMs ?? 60_000);
   }
 
   // ---------------------------------------------------------------- spaces
@@ -173,9 +180,13 @@ export class SpaceContext {
     create: (space: SpaceCreateRequest, options: RequestOptions = {}) =>
       this.json<ApiSpace>({ method: 'POST', path: '/spaces', json: space, idempotent: false, signal: options.signal }),
 
-    /** Deletes a space created through the API, with its scans and files. */
+    /**
+     * Deletes a space created through the API, with its scans and files. Not
+     * retried after a network error: a repeat would answer 404 for a space
+     * already deleted.
+     */
     delete: (id: string, options: RequestOptions = {}) =>
-      this.empty({ method: 'DELETE', path: `/spaces/${encodeURIComponent(id)}`, idempotent: true, signal: options.signal }),
+      this.empty({ method: 'DELETE', path: `/spaces/${encodeURIComponent(id)}`, idempotent: false, signal: options.signal }),
 
     scans: (id: string, options: RequestOptions = {}) =>
       this.json<ScanListResponse>({
@@ -260,9 +271,9 @@ export class SpaceContext {
     get: (id: string, options: RequestOptions = {}) =>
       this.json<Scan>({ method: 'GET', path: `/scans/${encodeURIComponent(id)}`, idempotent: true, signal: options.signal }),
 
-    /** Cancels a scan that has not started. Nothing is charged. */
+    /** Cancels a scan that has not started: nothing is charged and its uploads are deleted. */
     cancel: (id: string, options: RequestOptions = {}) =>
-      this.json<Scan>({ method: 'DELETE', path: `/scans/${encodeURIComponent(id)}`, idempotent: true, signal: options.signal }),
+      this.empty({ method: 'DELETE', path: `/scans/${encodeURIComponent(id)}`, idempotent: false, signal: options.signal }),
 
     uploadFrame: (id: string, index: number, data: UploadBody, contentType: FrameContentType, options: RequestOptions = {}) =>
       this.json<ScanUpload>({
@@ -297,14 +308,14 @@ export class SpaceContext {
     wait: (id: string, params: { intervalMs?: number; timeoutMs?: number; onProgress?: (scan: Scan) => void } = {}, options: RequestOptions = {}) =>
       this.waitForScan(id, params, options),
 
-    /** Creates, uploads and starts a video scan. Does not wait for the result. */
+    /** Creates, uploads and starts a video scan; cancels it if the upload fails. Does not wait for the result. */
     fromVideo: (
       spaceId: string,
       video: { data: UploadBody; contentType: VideoContentType; language?: 'en' | 'it'; recordedAt?: string; device?: string },
       options: RequestOptions = {}
     ) => this.scanFromVideo(spaceId, video, options),
 
-    /** Creates, uploads and starts a scan from still frames. Does not wait for the result. */
+    /** Creates, uploads and starts a scan from still frames; cancels it if an upload fails. Does not wait for the result. */
     fromFrames: (
       spaceId: string,
       frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
@@ -425,8 +436,18 @@ export class SpaceContext {
       },
       options
     );
-    await this.uploadVideo(scan, video.data, options);
+    await this.uploadOrCancel(scan, () => this.uploadVideo(scan, video.data, options));
     return this.scans.start(scan.id, options);
+  }
+
+  /** Runs the upload; when it fails, the scan is cancelled so that nothing is left waiting, then the error is rethrown. */
+  private async uploadOrCancel(scan: Scan, upload: () => Promise<void>): Promise<void> {
+    try {
+      await upload();
+    } catch (error) {
+      await this.scans.cancel(scan.id).catch(() => undefined);
+      throw error;
+    }
   }
 
   private async scanFromFrames(
@@ -446,9 +467,16 @@ export class SpaceContext {
       },
       options
     );
-    for (const [index, frame] of frames.entries()) {
-      await this.scans.uploadFrame(scan.id, index, frame.data, frame.contentType, options);
-    }
+    await this.uploadOrCancel(scan, async () => {
+      const maxBytes = scan.upload?.max_bytes;
+      const oversized = frames.findIndex((frame) => typeof maxBytes === 'number' && byteLength(frame.data) > maxBytes);
+      if (oversized !== -1) {
+        throw new SpaceContextError(`Frame ${oversized} is larger than ${maxBytes} bytes`, 413, 'PAYLOAD_TOO_LARGE', null, { index: oversized });
+      }
+      for (const [index, frame] of frames.entries()) {
+        await this.scans.uploadFrame(scan.id, index, frame.data, frame.contentType, options);
+      }
+    });
     return this.scans.start(scan.id, options);
   }
 
@@ -526,7 +554,8 @@ export class SpaceContext {
       // long (a daily limit). A 5xx only when the request is idempotent.
       const wait = error.retryAfter ?? (typeof error.details.retry_after === 'number' ? error.details.retry_after : null);
       const retryable =
-        (response.status === 429 && (wait === null || wait <= 60)) || (spec.idempotent && RETRYABLE_STATUSES.has(response.status));
+        (response.status === 429 && (wait === null || wait * 1000 <= this.maxRetryDelayMs)) ||
+        (spec.idempotent && RETRYABLE_STATUSES.has(response.status));
       if (retryable && attempt < this.maxRetries) {
         await sleep(this.backoff(attempt, wait), spec.signal);
         continue;
@@ -536,7 +565,7 @@ export class SpaceContext {
   }
 
   private backoff(attempt: number, retryAfter: number | null): number {
-    if (retryAfter !== null) return Math.min(retryAfter, 60) * 1000;
-    return Math.round(500 * 2 ** attempt * (0.75 + Math.random() * 0.5));
+    const delay = retryAfter !== null ? retryAfter * 1000 : Math.round(500 * 2 ** attempt * (0.75 + Math.random() * 0.5));
+    return Math.min(delay, this.maxRetryDelayMs);
   }
 }

@@ -67,6 +67,21 @@ function validEmail(value: string | undefined): string | null {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
+/** The API keys of this user's grants to one client. */
+async function keysOfGrants(env: Env, userId: string, clientId: string): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await env.OAUTH_PROVIDER.listUserGrants(userId, cursor ? { cursor } : {});
+    for (const grant of page.items) {
+      const keyId = (grant.metadata as { keyId?: unknown } | null)?.keyId;
+      if (grant.clientId === clientId && typeof keyId === 'string') keys.push(keyId);
+    }
+    cursor = page.cursor;
+  } while (cursor);
+  return keys;
+}
+
 async function showAuthorize(request: Request, env: Env): Promise<Response> {
   const oauth = new URL(request.url).search.slice(1);
   let described;
@@ -92,12 +107,13 @@ async function sendCode(request: Request, env: Env): Promise<Response> {
   const email = validEmail(form.email);
   if (!email) return emailPage({ consent: described.consent, handle, oauth, email: form.email ?? '', error: 'Enter a valid email address.' });
   try {
-    await backendJson(env, '/auth/email/send', {
+    const sent = await backendJson<{ sent?: boolean }>(env, '/auth/email/send', {
       method: 'POST',
       body: { email },
       clientIp: clientIp(request),
       language: request.headers.get('Accept-Language'),
     });
+    if (sent?.sent === false) throw new BackendError(502, 'EMAIL_NOT_SENT', 'The code could not be sent');
   } catch (error) {
     const message =
       error instanceof BackendError && error.status === 429
@@ -173,6 +189,10 @@ async function approve(request: Request, env: Env): Promise<Response> {
       throw new Error('The API did not return a usable key');
     }
     const props: GrantProps = { apiKey: key.key, keyId: key.id, userId: session.user.id, email: session.user.email, scopes: key.scopes };
+    // Connecting again replaces this client's earlier grants (the library revokes
+    // them): their keys are revoked too, so the console does not fill up with keys
+    // nobody holds.
+    const replaced = await keysOfGrants(env, session.user.id, approved.request.clientId);
     const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
       request: approved.request,
       userId: session.user.id,
@@ -180,6 +200,9 @@ async function approve(request: Request, env: Env): Promise<Response> {
       scope: approved.request.scope,
       props,
     });
+    for (const keyId of replaced) {
+      await backendJson(env, `/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
+    }
     const headers = new Headers(approved.headers);
     headers.set('Location', redirectTo);
     return new Response(null, { status: 302, headers });

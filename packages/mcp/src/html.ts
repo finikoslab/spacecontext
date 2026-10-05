@@ -15,6 +15,7 @@ label{display:block;margin:16px 0 6px;font-weight:600}input[type=email],input[ty
 .check{display:flex;gap:10px;align-items:flex-start;margin:14px 0;font-weight:400}.check input{margin-top:4px}
 .actions{display:flex;gap:10px;margin-top:20px}button{flex:1;padding:11px;border-radius:10px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}code{font-size:.9em}
+button.link{flex:none;padding:0;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;background:none}.resend{margin-top:8px}
 .who{border:1px solid var(--line);border-radius:10px;padding:12px;margin:16px 0}.warn{color:var(--error);font-size:.9rem}`;
 
 export function page(title: string, body: string, status = 200, headers?: Headers): Response {
@@ -77,6 +78,10 @@ ${input.error ? `<p class="error">${escapeHtml(input.error)}</p>` : ''}
 <label class="check"><input type="checkbox" name="sensitive" value="1"><span>Also show <strong>sensitive values</strong> such as Wi-Fi passwords, door and alarm codes, and the narration of your videos.</span></label>
 <p class="muted">You can revoke this access at any time from the console (API keys).</p>
 <div class="actions"><button type="submit" name="action" value="deny">Deny</button><button class="primary" type="submit" name="action" value="approve">Approve</button></div>
+</form>
+<form method="post" action="/authorize/code" class="resend">
+${hidden({ handle: input.handle, oauth: input.oauth, email: input.email })}
+<p class="muted">No email? <button type="submit" class="link">Send a new code</button></p>
 </form>`,
     input.error ? 400 : 200
   );

@@ -29,8 +29,10 @@ function harness(routes: Route[], env: Record<string, string> = {}) {
   const out: string[] = [];
   const err: string[] = [];
   const calls: Call[] = [];
+  const urls: string[] = [];
   const fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input));
+    urls.push(url.toString());
     const call: Call = { method: init.method ?? 'GET', path: url.pathname.replace(/^\/v1/, ''), search: url.searchParams, headers: new Headers(init.headers), body: init.body };
     calls.push(call);
     for (const route of routes) {
@@ -47,7 +49,7 @@ function harness(routes: Route[], env: Record<string, string> = {}) {
     prompt: null,
     fetch,
   };
-  return { io, calls, stdout: () => out.join(''), stderr: () => err.join('') };
+  return { io, calls, urls, stdout: () => out.join(''), stderr: () => err.join('') };
 }
 
 const me: Route = (call) =>
@@ -247,6 +249,65 @@ describe('spacecontext CLI', () => {
     }
     await writeFile(path.join(directory, 'notes.txt'), 'x');
     expect(await main(['scan', 'notes.txt', '--space', SPACE_ID], h.io)).toBe(2);
+  });
+});
+
+describe('spacecontext CLI, housekeeping', () => {
+  it('lists scans, cancels a scan and deletes a space', async () => {
+    const h = harness([
+      (call) => (call.path === `/spaces/${SPACE_ID}/scans` ? json({ data: [{ object: 'scan', id: SCAN_ID, space_id: SPACE_ID, analyzed_at: '2026-10-05T10:00:00.000Z', areas: 3, items: 14, issues: 2, current: true }] }) : undefined),
+      (call) => (call.method === 'DELETE' ? new Response(null, { status: 204 }) : undefined),
+    ], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scans', SPACE_ID], h.io)).toBe(0);
+    expect(h.stdout()).toContain(`${SCAN_ID} (current)`);
+    expect(await main(['cancel', SCAN_ID, '--json'], h.io)).toBe(0);
+    expect(h.stdout()).toContain(`"cancelled": "${SCAN_ID}"`);
+    expect(await main(['delete-space', SPACE_ID], h.io)).toBe(0);
+    expect(h.calls.filter((call) => call.method === 'DELETE').map((call) => call.path)).toEqual([`/scans/${SCAN_ID}`, `/spaces/${SPACE_ID}`]);
+  });
+
+  it('prints JSON on logout with --json', async () => {
+    const h = harness([]);
+    expect(await main(['logout', '--json'], h.io)).toBe(0);
+    expect(JSON.parse(h.stdout())).toEqual({ logged_out: true });
+  });
+
+  it('sends a key from the environment to the default API, never to the URL saved with another key', async () => {
+    const h = harness([me], { SPACECONTEXT_BASE_URL: '' });
+    delete h.io.env.SPACECONTEXT_BASE_URL;
+    await main(['login', '--key', KEY, '--base-url', 'http://localhost:8787/v1'], h.io);
+    await main(['whoami'], h.io);
+    const saved = h.calls.at(-1)!;
+    expect(saved.headers.get('authorization')).toBe(`Bearer ${KEY}`);
+
+    h.io.env.SPACECONTEXT_API_KEY = 'sc_live_otherkeyfromenv';
+    await main(['whoami'], h.io);
+    expect(h.calls.at(-1)!.headers.get('authorization')).toBe('Bearer sc_live_otherkeyfromenv');
+    expect(h.urls.at(-1)).toMatch(/^https:\/\/api\.spacecontext\.finikos\.it\/v1\/me/);
+    expect(h.urls.at(-2)).toMatch(/^http:\/\/localhost:8787\/v1\/me/);
+  });
+
+  it('refuses oversized files before creating anything, and says when a space was left without a scan', async () => {
+    const frames = path.join(directory, 'big');
+    await mkdir(frames);
+    await writeFile(path.join(frames, 'frame-1.jpg'), new Uint8Array(2 * 1024 * 1024 + 1));
+    const h = harness([], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scan', 'big', '--name', 'Flat'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('larger than 2 MB');
+    expect(h.calls).toEqual([]);
+
+    const ok = path.join(directory, 'ok');
+    await mkdir(ok);
+    await writeFile(path.join(ok, 'frame-1.jpg'), new Uint8Array([0xff, 0xd8]));
+    const failing = harness([
+      (call) => (call.method === 'POST' && call.path === '/spaces' ? json({ object: 'space', id: SPACE_ID, name: 'Flat' }, 201) : undefined),
+      (call) => (call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans` ? json(scan('awaiting_upload'), 201) : undefined),
+      (call) => (call.method === 'PUT' ? json({ error: { code: 'INVALID_CONTENT_TYPE', message: 'Not an image', request_id: 'r' } }, 415) : undefined),
+      (call) => (call.method === 'DELETE' ? new Response(null, { status: 204 }) : undefined),
+    ], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scan', 'ok', '--name', 'Flat'], failing.io)).toBe(1);
+    expect(failing.calls.some((call) => call.method === 'DELETE' && call.path === `/scans/${SCAN_ID}`)).toBe(true);
+    expect(failing.stderr()).toContain(`spacecontext delete-space ${SPACE_ID}`);
   });
 });
 

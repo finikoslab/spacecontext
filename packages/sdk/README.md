@@ -24,10 +24,10 @@ const answer = await sc.spaces.ask(space.id, 'Is there a dishwasher?');
 const skill = await sc.spaces.skill(space.id); // { name, files: [{ path, content }] }
 
 try {
-  await sc.spaces.get('app_…');
+  await sc.spaces.ask('app_…', 'Where is the boiler?');
 } catch (error) {
   if (error instanceof SpaceContextError && error.code === 'ENRICHMENT_PENDING') {
-    // being screened for sensitive values: retry shortly
+    // a space scanned with the app is being screened for sensitive values: retry in a minute
   }
 }
 ```
@@ -36,7 +36,7 @@ try {
 
 - **Keys:** `sc_test_…` (free, demo data) or `sc_live_…`. Falls back to `SPACECONTEXT_API_KEY` and `SPACECONTEXT_BASE_URL`.
 - **Errors:** every failure is a `SpaceContextError` with `status`, a stable `code` (branch on it), `requestId` and `details`. `NETWORK_ERROR` and `TIMEOUT` come from the client.
-- **Retries:** a `429` is retried after `Retry-After` (unless the wait is long, like a daily limit); `502–504` and network errors only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry. `maxRetries` defaults to 2.
+- **Retries:** a `429` is retried after `Retry-After` when the wait is within `maxRetryDelayMs` (default 60 s), otherwise returned at once; `502–504` and network errors only for requests that are safe to repeat (not `cancel` nor `delete`). Scan creation sends an `Idempotency-Key`, reused on retry. `maxRetries` defaults to 2.
 - **Uploads:** pass a `Blob` (`fs.openAsBlob` streams from disk), `ArrayBuffer` or `Uint8Array`. Videos go straight to storage when the API offers a signed URL; the API key is only ever sent to the API itself.
 - **Redirects** are never followed.
 - **Types:** every schema of the [OpenAPI spec](../../openapi/openapi.json) is exported (`SpaceDocument`, `Scan`, `SearchResults`, … and `components`).

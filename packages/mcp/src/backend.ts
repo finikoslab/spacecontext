@@ -17,7 +17,8 @@ export function backendFetch(env: Env, clientIp: string | null): typeof fetch {
 
 /** The SDK, acting with the API key of a grant. */
 export function apiClient(env: Env, apiKey: string, clientIp: string | null): SpaceContext {
-  return new SpaceContext({ apiKey, baseUrl: env.API_BASE_URL, fetch: backendFetch(env, clientIp), maxRetries: 1, timeoutMs: 30_000 });
+  // A tool call must answer quickly: a long rate-limit wait is reported, not slept through.
+  return new SpaceContext({ apiKey, baseUrl: env.API_BASE_URL, fetch: backendFetch(env, clientIp), maxRetries: 1, timeoutMs: 30_000, maxRetryDelayMs: 5_000 });
 }
 
 export class BackendError extends Error {

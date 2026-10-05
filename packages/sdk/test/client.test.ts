@@ -131,6 +131,24 @@ describe('SpaceContext client', () => {
     expect(always.calls).toHaveLength(2);
   });
 
+  it('cancels a scan and deletes a space without expecting a body, and does not repeat them', async () => {
+    const ok = fakeFetch(() => new Response(null, { status: 204 }));
+    await expect(client(ok.fetch).scans.cancel('scn_1')).resolves.toBeUndefined();
+    await expect(client(ok.fetch).spaces.delete('spc_1')).resolves.toBeUndefined();
+    expect(ok.calls.map((call) => call.method)).toEqual(['DELETE', 'DELETE']);
+
+    const flaky = fakeFetch(() => apiError(503, 'UNAVAILABLE', {}, { 'Retry-After': '0' }));
+    await expect(client(flaky.fetch).scans.cancel('scn_1')).rejects.toMatchObject({ status: 503 });
+    expect(flaky.calls).toHaveLength(1);
+  });
+
+  it('gives up at once on a 429 that asks for a longer wait than allowed', async () => {
+    const limited = fakeFetch(() => apiError(429, 'RATE_LIMIT_EXCEEDED', {}, { 'Retry-After': '60' }));
+    const sc = new SpaceContext({ apiKey: LIVE, baseUrl: BASE, fetch: limited.fetch, maxRetryDelayMs: 5000 });
+    await expect(sc.search('oven')).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED', retryAfter: 60 });
+    expect(limited.calls).toHaveLength(1);
+  });
+
   it('never follows a redirect', async () => {
     const { fetch } = fakeFetch(() => new Response(null, { status: 302, headers: { Location: 'https://elsewhere.example/v1/me' } }));
     await expect(client(fetch).me()).rejects.toMatchObject({ status: 302, code: 'HTTP_302' });
@@ -219,6 +237,24 @@ describe('SpaceContext client', () => {
     await client(fetch).scans.fromVideo('spc_1', { data: new Uint8Array(4), contentType: 'video/mp4' });
     expect(JSON.parse(String(calls[0]!.body)).input).toEqual({ kind: 'video', language: 'en', video: { content_type: 'video/mp4', content_length: 4 } });
     expect(calls.map((call) => call.method)).toEqual(['POST', 'PUT', 'POST']);
+  });
+
+  it('cancels a scan whose upload fails, and refuses oversized frames before sending them', async () => {
+    const created = scan({ input: { kind: 'frames', language: 'en', frame_count: 2, video: null, has_transcript: false }, upload: { kind: 'frames', method: 'PUT', url_template: `${BASE}/scans/x/frames/{index}`, max_bytes: 4 } as Scan['upload'] });
+    const big = fakeFetch((call) => (call.method === 'DELETE' ? new Response(null, { status: 204 }) : json(created, 201)));
+    await expect(
+      client(big.fetch).scans.fromFrames('spc_1', [
+        { data: new Uint8Array(4), contentType: 'image/jpeg' },
+        { data: new Uint8Array(5), contentType: 'image/jpeg' },
+      ])
+    ).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE', details: { index: 1 } });
+    expect(big.calls.map((call) => `${call.method} ${new URL(call.url).pathname}`)).toEqual(['POST /v1/spaces/spc_1/scans', `DELETE /v1/scans/${created.id}`]);
+
+    const failing = fakeFetch((call) =>
+      call.method === 'POST' ? json(scan(), 201) : call.method === 'PUT' ? apiError(413, 'FILE_TOO_LARGE') : new Response(null, { status: 204 })
+    );
+    await expect(client(failing.fetch).scans.fromVideo('spc_1', { data: new Uint8Array(4), contentType: 'video/mp4' })).rejects.toMatchObject({ code: 'FILE_TOO_LARGE' });
+    expect(failing.calls.map((call) => call.method)).toEqual(['POST', 'PUT', 'DELETE']);
   });
 
   it('waits for a scan to finish, and gives up at the deadline', async () => {

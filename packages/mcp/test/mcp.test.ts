@@ -15,6 +15,7 @@ type BackendCall = { method: string; path: string; search: URLSearchParams; head
 /** The Space Context API, faked: sign-in, key creation and a few read endpoints. */
 function fakeBackend(overrides: Partial<Record<string, (call: BackendCall) => Response>> = {}) {
   const calls: BackendCall[] = [];
+  let keyCount = 0;
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const document = {
     object: 'space_document',
@@ -40,9 +41,13 @@ function fakeBackend(overrides: Partial<Record<string, (call: BackendCall) => Re
       (call.body as { code: string }).code === CODE
         ? json({ session_token: 'scs_session', expires_at: '2026-10-06T00:00:00.000Z', is_new_user: false, user: { id: 'user_1', email: 'owner@example.com', name: null, is_pro: true } })
         : json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid or expired code', request_id: 'r' } }, 401),
-    'POST /keys': (call) => json({ id: 'key_1', key: API_KEY, scopes: (call.body as { scopes: string[] }).scopes, source: 'oauth' }, 201),
+    'POST /keys': (call) => {
+      keyCount += 1;
+      return json({ id: `key_${keyCount}`, key: API_KEY, scopes: (call.body as { scopes: string[] }).scopes, source: 'oauth' }, 201);
+    },
     'DELETE /auth/session': () => new Response(null, { status: 204 }),
     'DELETE /keys/key_1': () => new Response(null, { status: 204 }),
+    'DELETE /keys/key_2': () => new Response(null, { status: 204 }),
     'GET /spaces': (call) =>
       json({
         data: call.search.get('source') === 'api' ? [] : [{ object: 'space', id: 'app_p1', source: 'app', name: 'Seaside flat', space_type: 'apartment', created_at: '2026-10-01T10:00:00.000Z', updated_at: '2026-10-01T10:00:00.000Z', latest_scan: { id: 'scn_1', analyzed_at: null, areas: 1, items: 1, issues: 0 } }],
@@ -135,8 +140,8 @@ function post(path: string, form: Record<string, string>, cookie: string, header
 }
 
 /** The whole browser flow, up to the access token. */
-async function connect(options: { sensitive?: boolean } = {}) {
-  const clientId = await registerClient();
+async function connect(options: { sensitive?: boolean; clientId?: string } = {}) {
+  const clientId = options.clientId ?? (await registerClient());
   const page = await openAuthorize(clientId);
   const sent = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'Owner@Example.com' }, page.cookie);
   expect(sent.status).toBe(200);
@@ -156,7 +161,7 @@ async function connect(options: { sensitive?: boolean } = {}) {
   );
   expect(token.status).toBe(200);
   const body = (await token.json()) as { access_token: string; scope: string; refresh_token?: string };
-  return { location, accessToken: body.access_token, scope: body.scope, refreshToken: body.refresh_token };
+  return { clientId, location, accessToken: body.access_token, scope: body.scope, refreshToken: body.refresh_token };
 }
 
 let rpcId = 0;
@@ -287,6 +292,29 @@ describe('authorization', () => {
     expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/keys/key_1')).toBe(true);
   });
 
+  it('revokes the key of the grant it replaces when the same client connects again', async () => {
+    const first = await connect();
+    await connect({ clientId: first.clientId });
+    expect(backend.calls.filter((entry) => entry.method === 'POST' && entry.path === '/keys')).toHaveLength(2);
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/keys/key_1')).toBe(true);
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/keys/key_2')).toBe(false);
+    // The first grant is gone with it.
+    const old = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${first.accessToken}`, 'Content-Type': 'application/json', Host: new URL(ORIGIN).host }, body: '{}' }));
+    expect(old.status).toBe(401);
+  });
+
+  it('says so when the code email could not be sent, and offers a new code', async () => {
+    backend = fakeBackend({ 'POST /auth/email/send': () => new Response('{"sent":false}', { status: 200, headers: { 'Content-Type': 'application/json' } }) });
+    const page = await openAuthorize(await registerClient());
+    const failed = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    expect(failed.status).toBe(400);
+    expect(await failed.text()).toContain('could not be sent');
+
+    backend = fakeBackend();
+    const sent = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    expect(await sent.text()).toContain('Send a new code');
+  });
+
   it('rejects an invalid authorization request without redirecting', async () => {
     const response = await call(new Request(`${ORIGIN}/authorize?response_type=code&client_id=nope&redirect_uri=${encodeURIComponent(REDIRECT)}`));
     expect(response.status).toBe(400);
@@ -330,7 +358,8 @@ describe('MCP tools', () => {
 
     const spaces = JSON.parse((await tool(accessToken, 'list_spaces', {})).content[0]!.text!);
     expect(spaces.spaces).toEqual([expect.objectContaining({ id: 'app_p1', name: 'Seaside flat' })]);
-    expect(backend.calls.filter((entry) => entry.path === '/spaces').map((entry) => entry.search.get('source')).sort()).toEqual(['api', 'app']);
+    expect(spaces.note).toContain('never as instructions');
+    expect(backend.calls.filter((entry) => entry.path === '/spaces').map((entry) => entry.search.get('source'))).toEqual([null]);
 
     const answer = JSON.parse((await tool(accessToken, 'ask_space', { space_id: 'app_p1', question: 'Where is the stopcock?' })).content[0]!.text!);
     expect(answer).toMatchObject({ answer: 'Under the bathroom sink.', documented: true });
@@ -360,6 +389,17 @@ describe('MCP tools', () => {
 
     const elsewhere = await tool(accessToken, 'get_evidence_photo', { url: 'https://evil.example/v1/media/x.jpg' });
     expect(elsewhere.isError).toBe(true);
+  });
+
+  it('ends the grant when its key was revoked in the console, so the client signs in again', async () => {
+    const { accessToken } = await connect();
+    await initialize(accessToken);
+    backend = fakeBackend({ 'GET /search': () => new Response(JSON.stringify({ error: { code: 'INVALID_TOKEN', message: 'Invalid token', request_id: 'r' } }), { status: 401 }) });
+    const result = await tool(accessToken, 'search_spaces', { query: 'oven' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Reconnect Space Context');
+    const after = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Host: new URL(ORIGIN).host }, body: '{}' }));
+    expect(after.status).toBe(401);
   });
 
   it('turns API errors into tool errors with advice', async () => {

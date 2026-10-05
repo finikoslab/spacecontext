@@ -13,9 +13,25 @@ const mcpHandler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const props = (ctx as ExecutionContext & { props: GrantProps }).props;
     const api = apiClient(env, props.apiKey, request.headers.get('CF-Connecting-IP'));
-    return createMcpHandler(() => createServer(api), { route: '/mcp', allowedHostnames: [new URL(env.PUBLIC_URL).hostname] })(request, env, ctx);
+    const hooks = { onUnauthorized: () => revokeGrantOfKey(env, props) };
+    return createMcpHandler(() => createServer(api, hooks), { route: '/mcp', allowedHostnames: [new URL(env.PUBLIC_URL).hostname] })(request, env, ctx);
   },
 };
+
+/**
+ * The key of a grant was revoked in the console: the grant goes too, so the
+ * client's next request is refused and it asks the user to sign in again.
+ */
+async function revokeGrantOfKey(env: Env, props: GrantProps): Promise<void> {
+  let cursor: string | undefined;
+  do {
+    const page = await env.OAUTH_PROVIDER.listUserGrants(props.userId, cursor ? { cursor } : {});
+    for (const grant of page.items) {
+      if ((grant.metadata as { keyId?: string } | null)?.keyId === props.keyId) await env.OAUTH_PROVIDER.revokeGrant(grant.id, props.userId);
+    }
+    cursor = page.cursor;
+  } while (cursor);
+}
 
 /** The provider for this deployment's public URL, which names the protected resource (RFC 9728). */
 function provider(publicUrl: string): OAuthProvider<Env> {

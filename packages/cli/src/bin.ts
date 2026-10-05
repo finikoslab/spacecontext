@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
+import { Writable } from 'node:stream';
 import { main } from './cli.js';
 
+/** Reads a line without echoing it: an API key must not stay on screen or in the scrollback. */
 async function prompt(question: string): Promise<string> {
-  const readline = createInterface({ input: process.stdin, output: process.stderr, terminal: true });
+  process.stderr.write(question);
+  const muted = new Writable({ write: (_chunk, _encoding, done) => done() });
+  const readline = createInterface({ input: process.stdin, output: muted, terminal: true });
   try {
-    return await readline.question(question);
+    return await readline.question('');
   } finally {
     readline.close();
+    process.stderr.write('\n');
   }
 }
 
