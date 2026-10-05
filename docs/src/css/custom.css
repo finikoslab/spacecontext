@@ -1,0 +1,34 @@
+/* Space Context palette: accent #8B5CF6 (as on spacecontext.finikos.it). */
+:root {
+  --ifm-color-primary: #7c3aed;
+  --ifm-color-primary-dark: #6d28d9;
+  --ifm-color-primary-darker: #6526cc;
+  --ifm-color-primary-darkest: #5b21b6;
+  --ifm-color-primary-light: #8b5cf6;
+  --ifm-color-primary-lighter: #9b72f7;
+  --ifm-color-primary-lightest: #a78bfa;
+  --ifm-code-font-size: 92%;
+  --ifm-font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --docusaurus-highlighted-code-line-bg: rgba(124, 58, 237, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-background-color: #0b0813;
+  --ifm-background-surface-color: #11101a;
+  --ifm-navbar-background-color: rgba(11, 8, 19, 0.92);
+  --ifm-footer-background-color: #07060c;
+  --ifm-color-primary: #a78bfa;
+  --ifm-color-primary-dark: #9b72f7;
+  --ifm-color-primary-darker: #8b5cf6;
+  --ifm-color-primary-darkest: #7c3aed;
+  --ifm-color-primary-light: #b9a1fb;
+  --ifm-color-primary-lighter: #c4b5fd;
+  --ifm-color-primary-lightest: #ddd6fe;
+  --docusaurus-highlighted-code-line-bg: rgba(167, 139, 250, 0.15);
+}
+
+/* Full-width tables on wide screens; on phones the default applies (the table scrolls by itself). */
+@media (min-width: 997px) {
+  .markdown table { display: table; width: 100%; }
+  .markdown td code, .markdown th code { white-space: nowrap; }
+}

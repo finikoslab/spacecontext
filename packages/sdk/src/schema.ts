@@ -1611,6 +1611,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string;
+                /** @description Only spaces from this source. Omitted: every space this key can read (app spaces need a live key of a Pro user; test keys see the demo space). */
                 source?: "app" | "api";
             };
             header?: never;
