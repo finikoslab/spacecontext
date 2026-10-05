@@ -257,6 +257,25 @@ describe('SpaceContext client', () => {
     expect(failing.calls.map((call) => call.method)).toEqual(['POST', 'PUT', 'DELETE']);
   });
 
+  it('cancels a scan whose start is refused, so that its files are not left waiting', async () => {
+    const refused = fakeFetch((call) =>
+      call.url.endsWith('/start')
+        ? apiError(402, 'INSUFFICIENT_FUNDS')
+        : call.method === 'PUT'
+          ? json({})
+          : call.method === 'DELETE'
+            ? new Response(null, { status: 204 })
+            : json(scan(), 201)
+    );
+    await expect(client(refused.fetch).scans.fromVideo('spc_1', { data: new Uint8Array(4), contentType: 'video/mp4' })).rejects.toMatchObject({ status: 402, code: 'INSUFFICIENT_FUNDS' });
+    expect(refused.calls.map((call) => `${call.method} ${new URL(call.url).pathname.replace(/scn_a+/, 'scn')}`)).toEqual([
+      'POST /v1/spaces/spc_1/scans',
+      'PUT /v1/scans/scn/video',
+      'POST /v1/scans/scn/start',
+      'DELETE /v1/scans/scn',
+    ]);
+  });
+
   it('waits for a scan to finish, and gives up at the deadline', async () => {
     vi.useFakeTimers();
     const statuses: Scan['status'][] = ['queued', 'processing', 'complete'];

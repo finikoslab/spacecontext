@@ -22,7 +22,7 @@ In the console, **Billing → Add $10 / $25 / $50**. You are taken to a **Stripe
 
 - Amounts from $5 to $500 per top-up (the API accepts any amount in that range).
 - The balance never expires and is used only for API scans.
-- Tick **Save the card for automatic top-ups** to allow automatic top-up later. The card is stored by Stripe, never by us.
+- Tick **Save the card for automatic top-ups** to allow automatic top-up later. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.
 
 ## Automatic top-up
 

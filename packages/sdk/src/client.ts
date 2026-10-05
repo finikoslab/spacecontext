@@ -437,7 +437,22 @@ export class SpaceContext {
       options
     );
     await this.uploadOrCancel(scan, () => this.uploadVideo(scan, video.data, options));
-    return this.scans.start(scan.id, options);
+    return this.startOrCancel(scan, options);
+  }
+
+  /**
+   * Starts the uploaded scan; when it is refused (no funds, spending cap, too many
+   * scans running), the scan is cancelled so that its files are not left waiting,
+   * then the error is rethrown. A scan that did start is not affected: only a scan
+   * still waiting for its upload can be cancelled.
+   */
+  private async startOrCancel(scan: Scan, options: RequestOptions): Promise<Scan> {
+    try {
+      return await this.scans.start(scan.id, options);
+    } catch (error) {
+      await this.scans.cancel(scan.id).catch(() => undefined);
+      throw error;
+    }
   }
 
   /** Runs the upload; when it fails, the scan is cancelled so that nothing is left waiting, then the error is rethrown. */
@@ -477,7 +492,7 @@ export class SpaceContext {
         await this.scans.uploadFrame(scan.id, index, frame.data, frame.contentType, options);
       }
     });
-    return this.scans.start(scan.id, options);
+    return this.startOrCancel(scan, options);
   }
 
   private isApiUrl(url: string): boolean {

@@ -1051,7 +1051,7 @@
       "get": {
         "operationId": "getSpaceDiff",
         "summary": "Compare two scans of a space",
-        "description": "What changed from the scan `from` to the scan `to` (the current one when omitted): areas, items added, removed, moved or changed, issues new or resolved. Computed without a model, by matching records by content. For a space scanned with the app, past scans are not screened for sensitive values, so this operation requires the `spaces:sensitive` scope.",
+        "description": "What changed from the scan `from` to the scan `to` (the current one when omitted): areas, items added, removed, not seen, moved or changed, issues new, resolved or not seen. Computed without a model. When `to` was checked against `from` (consecutive scans of a space created through the API) records are matched by the links it made, and removals are confirmed by a frame of the empty place; otherwise records are matched by content (name, generic name, aliases) and what is missing is reported as `not_seen`. For a space scanned with the app, past scans are not screened for sensitive values, so this operation requires the `spaces:sensitive` scope.",
         "security": [
           {
             "apiKey": []
@@ -2863,6 +2863,7 @@
           "aliases",
           "note",
           "issue_ids",
+          "previous_item_id",
           "evidence",
           "confidence"
         ],
@@ -2963,6 +2964,13 @@
               "type": "string"
             }
           },
+          "previous_item_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The same object in the previous scan (`continuity.previous_scan_id`), when this scan was checked against it."
+          },
           "evidence": {
             "type": "array",
             "items": {
@@ -2990,6 +2998,7 @@
           "category",
           "severity",
           "suggested_action",
+          "previous_issue_id",
           "evidence",
           "confidence"
         ],
@@ -3043,6 +3052,13 @@
               "string",
               "null"
             ]
+          },
+          "previous_issue_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The same issue in the previous scan, still there."
           },
           "evidence": {
             "type": "array",
@@ -3303,6 +3319,89 @@
           }
         }
       },
+      "SpaceContinuity": {
+        "type": "object",
+        "description": "How this scan was checked against the scan before it. Items and issues seen again carry `previous_item_id` / `previous_issue_id`; what is gone is listed only when a frame of this scan shows the place where it was. A previous record that is neither linked nor listed was not seen: it may be gone, or simply not filmed.",
+        "required": [
+          "previous_scan_id",
+          "absent_items",
+          "resolved_issues"
+        ],
+        "properties": {
+          "previous_scan_id": {
+            "type": "string",
+            "pattern": "^scn_"
+          },
+          "absent_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "item_id",
+                "name",
+                "note",
+                "evidence"
+              ],
+              "properties": {
+                "item_id": {
+                  "type": "string",
+                  "description": "Id in the previous scan."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Its name in the previous scan."
+                },
+                "note": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence": {
+                  "type": "array",
+                  "description": "Frames of this scan that show the place.",
+                  "items": {
+                    "$ref": "#/components/schemas/SpaceEvidenceRef"
+                  }
+                }
+              }
+            }
+          },
+          "resolved_issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "issue_id",
+                "title",
+                "note",
+                "evidence"
+              ],
+              "properties": {
+                "issue_id": {
+                  "type": "string",
+                  "description": "Id in the previous scan."
+                },
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SpaceEvidenceRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "SpaceDocument": {
         "type": "object",
         "required": [
@@ -3323,6 +3422,7 @@
           "facts",
           "qa",
           "frames",
+          "continuity",
           "coverage"
         ],
         "properties": {
@@ -3591,6 +3691,16 @@
             "items": {
               "$ref": "#/components/schemas/SpaceFrame"
             }
+          },
+          "continuity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaceContinuity"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "coverage": {
             "type": "object",
@@ -4026,6 +4136,7 @@
           "from",
           "to",
           "level",
+          "linked",
           "summary",
           "areas",
           "items",
@@ -4084,6 +4195,10 @@
               "deep"
             ]
           },
+          "linked": {
+            "type": "boolean",
+            "description": "True when `to` was checked against `from` itself (consecutive scans of a space created through the API): its links and confirmed removals are used. Otherwise records are matched by content only, and nothing can be confirmed removed or resolved."
+          },
           "summary": {
             "type": "object",
             "required": [
@@ -4091,10 +4206,12 @@
               "areas_removed",
               "items_added",
               "items_removed",
+              "items_not_seen",
               "items_moved",
               "items_changed",
               "issues_new",
-              "issues_resolved"
+              "issues_resolved",
+              "issues_not_seen"
             ],
             "properties": {
               "areas_added": {
@@ -4113,6 +4230,10 @@
                 "type": "integer",
                 "minimum": 0
               },
+              "items_not_seen": {
+                "type": "integer",
+                "minimum": 0
+              },
               "items_moved": {
                 "type": "integer",
                 "minimum": 0
@@ -4126,6 +4247,10 @@
                 "minimum": 0
               },
               "issues_resolved": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "issues_not_seen": {
                 "type": "integer",
                 "minimum": 0
               }
@@ -4200,6 +4325,7 @@
             "required": [
               "added",
               "removed",
+              "not_seen",
               "moved",
               "quantity_changed",
               "condition_changed"
@@ -4213,7 +4339,8 @@
                     "name",
                     "canonical_name",
                     "area",
-                    "quantity"
+                    "quantity",
+                    "evidence"
                   ],
                   "properties": {
                     "name": {
@@ -4236,19 +4363,90 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
               },
               "removed": {
                 "type": "array",
+                "description": "Confirmed gone: a frame of `to` shows the place without it.",
                 "items": {
                   "type": "object",
                   "required": [
                     "name",
                     "canonical_name",
                     "area",
-                    "quantity"
+                    "quantity",
+                    "evidence",
+                    "note"
                   ],
                   "properties": {
                     "name": {
@@ -4271,6 +4469,185 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "not_seen": {
+                "type": "array",
+                "description": "In `from`, not in `to`, not confirmed gone: it may be gone, or its place was not filmed.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "canonical_name",
+                    "area",
+                    "quantity",
+                    "evidence"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "canonical_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "quantity": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -4284,6 +4661,7 @@
                     "canonical_name",
                     "area",
                     "quantity",
+                    "evidence",
                     "from_area"
                   ],
                   "properties": {
@@ -4308,6 +4686,74 @@
                         "null"
                       ]
                     },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
                     "from_area": {
                       "type": [
                         "string",
@@ -4326,6 +4772,7 @@
                     "canonical_name",
                     "area",
                     "quantity",
+                    "evidence",
                     "from_quantity"
                   ],
                   "properties": {
@@ -4350,6 +4797,74 @@
                         "null"
                       ]
                     },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
                     "from_quantity": {
                       "type": "integer"
                     }
@@ -4365,6 +4880,7 @@
                     "canonical_name",
                     "area",
                     "quantity",
+                    "evidence",
                     "from_condition",
                     "to_condition"
                   ],
@@ -4389,6 +4905,74 @@
                         "integer",
                         "null"
                       ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     },
                     "from_condition": {
                       "type": "string",
@@ -4425,7 +5009,8 @@
             "type": "object",
             "required": [
               "new",
-              "resolved"
+              "resolved",
+              "not_seen"
             ],
             "properties": {
               "new": {
@@ -4435,7 +5020,8 @@
                   "required": [
                     "title",
                     "area",
-                    "severity"
+                    "severity",
+                    "evidence"
                   ],
                   "properties": {
                     "title": {
@@ -4459,18 +5045,89 @@
                         "critical",
                         null
                       ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
               },
               "resolved": {
                 "type": "array",
+                "description": "Confirmed fixed: a frame of `to` shows the place without the defect.",
                 "items": {
                   "type": "object",
                   "required": [
                     "title",
                     "area",
-                    "severity"
+                    "severity",
+                    "evidence",
+                    "note"
                   ],
                   "properties": {
                     "title": {
@@ -4494,6 +5151,185 @@
                         "critical",
                         null
                       ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "not_seen": {
+                "type": "array",
+                "description": "In `from`, not reported in `to`, not confirmed fixed.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "title",
+                    "area",
+                    "severity",
+                    "evidence"
+                  ],
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "area": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "severity": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "critical",
+                        null
+                      ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "description": "Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it.",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "frame_id",
+                              "timestamp_ms",
+                              "url"
+                            ],
+                            "properties": {
+                              "frame_id": {
+                                "type": "string"
+                              },
+                              "timestamp_ms": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Signed URL of the original frame; null when this key may not see it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }

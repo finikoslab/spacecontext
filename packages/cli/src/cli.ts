@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { SpaceContext, SpaceContextError, type Scan, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { SpaceContext, SpaceContextError, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
 import { clearConfig, configDirectory, readConfig, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
 import { fileBlob, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
@@ -257,7 +257,31 @@ async function diff(context: Context): Promise<void> {
   const from = context.values.from;
   if (!from) throw new UsageError('--from <scan-id> is required');
   const result = await (await client(context)).spaces.diff(id, { from, ...(context.values.to ? { to: context.values.to } : {}) });
-  print(context.io, context.values, result, () => `${JSON.stringify(result, null, 2)}\n`);
+  print(context.io, context.values, result, () => diffSummary(result));
+}
+
+function diffSummary(diff: SpaceDiff): string {
+  const where = (area: string | null) => (area ? ` — ${area}` : '');
+  const out: string[] = [
+    `${diff.from.scan_id} → ${diff.to.scan_id} (${diff.level} level, ${diff.linked ? 'the later scan was checked against the earlier one' : 'matched by content'})`,
+  ];
+  const section = (title: string, lines: string[]) => {
+    if (lines.length > 0) out.push('', `${title} (${lines.length})`, ...lines.map((line) => `  ${line}`));
+  };
+  section('Areas added', diff.areas.added);
+  section('Areas not in the later scan', diff.areas.removed);
+  section('Areas in another condition', diff.areas.condition_changed.map((entry) => `${entry.area}: ${entry.from} → ${entry.to}`));
+  section('Items added', diff.items.added.map((item) => `+ ${item.name}${where(item.area)}`));
+  section('Items gone (seen: the place is empty)', diff.items.removed.map((item) => `- ${item.name}${where(item.area)}${item.note ? `: ${item.note}` : ''}`));
+  section('Items not seen in the later scan (gone, or not filmed)', diff.items.not_seen.map((item) => `? ${item.name}${where(item.area)}`));
+  section('Items moved', diff.items.moved.map((item) => `${item.name}: ${item.from_area ?? 'no area'} → ${item.area ?? 'no area'}`));
+  section('Items recounted', diff.items.quantity_changed.map((item) => `${item.name}${where(item.area)}: ${item.from_quantity} → ${item.quantity}`));
+  section('Items in another condition', diff.items.condition_changed.map((item) => `${item.name}${where(item.area)}: ${item.from_condition} → ${item.to_condition}`));
+  section('Issues new', diff.issues.new.map((issue) => `! ${issue.title}${where(issue.area)}`));
+  section('Issues fixed (seen)', diff.issues.resolved.map((issue) => `✓ ${issue.title}${where(issue.area)}${issue.note ? `: ${issue.note}` : ''}`));
+  section('Issues not seen in the later scan', diff.issues.not_seen.map((issue) => `? ${issue.title}${where(issue.area)}`));
+  if (out.length === 1) out.push('', 'No differences found.');
+  return `${out.join('\n')}\n`;
 }
 
 async function scans(context: Context): Promise<void> {

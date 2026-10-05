@@ -20,6 +20,7 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 | `stats` | Counts of areas, items, issues, key locations, instructions, facts |
 | `areas`, `items`, `issues`, `key_locations`, `instructions`, `facts`, `qa` | The records, below |
 | `frames` | The evidence frames, with signed URLs |
+| `continuity` | How this scan was checked against the previous one, or `null`: `previous_scan_id`, `absent_items` and `resolved_issues` (each with the frame of this scan that shows the place). See [Compare two scans](skills-and-diff.md#gone-or-just-not-filmed) |
 | `coverage` | `warnings` (weak coverage, unreadable labels, withheld text) and `not_documented` (what a reader would expect but the video did not show) |
 | `transcript` | Only with `include=transcript` and `spaces:sensitive` |
 
@@ -28,8 +29,8 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 | Record | Main fields |
 | --- | --- |
 | **Area** | `id`, `name`, `type` (`kitchen`, `bathroom`, `bedroom`, …), `level`, `condition` (`code`, `notes`), `description`, `features`, `access_from`, `item_ids`, `issue_ids` |
-| **Item** | `id`, `area_id`, `name`, `canonical_name`, `category`, `subcategory`, `quantity`, `location` (where in the area), `condition`, `brand`, `model`, `attributes`, `visible_text`, `aliases`, `note` |
-| **Issue** | `id`, `area_id`, `item_id`, `title`, `description`, `category`, `severity` (`low`, `medium`, `high`, `critical`), `suggested_action` |
+| **Item** | `id`, `area_id`, `name`, `canonical_name`, `category`, `subcategory`, `quantity`, `location` (where in the area), `condition`, `brand`, `model`, `attributes`, `visible_text`, `aliases`, `note`, `previous_item_id` (the same object in the previous scan) |
+| **Issue** | `id`, `area_id`, `item_id`, `title`, `description`, `category`, `severity` (`low`, `medium`, `high`, `critical`), `suggested_action`, `previous_issue_id` |
 | **Key location** | `id`, `kind` (`water_shutoff`, `electrical_panel`, `gas_shutoff`, `water_heater`, `heating_control`, `router`, `fire_extinguisher`, `smoke_detector`, `emergency_exit`, `keys`, meters, `alarm_panel`, …), `label`, `area_id`, `location`, `notes` |
 | **Instruction** | `id`, `title`, `area_id`, `item_id`, `steps`, `source_quote` (what was said) |
 | **Fact** | `id`, `kind` (`access`, `wifi`, `rule`, `contact`, `schedule`, `quirk`, `measurement`, `history`, `other`), `statement`, `value`, `sensitive`, `redacted` |

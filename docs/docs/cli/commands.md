@@ -51,7 +51,7 @@ spacecontext scans <space-id>
 spacecontext diff <space-id> --from <scan-id> [--to <scan-id>]
 ```
 
-`skill` writes the space as an Agent Skill folder (default: a folder named after the skill in the current directory). `scans` lists the scan history; `diff` compares two of them (`--to` defaults to the current scan).
+`skill` writes the space as an Agent Skill folder (default: a folder named after the skill in the current directory). `scans` lists the scan history; `diff` compares two of them (`--to` defaults to the current scan) and prints what changed, keeping what is confirmed gone apart from what the later scan did not show ([why](../api/skills-and-diff.md#gone-or-just-not-filmed)).
 
 ## Scans
 

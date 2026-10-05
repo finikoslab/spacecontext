@@ -27,10 +27,10 @@ npx spacecontext scan checkout.mp4 --space spc_3f…
 
 ```bash
 npx spacecontext scans spc_3f…                       # the two scan ids
-npx spacecontext diff spc_3f… --from scn_checkin… --json
+npx spacecontext diff spc_3f… --from scn_checkin…        # add --json for the full answer
 ```
 
-The comparison lists items added, removed, moved, with a changed quantity or condition, and issues new or resolved. Every item and issue links to its evidence frames in each scan: the original frames, with their time in the video, never retouched.
+The check-out scan is analysed against the check-in one: the same objects keep their names, and something is reported **gone** only when a frame shows its place empty. The comparison lists items added, gone, moved, with a changed quantity or condition, issues new or fixed, and, apart, what the check-out scan simply did not show (`not_seen`): it may be missing, or not filmed. Every entry links to its evidence frames in both scans: the original frames, with their time in the video, never retouched.
 
 ## With an agent
 
@@ -41,5 +41,6 @@ Connected through [MCP](../mcp/connect.md), an assistant can do it for you:
 ## Notes
 
 - Comparisons match records by content, so the same room filmed from another angle is still the same room.
-- A scan made while lights are off or too fast can miss things: the comparison reports what each scan saw. Check `coverage` in both documents before drawing conclusions.
+- Film the check-out the way you filmed the check-in: the same rooms, in the same order, with cupboards open. What the camera does not show ends up in `not_seen`, never in `removed`.
+- A scan made while lights are off or too fast can miss things: check `coverage` in both documents before drawing conclusions.
 - Keep both scans: deleting the space deletes its history.

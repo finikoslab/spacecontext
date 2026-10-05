@@ -57,7 +57,7 @@ The scan history of a space, newest first, to choose two scans for `compare_scan
 
 ## `compare_scans`
 
-What changed between two scans of a space: areas added or removed, items added, removed, moved or changed, issues new or resolved.
+What changed between two scans of a space: items added, moved, recounted or in another condition, and new issues. Items `removed` and issues `resolved` are confirmed by a frame of the empty place; `not_seen` ones were only absent from the later scan, so the assistant is told to say they *may* be missing. Each entry has evidence frames of both scans, which `get_evidence_photo` can show.
 
 | Argument | Type | |
 | --- | --- | --- |

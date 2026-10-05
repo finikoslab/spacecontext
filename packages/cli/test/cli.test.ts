@@ -270,6 +270,43 @@ describe('spacecontext CLI, housekeeping', () => {
     expect(h.calls.filter((call) => call.method === 'DELETE').map((call) => call.path)).toEqual([`/scans/${SCAN_ID}`, `/spaces/${SPACE_ID}`]);
   });
 
+  it('prints a comparison in words, telling what is gone from what was not seen', async () => {
+    const none = { from: [], to: [] };
+    const diff = {
+      object: 'space_diff', space_id: SPACE_ID, from: { scan_id: 'scn_before', analyzed_at: null }, to: { scan_id: SCAN_ID, analyzed_at: null },
+      level: 'deep', linked: true,
+      summary: {},
+      areas: { added: [], removed: [], condition_changed: [] },
+      items: {
+        added: [{ name: 'Toaster', canonical_name: 'toaster', area: 'Kitchen', quantity: 1, evidence: none }],
+        removed: [{ name: 'Kettle', canonical_name: 'kettle', area: 'Kitchen', quantity: 1, note: 'The counter is empty.', evidence: none }],
+        not_seen: [{ name: 'Umbrella stand', canonical_name: 'umbrella stand', area: 'Hall', quantity: 1, evidence: none }],
+        moved: [], quantity_changed: [],
+        condition_changed: [{ name: 'Oven', canonical_name: 'oven', area: 'Kitchen', quantity: 1, from_condition: 'good', to_condition: 'damaged', evidence: none }],
+      },
+      issues: { new: [], resolved: [{ title: 'Dripping tap', area: 'Kitchen', severity: 'low', note: null, evidence: none }], not_seen: [] },
+    };
+    const empty = { ...diff, linked: false, items: { added: [], removed: [], not_seen: [], moved: [], quantity_changed: [], condition_changed: [] }, issues: { new: [], resolved: [], not_seen: [] } };
+    const h = harness([
+      (call) => (call.path === `/spaces/${SPACE_ID}/diff` ? json(call.search.get('to') ? empty : diff) : undefined),
+    ], { SPACECONTEXT_API_KEY: KEY });
+
+    expect(await main(['diff', SPACE_ID, '--from', 'scn_before'], h.io)).toBe(0);
+    const out = h.stdout();
+    expect(out).toContain('the later scan was checked against the earlier one');
+    expect(out).toContain('Items added (1)\n  + Toaster — Kitchen');
+    expect(out).toContain('Items gone (seen: the place is empty) (1)\n  - Kettle — Kitchen: The counter is empty.');
+    expect(out).toContain('Items not seen in the later scan (gone, or not filmed) (1)\n  ? Umbrella stand — Hall');
+    expect(out).toContain('Oven — Kitchen: good → damaged');
+    expect(out).toContain('✓ Dripping tap — Kitchen');
+    expect(out).not.toContain('"object"');
+
+    expect(await main(['diff', SPACE_ID, '--from', 'scn_before', '--to', SCAN_ID], h.io)).toBe(0);
+    expect(h.stdout()).toContain('matched by content');
+    expect(h.stdout()).toContain('No differences found.');
+    expect(await main(['diff', SPACE_ID], h.io)).toBe(2);
+  });
+
   it('prints JSON on logout with --json', async () => {
     const h = harness([]);
     expect(await main(['logout', '--json'], h.io)).toBe(0);

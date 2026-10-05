@@ -172,7 +172,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
     {
       title: 'Compare two scans',
       description:
-        'What changed in a space between two scans: areas added or removed, items added, removed, moved or changed, issues new or resolved. Useful for check-in/check-out and move-in/move-out.',
+        'What changed in a space between two scans, for check-in/check-out and move-in/move-out: items added, moved, recounted or in another condition, issues new. Only `removed` items and `resolved` issues are confirmed (a frame shows the place without them); `not_seen` ones were simply not in the later scan: say they may be missing, never that they are. Every entry has evidence frames of both scans; pass an evidence `url` to get_evidence_photo to show it.',
       inputSchema: z.object({
         space_id: spaceId,
         from_scan_id: scanId.describe('The earlier scan.'),
@@ -188,7 +188,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
     'get_evidence_photo',
     {
       title: 'Get an evidence photo',
-      description: 'Returns the original video frame behind a record, from a signed URL found in get_space (include_evidence) or ask_space citations.',
+      description: 'Returns the original video frame behind a record, from a signed URL found in get_space (include_evidence), ask_space citations or compare_scans evidence.',
       inputSchema: z.object({ url: z.string().url().describe('A signed evidence URL from Space Context.') }),
       annotations: { title: 'Get an evidence photo', ...READ_ONLY },
     },

@@ -46,13 +46,29 @@ curl "https://api.spacecontext.finikos.it/v1/spaces/spc_3f…/diff?from=scn_old�
   "from": { "scan_id": "scn_old…", "analyzed_at": "…" },
   "to": { "scan_id": "scn_new…", "analyzed_at": "…" },
   "level": "deep",
-  "summary": { "areas_added": 0, "areas_removed": 0, "items_added": 1, "items_removed": 2, "items_moved": 1, "items_changed": 1, "issues_new": 1, "issues_resolved": 0 },
+  "linked": true,
+  "summary": { "areas_added": 0, "areas_removed": 0, "items_added": 1, "items_removed": 1, "items_not_seen": 2, "items_moved": 1, "items_changed": 1, "issues_new": 1, "issues_resolved": 1, "issues_not_seen": 0 },
   "areas": { "added": [], "removed": [], "condition_changed": [] },
-  "items": { "added": […], "removed": […], "moved": […], "quantity_changed": […], "condition_changed": […] },
-  "issues": { "new": […], "resolved": […] }
+  "items": { "added": […], "removed": […], "not_seen": […], "moved": […], "quantity_changed": […], "condition_changed": […] },
+  "issues": { "new": […], "resolved": […], "not_seen": […] }
 }
 ```
 
-Records are matched by content (area names, canonical item names), never by id, and always between two documents of the same level. List the scans with `GET /spaces/{id}/scans`.
+### Gone, or just not filmed?
+
+A video shows what the camera pointed at, and two analyses of the same space never list exactly the same objects. So a comparison keeps two lists apart:
+
+| | Means |
+| --- | --- |
+| `items.removed`, `issues.resolved` | **Confirmed.** A frame of the later scan shows the place where it was, without it. Each entry has a `note` and that frame. |
+| `items.not_seen`, `issues.not_seen` | In the earlier scan, not in the later one, not confirmed: it may be gone, or its place was not filmed. Check it before acting on it. |
+
+Confirmation comes from the later scan itself. When you scan a space created through the API again, the analysis is given the previous scan's inventory as a checklist: it links what it sees again (`previous_item_id`, `previous_issue_id` in the [document](space-document.md)) and reports what is gone only with a frame of the empty place (`continuity`). The comparison of two consecutive scans uses those links (`"linked": true`).
+
+Otherwise (two scans that are not consecutive, or spaces scanned with the app) records are matched by content: area names, then the generic name of each item (`canonical_name`) in the same area, then items worded differently (*sideboard* and *TV cabinet*, *fan heater* and *heater*), never across categories. Nothing can then be confirmed gone, so what is missing is `not_seen`. Comparisons are always between two documents of the same level. List the scans with `GET /spaces/{id}/scans`.
+
+### Evidence
+
+Every entry carries `evidence.from` and `evidence.to`: the frames of each scan that show it, each with its signed `url` (`null` when your key may not see that image). For something gone, `to` is the photo of the empty place.
 
 For spaces scanned with the app, past scans are not screened for sensitive values, so comparisons need `spaces:sensitive`. See the [check-in / check-out guide](../guides/check-in-check-out.md).

@@ -295,7 +295,7 @@ export interface paths {
         };
         /**
          * Compare two scans of a space
-         * @description What changed from the scan `from` to the scan `to` (the current one when omitted): areas, items added, removed, moved or changed, issues new or resolved. Computed without a model, by matching records by content. For a space scanned with the app, past scans are not screened for sensitive values, so this operation requires the `spaces:sensitive` scope.
+         * @description What changed from the scan `from` to the scan `to` (the current one when omitted): areas, items added, removed, not seen, moved or changed, issues new, resolved or not seen. Computed without a model. When `to` was checked against `from` (consecutive scans of a space created through the API) records are matched by the links it made, and removals are confirmed by a frame of the empty place; otherwise records are matched by content (name, generic name, aliases) and what is missing is reported as `not_seen`. For a space scanned with the app, past scans are not screened for sensitive values, so this operation requires the `spaces:sensitive` scope.
          */
         get: operations["getSpaceDiff"];
         put?: never;
@@ -770,6 +770,8 @@ export interface components {
             aliases: string[];
             note: string | null;
             issue_ids: string[];
+            /** @description The same object in the previous scan (`continuity.previous_scan_id`), when this scan was checked against it. */
+            previous_item_id: string | null;
             evidence: components["schemas"]["SpaceEvidenceRef"][];
             confidence: number | null;
         };
@@ -782,6 +784,8 @@ export interface components {
             category: components["schemas"]["IssueCategory"] | null;
             severity: components["schemas"]["IssueSeverity"] | null;
             suggested_action: string | null;
+            /** @description The same issue in the previous scan, still there. */
+            previous_issue_id: string | null;
             evidence: components["schemas"]["SpaceEvidenceRef"][];
             confidence: number | null;
         };
@@ -831,6 +835,26 @@ export interface components {
             start_ms: number;
             end_ms: number;
             text: string;
+        };
+        /** @description How this scan was checked against the scan before it. Items and issues seen again carry `previous_item_id` / `previous_issue_id`; what is gone is listed only when a frame of this scan shows the place where it was. A previous record that is neither linked nor listed was not seen: it may be gone, or simply not filmed. */
+        SpaceContinuity: {
+            previous_scan_id: string;
+            absent_items: {
+                /** @description Id in the previous scan. */
+                item_id: string;
+                /** @description Its name in the previous scan. */
+                name: string;
+                note: string | null;
+                /** @description Frames of this scan that show the place. */
+                evidence: components["schemas"]["SpaceEvidenceRef"][];
+            }[];
+            resolved_issues: {
+                /** @description Id in the previous scan. */
+                issue_id: string;
+                title: string;
+                note: string | null;
+                evidence: components["schemas"]["SpaceEvidenceRef"][];
+            }[];
         };
         SpaceDocument: {
             /** @enum {string} */
@@ -891,6 +915,7 @@ export interface components {
                 segments: components["schemas"]["SpaceTranscriptSegment"][];
             };
             frames: components["schemas"]["SpaceFrame"][];
+            continuity: components["schemas"]["SpaceContinuity"] | null;
             coverage: {
                 warnings: string[];
                 not_documented: string[];
@@ -1005,15 +1030,19 @@ export interface components {
             };
             /** @enum {string} */
             level: "base" | "deep";
+            /** @description True when `to` was checked against `from` itself (consecutive scans of a space created through the API): its links and confirmed removals are used. Otherwise records are matched by content only, and nothing can be confirmed removed or resolved. */
+            linked: boolean;
             summary: {
                 areas_added: number;
                 areas_removed: number;
                 items_added: number;
                 items_removed: number;
+                items_not_seen: number;
                 items_moved: number;
                 items_changed: number;
                 issues_new: number;
                 issues_resolved: number;
+                issues_not_seen: number;
             };
             areas: {
                 added: string[];
@@ -1032,18 +1061,87 @@ export interface components {
                     canonical_name: string | null;
                     area: string | null;
                     quantity: number | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
                 }[];
+                /** @description Confirmed gone: a frame of `to` shows the place without it. */
                 removed: {
                     name: string;
                     canonical_name: string | null;
                     area: string | null;
                     quantity: number | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
+                    note: string | null;
+                }[];
+                /** @description In `from`, not in `to`, not confirmed gone: it may be gone, or its place was not filmed. */
+                not_seen: {
+                    name: string;
+                    canonical_name: string | null;
+                    area: string | null;
+                    quantity: number | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
                 }[];
                 moved: {
                     name: string;
                     canonical_name: string | null;
                     area: string | null;
                     quantity: number | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
                     from_area: string | null;
                 }[];
                 quantity_changed: {
@@ -1051,6 +1149,21 @@ export interface components {
                     canonical_name: string | null;
                     area: string | null;
                     quantity: number | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
                     from_quantity: number;
                 }[];
                 condition_changed: {
@@ -1058,6 +1171,21 @@ export interface components {
                     canonical_name: string | null;
                     area: string | null;
                     quantity: number | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
                     /** @enum {string} */
                     from_condition: "new" | "excellent" | "good" | "fair" | "poor" | "damaged" | "not_working" | "unknown";
                     /** @enum {string} */
@@ -1070,12 +1198,66 @@ export interface components {
                     area: string | null;
                     /** @enum {string|null} */
                     severity: "low" | "medium" | "high" | "critical" | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
                 }[];
+                /** @description Confirmed fixed: a frame of `to` shows the place without the defect. */
                 resolved: {
                     title: string;
                     area: string | null;
                     /** @enum {string|null} */
                     severity: "low" | "medium" | "high" | "critical" | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
+                    note: string | null;
+                }[];
+                /** @description In `from`, not reported in `to`, not confirmed fixed. */
+                not_seen: {
+                    title: string;
+                    area: string | null;
+                    /** @enum {string|null} */
+                    severity: "low" | "medium" | "high" | "critical" | null;
+                    /** @description Frames of each scan that show the record. For a removal or a resolution, `to` shows the place without it. */
+                    evidence: {
+                        from: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                        to: {
+                            frame_id: string;
+                            timestamp_ms: number | null;
+                            /** @description Signed URL of the original frame; null when this key may not see it. */
+                            url: string | null;
+                        }[];
+                    };
                 }[];
             };
         };
