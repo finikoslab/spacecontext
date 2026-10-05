@@ -9,6 +9,8 @@ description: 'From zero to a searchable space in five minutes, with a free test 
 
 The rest of this page does the same from the terminal. It takes about five minutes and costs nothing: it uses a **test key**, which works on the demo space.
 
+The demo is real output, not a mock-up: a one-bedroom apartment in Brisbane scanned twice through the API, with five photos at check-in and a narrated video at check-out, checked against the check-in. The narration (Wi-Fi, fuse box, bins, a loose heater cable) is invented for the example; the photos are by Chris Olszewski on Wikimedia Commons (CC BY-SA 4.0).
+
 ## 1. Create a test key
 
 1. Open the [console](https://spacecontext.finikos.it/developers/console) and sign in with Apple, Google or your email: it is the same account as the iPhone app. → [Console and sign-in](account/console-and-login.md)
@@ -21,8 +23,8 @@ You need Node.js 22 or later.
 ```bash
 npx spacecontext login          # paste the sc_test_… key when asked
 npx spacecontext spaces         # the demo space: spc_demo
-npx spacecontext search "where is the electrical panel?"
-npx spacecontext ask spc_demo "where is the electrical panel?"
+npx spacecontext search "where is the fuse box?"
+npx spacecontext ask spc_demo "where is the fuse box?"
 ```
 
 `search` looks across every space you can read; `ask` answers from one space, with its sources.
@@ -30,7 +32,7 @@ npx spacecontext ask spc_demo "where is the electrical panel?"
 ## 3. Export it as an Agent Skill
 
 ```bash
-npx spacecontext skill spc_demo --out ./home-kitchen-skill
+npx spacecontext skill spc_demo --out ./brisbane-apartment-skill
 ```
 
 The folder holds `SKILL.md`, `space.json` and one reference file per topic (areas, items, issues, key locations, how-to, facts). Point any agent that reads skills at it, for example `~/.claude/skills/` for Claude Code. → [Use a space in Claude Code](guides/claude-code-skill.md)

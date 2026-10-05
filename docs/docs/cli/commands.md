@@ -33,14 +33,20 @@ spacecontext search <question…> [--space <space-id>] [--limit <1-25>]
 spacecontext ask <space-id> <question…>
 ```
 
-`search` looks across every space, in any language. `ask` answers from one space, with its sources:
+`search` looks across every space, in any language. `ask` answers from one space, with its sources, in English or Italian whatever language the scan was described in (with a test key, from the demo space, without a model):
 
 ```text
-$ spacecontext ask spc_demo "where is the electrical panel?"
-In the utility closet, on the wall behind the sliding door, at eye level.
+$ spacecontext ask spc_demo "where is the fuse box?"
+The fuse box is in the Open-plan Living, Dining and Kitchen, in the hallway cupboard behind the coats.
 
 Sources:
-  - Electrical panel (Utility closet)
+  - Fuse box (Open-plan Living, Dining and Kitchen)
+
+$ spacecontext ask spc_demo "dov'è il frigorifero?"
+Dark refrigerator is in the Open-plan Living, Dining and Kitchen, at the left side of the kitchen work area. Condition: good.
+
+Sources:
+  - Dark refrigerator (Open-plan Living, Dining and Kitchen)
 ```
 
 ## Skills and comparisons
