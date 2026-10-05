@@ -172,6 +172,13 @@ describe('spacecontext CLI', () => {
     const evil = harness([(call) => (call.path === `/spaces/${SPACE_ID}/skill` ? json({ object: 'skill', name: 'evil', space_id: SPACE_ID, scan_id: SCAN_ID, files: [files[0], { path: '../escaped.md', media_type: 'text/markdown', content: 'x' }] }) : undefined)], { SPACECONTEXT_API_KEY: KEY });
     expect(await main(['skill', SPACE_ID], evil.io)).toBe(1);
     expect(evil.stderr()).toContain('Refusing to write');
+    // A bundle name that is not a plain slug is never used as a folder.
+    for (const name of ['../outside', '/tmp/abs', 'a/b', '..']) {
+      const named = harness([(call) => (call.path === `/spaces/${SPACE_ID}/skill` ? json({ object: 'skill', name, space_id: SPACE_ID, scan_id: SCAN_ID, files }) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+      expect(await main(['skill', SPACE_ID], named.io), name).toBe(1);
+      expect(named.stderr()).toContain('pass --out');
+    }
+    await expect(readFile(path.join(directory, '..', 'outside', 'SKILL.md'))).rejects.toThrow();
     // Nothing at all was written: paths are checked before any write.
     await expect(readdir(path.join(directory, 'evil'))).rejects.toThrow();
     await expect(readFile(path.join(directory, 'escaped.md'))).rejects.toThrow();

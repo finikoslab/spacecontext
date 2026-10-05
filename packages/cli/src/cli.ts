@@ -227,6 +227,11 @@ async function ask(context: Context): Promise<void> {
 async function skill(context: Context): Promise<void> {
   const id = one(context.args, 'space id');
   const bundle = await (await client(context)).spaces.skill(id, context.values.transcript ? { include: 'transcript' } : {});
+  // The default folder is named by the API: a name that is not a plain slug
+  // ("../../x", "/etc") would place the skill outside the current directory.
+  if (!context.values.out && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(bundle.name)) {
+    throw new Error(`Refusing to use "${bundle.name}" as a folder name: pass --out <dir>`);
+  }
   const directory = path.resolve(context.io.cwd, context.values.out ?? bundle.name);
   const written = await writeSkill(directory, bundle);
   print(context.io, context.values, { directory, files: written }, () =>
