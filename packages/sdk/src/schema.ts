@@ -649,6 +649,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/frames/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check one frame while filming
+         * @description For apps that capture a space: is this frame usable, and which key locations (electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter) does it show. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`. Errors: 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`.
+         */
+        post: operations["checkFrame"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhook-endpoints": {
         parameters: {
             query?: never;
@@ -1054,6 +1074,8 @@ export interface components {
             coverage: {
                 warnings: string[];
                 not_documented: string[];
+                /** @description Key locations every frame was checked for, seen or not; empty when the frames were not checked. */
+                checklist: components["schemas"]["SpaceCoverageCheck"][];
             };
         };
         SpaceSummary: {
@@ -1604,7 +1626,7 @@ export interface components {
             /** @enum {string} */
             status: "awaiting_upload" | "queued" | "processing" | "complete" | "failed" | "cancelled";
             /** @enum {string|null} */
-            stage: "ingesting" | "observing" | "fusing" | "enriching" | "saving" | null;
+            stage: "ingesting" | "screening" | "observing" | "fusing" | "enriching" | "saving" | null;
             input: {
                 /** @enum {string} */
                 kind: "frames" | "video";
@@ -1658,6 +1680,35 @@ export interface components {
             index?: number;
             bytes: number;
             content_type?: string;
+        };
+        FrameCheck: {
+            /** @enum {string} */
+            object: "frame_check";
+            livemode: boolean;
+            /** @description Sharp, lit and showing a place: worth keeping in a scan. */
+            usable: boolean;
+            quality: {
+                /** @description Expected level, 0 (unusable) to 3 (excellent). */
+                score: number;
+                /** @enum {string} */
+                level: "unusable" | "poor" | "good" | "excellent";
+            };
+            /** @description Probability that the frame shows a real place (not a drawing, document or screen). */
+            shows_space: number;
+            key_locations: {
+                kind: components["schemas"]["KeyLocationKind"];
+                probability: number;
+                /** @description Probability of at least 0.7. */
+                seen: boolean;
+            }[];
+        };
+        SpaceCoverageCheck: {
+            kind: components["schemas"]["KeyLocationKind"];
+            /** @description At least one frame shows it (probability from 0.7). */
+            seen: boolean;
+            /** @description The highest probability over the frames. */
+            probability: number;
+            evidence: components["schemas"]["SpaceEvidenceRef"][];
         };
         WebhookEndpointCreateRequest: {
             /** Format: uri */
@@ -2872,6 +2923,40 @@ export interface operations {
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    checkFrame: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description What the frame shows */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrameCheck"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ErrorResponse"];
         };
     };
     listWebhookEndpoints: {

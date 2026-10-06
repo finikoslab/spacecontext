@@ -224,6 +224,69 @@ describe('spacecontext CLI', () => {
     expect(h.stdout()).toContain(`spacecontext ask ${SPACE_ID}`);
   });
 
+  it('checks frames before a scan: which are usable, what they show, what is still missing', async () => {
+    const frames = path.join(directory, 'shots');
+    await mkdir(frames);
+    await writeFile(path.join(frames, 'a-hall.jpg'), new Uint8Array([0xff, 0xd8, 1]));
+    await writeFile(path.join(frames, 'b-blur.jpg'), new Uint8Array([0xff, 0xd8, 2]));
+    const kinds = ['electrical_panel', 'water_shutoff', 'water_heater'];
+    const answer = (marker: number) => ({
+      object: 'frame_check',
+      livemode: true,
+      usable: marker === 1,
+      quality: marker === 1 ? { score: 2.4, level: 'good' } : { score: 0.3, level: 'unusable' },
+      shows_space: 0.99,
+      key_locations: kinds.map((kind) => ({ kind, probability: marker === 1 && kind === 'electrical_panel' ? 0.93 : 0.05, seen: marker === 1 && kind === 'electrical_panel' })),
+    });
+    const markers: number[] = [];
+    const route: Route = (call) => {
+      if (call.method !== 'POST' || call.path !== '/frames/check') return undefined;
+      expect(call.headers.get('content-type')).toBe('image/jpeg');
+      return undefined;
+    };
+    const h = harness([
+      route,
+      (call) => {
+        if (call.method !== 'POST' || call.path !== '/frames/check') return undefined;
+        const marker = markers.length + 1;
+        markers.push(marker);
+        return json(answer(marker));
+      },
+    ], { SPACECONTEXT_API_KEY: KEY });
+
+    expect(await main(['check', 'shots'], h.io)).toBe(0);
+    expect(h.stdout()).toContain('a-hall.jpg  usable (good, 2.4)  electrical panel');
+    expect(h.stdout()).toContain('b-blur.jpg  NOT usable (unusable, 0.3)');
+    expect(h.stdout()).toContain('Usable: 1 of 2 frames');
+    expect(h.stdout()).toContain('Seen: electrical panel (a-hall.jpg)');
+    expect(h.stdout()).toContain('Not seen yet: water shutoff, water heater.');
+
+    markers.length = 0;
+    const j = harness([(call) => (call.path === '/frames/check' ? json(answer(markers.push(1))) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['check', path.join('shots', 'a-hall.jpg'), '--json'], j.io)).toBe(0);
+    expect(JSON.parse(j.stdout()).summary).toEqual({ frames: 1, usable: 1, seen: [{ kind: 'electrical_panel', file: 'a-hall.jpg', probability: 0.93 }], not_seen: ['water_shutoff', 'water_heater'] });
+
+    await writeFile(path.join(directory, 'notes.txt'), 'not an image');
+    expect(await main(['check', 'notes.txt'], harness([], { SPACECONTEXT_API_KEY: KEY }).io)).toBe(2);
+  });
+
+  it('shows which key locations a scan filmed', async () => {
+    const withChecklist = {
+      ...document,
+      coverage: {
+        warnings: [],
+        not_documented: [],
+        checklist: [
+          { kind: 'electrical_panel', seen: true, probability: 0.9, evidence: [] },
+          { kind: 'water_heater', seen: false, probability: 0.1, evidence: [] },
+        ],
+      },
+    };
+    const h = harness([(call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(withChecklist) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID], h.io)).toBe(0);
+    expect(h.stdout()).toContain('Key locations filmed: electrical panel\nNot filmed: water heater');
+  });
+
   it('reports a failed scan and checks its arguments', async () => {
     const video = path.join(directory, 'tour.mov');
     await writeFile(video, new Uint8Array([0, 0, 0, 20]));

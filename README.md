@@ -22,6 +22,7 @@ A **Space Document** (JSON, versioned schema): areas with type, level and condit
 - **Answers with citations** (`POST /v1/spaces/{id}/ask`), saying "not documented" instead of guessing.
 - **Comparisons** between two scans: items added, removed, moved, issues new or resolved.
 - **Agent Skills**: a folder with `SKILL.md`, `space.json` and reference files, for any agent that reads skills.
+- **Guided capture** (`POST /v1/frames/check`): one frame checked in about half a second while filming: usable or not, and which key locations (fuse box, stopcock, boiler, smoke detector…) it shows. Every scan runs the same check: unusable frames are left out, footage with nothing usable is refused before it is charged, and `coverage.checklist` says which key locations the recording did not film.
 
 Text captured in a space is always treated as data: sentences addressed to an AI ("ignore your instructions…") are withheld before any model or agent reads them.
 
@@ -30,6 +31,7 @@ Text captured in a space is always treated as data: sentences addressed to an AI
 ```bash
 # 1. Create an API key in the console: https://spacecontext.finikos.it/developers/console
 npx spacecontext login                       # paste the key; sc_test_ keys return a free demo space
+npx spacecontext check ./photos                 # usable frames, and the key locations still missing
 npx spacecontext search "where is the stopcock?"
 npx spacecontext scan tour.mp4 --name "Seaside flat"   # a live key analyses your video
 npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat

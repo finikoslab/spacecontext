@@ -96,7 +96,9 @@ curl -X POST $API/scans/scn_8a…/start -H "$AUTH" -H "Content-Type: application
 curl $API/scans/scn_8a… -H "$AUTH"
 ```
 
-`status` moves through `queued`, `processing` (with `stage`: `ingesting`, `observing`, `fusing`, `enriching`, `saving`) to `complete`, or `failed` with `error` and `charge.refunded: true`. Poll every few seconds, or subscribe to `scan.completed` and `scan.failed`.
+`status` moves through `queued`, `processing` (with `stage`: `ingesting`, `screening`, `observing`, `fusing`, `enriching`, `saving`) to `complete`, or `failed` with `error` and `charge.refunded: true`. Poll every few seconds, or subscribe to `scan.completed` and `scan.failed`.
+
+**Screening.** Before the analysis, every frame is checked once: is it usable, does it show a place, and which key locations does it show. Blurred, dark or covered frames are left out, and the sharpest frame of each part of the video is the one analysed. Footage with no usable frame at all fails with `FOOTAGE_UNUSABLE` and is refunded. What the frames showed becomes `coverage.checklist` in the document. To check frames while filming, before a scan, see [Guided capture](../guides/guided-capture.md).
 
 Then read the space: `GET /spaces/spc_3f…` returns its [Space Document](space-document.md).
 

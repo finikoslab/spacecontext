@@ -23,6 +23,7 @@ npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 | `diff <space-id> --from <scan> [--to <scan>]` | What changed between two scans |
 | `delete-space <space-id>` | Delete a space created through the API, with its scans |
 | `scan <video\|frames-dir> (--space id \| --name …)` | Upload (`.mp4 .mov .m4v` up to 500 MB, or a folder of up to 120 `.jpg .png .webp` of 2 MB each), analyse, wait |
+| `check <image\|frames-dir>` | Before a scan: which frames are usable, and which key locations (fuse box, stopcock, boiler…) they show |
 | `scan-status <scan-id>` | Where a scan is |
 | `cancel <scan-id>` | Cancel a scan that has not started; nothing is charged |
 

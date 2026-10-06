@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { SpaceContext, SpaceContextError, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
 import { clearConfig, configDirectory, readConfig, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
-import { fileBlob, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
+import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
 
 export const VERSION = '0.1.0';
 
@@ -47,6 +47,8 @@ Scans
        [--language en|it] [--no-wait]
                                 Upload a video (.mp4 .mov .m4v) or a folder of
                                 frames, analyse it, and wait for the result
+  check <image|frames-dir>      Before scanning: which frames are usable, and which
+                                key locations (fuse box, stopcock, boiler…) they show
   scan-status <scan-id>         Show where a scan is
   cancel <scan-id>              Cancel a scan that has not started (nothing is charged)
 
@@ -135,8 +137,19 @@ function documentSummary(document: SpaceDocument): string {
     lines.push('', 'Issues:');
     for (const issue of document.issues) lines.push(`  - [${issue.severity ?? 'n/a'}] ${issue.title}`);
   }
+  const checklist = document.coverage.checklist ?? [];
+  if (checklist.length > 0) {
+    const seen = checklist.filter((check) => check.seen).map((check) => kindLabel(check.kind));
+    const unseen = checklist.filter((check) => !check.seen).map((check) => kindLabel(check.kind));
+    lines.push('', `Key locations filmed: ${seen.join(', ') || 'none'}`);
+    if (unseen.length > 0) lines.push(`Not filmed: ${unseen.join(', ')}`);
+  }
   for (const warning of document.coverage.warnings) lines.push('', `Note: ${warning}`);
   return `${lines.join('\n')}\n`;
+}
+
+function kindLabel(kind: string): string {
+  return kind.replaceAll('_', ' ');
 }
 
 function scanLine(scan: Scan): string {
@@ -311,6 +324,48 @@ async function scanStatus(context: Context): Promise<void> {
   print(context.io, context.values, scan, () => `${scanLine(scan)}\n`);
 }
 
+/**
+ * Checks images before they are scanned: usable or not, and which key locations
+ * they show, so what is missing can be filmed before paying for a scan.
+ */
+async function check(context: Context): Promise<void> {
+  const { io, values } = context;
+  const files = await frameFiles(path.resolve(io.cwd, one(context.args, 'image or frames directory')));
+  for (const frame of files) {
+    if ((await stat(frame.file)).size > MAX_FRAME_BYTES) throw new UsageError(`${path.basename(frame.file)} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
+  }
+  const sc = await client(context);
+  const checked: Array<{ file: string; check: FrameCheck }> = [];
+  for (const frame of files) {
+    checked.push({ file: path.basename(frame.file), check: await sc.frames.check(await fileBlob(frame.file), frame.contentType) });
+  }
+
+  const kinds = checked[0]?.check.key_locations.map((entry) => entry.kind) ?? [];
+  const seen = kinds.flatMap((kind) => {
+    const best = checked
+      .map(({ file, check }) => ({ file, probability: check.key_locations.find((entry) => entry.kind === kind)?.probability ?? 0, seen: check.key_locations.find((entry) => entry.kind === kind)?.seen ?? false }))
+      .filter((entry) => entry.seen)
+      .sort((a, b) => b.probability - a.probability)[0];
+    return best ? [{ kind, file: best.file, probability: best.probability }] : [];
+  });
+  const notSeen = kinds.filter((kind) => !seen.some((entry) => entry.kind === kind));
+  const usable = checked.filter(({ check }) => check.usable).length;
+  const summary = { frames: checked.length, usable, seen, not_seen: notSeen };
+
+  print(io, values, { frames: checked.map(({ file, check }) => ({ file, ...check })), summary }, () => {
+    const width = Math.max(...checked.map(({ file }) => file.length));
+    const lines = checked.map(({ file, check }) => {
+      const state = check.usable ? 'usable' : 'NOT usable';
+      const shows = check.key_locations.filter((entry) => entry.seen).map((entry) => kindLabel(entry.kind));
+      return `${file.padEnd(width)}  ${state} (${check.quality.level}, ${check.quality.score.toFixed(1)})${shows.length > 0 ? `  ${shows.join(', ')}` : ''}`;
+    });
+    lines.push('', `Usable: ${usable} of ${checked.length} frame${checked.length === 1 ? '' : 's'}`);
+    lines.push(`Seen: ${seen.length > 0 ? seen.map((entry) => `${kindLabel(entry.kind)} (${entry.file})`).join(', ') : 'none'}`);
+    if (notSeen.length > 0) lines.push(`Not seen yet: ${notSeen.map(kindLabel).join(', ')}. Film them before scanning if the space has them.`);
+    return `${lines.join('\n')}\n`;
+  });
+}
+
 async function scan(context: Context): Promise<void> {
   const { io, values } = context;
   const input = path.resolve(io.cwd, one(context.args, 'video file or frames directory'));
@@ -399,6 +454,7 @@ const COMMANDS: Record<string, (context: Context) => Promise<void>> = {
   scans,
   scan,
   'scan-status': scanStatus,
+  check,
   cancel,
   'delete-space': deleteSpace,
 };

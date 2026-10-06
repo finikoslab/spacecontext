@@ -61,6 +61,8 @@ spacecontext diff <space-id> --from <scan-id> [--to <scan-id>]
 
 ## Scans
 
+`spacecontext check <image|frames-dir>` checks images before a scan: which are usable, and which key locations (fuse box, stopcock, boiler, smoke detector…) they show, so what is missing can be filmed before paying for a scan. Free; needs `scans:write`. With `--json`, every frame's answer and a summary.
+
 ```bash
 spacecontext scan <video-file | frames-dir> (--space <space-id> | --name <name>) [--type <type>] [--language en|it] [--no-wait]
 spacecontext scan-status <scan-id>

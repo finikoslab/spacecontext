@@ -2116,6 +2116,81 @@
         }
       }
     },
+    "/frames/check": {
+      "post": {
+        "operationId": "checkFrame",
+        "summary": "Check one frame while filming",
+        "description": "For apps that capture a space: is this frame usable, and which key locations (electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter) does it show. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`. Errors: 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What the frame shows",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameCheck"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
     "/webhook-endpoints": {
       "get": {
         "operationId": "listWebhookEndpoints",
@@ -4059,7 +4134,8 @@
             "type": "object",
             "required": [
               "warnings",
-              "not_documented"
+              "not_documented",
+              "checklist"
             ],
             "properties": {
               "warnings": {
@@ -4072,6 +4148,13 @@
                 "type": "array",
                 "items": {
                   "type": "string"
+                }
+              },
+              "checklist": {
+                "type": "array",
+                "description": "Key locations every frame was checked for, seen or not; empty when the frames were not checked.",
+                "items": {
+                  "$ref": "#/components/schemas/SpaceCoverageCheck"
                 }
               }
             }
@@ -6670,6 +6753,7 @@
             ],
             "enum": [
               "ingesting",
+              "screening",
               "observing",
               "fusing",
               "enriching",
@@ -6864,6 +6948,118 @@
           },
           "content_type": {
             "type": "string"
+          }
+        }
+      },
+      "FrameCheck": {
+        "type": "object",
+        "required": [
+          "object",
+          "livemode",
+          "usable",
+          "quality",
+          "shows_space",
+          "key_locations"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "frame_check"
+            ]
+          },
+          "livemode": {
+            "type": "boolean"
+          },
+          "usable": {
+            "type": "boolean",
+            "description": "Sharp, lit and showing a place: worth keeping in a scan."
+          },
+          "quality": {
+            "type": "object",
+            "required": [
+              "score",
+              "level"
+            ],
+            "properties": {
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 3,
+                "description": "Expected level, 0 (unusable) to 3 (excellent)."
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "unusable",
+                  "poor",
+                  "good",
+                  "excellent"
+                ]
+              }
+            }
+          },
+          "shows_space": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Probability that the frame shows a real place (not a drawing, document or screen)."
+          },
+          "key_locations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "probability",
+                "seen"
+              ],
+              "properties": {
+                "kind": {
+                  "$ref": "#/components/schemas/KeyLocationKind"
+                },
+                "probability": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "seen": {
+                  "type": "boolean",
+                  "description": "Probability of at least 0.7."
+                }
+              }
+            }
+          }
+        }
+      },
+      "SpaceCoverageCheck": {
+        "type": "object",
+        "required": [
+          "kind",
+          "seen",
+          "probability",
+          "evidence"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/KeyLocationKind"
+          },
+          "seen": {
+            "type": "boolean",
+            "description": "At least one frame shows it (probability from 0.7)."
+          },
+          "probability": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "The highest probability over the frames."
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/SpaceEvidenceRef"
+            }
           }
         }
       },

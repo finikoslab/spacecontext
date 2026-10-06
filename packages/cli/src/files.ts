@@ -50,6 +50,24 @@ export async function scanSource(input: string): Promise<ScanSource> {
   };
 }
 
+/** One image, or the images of a directory sorted by name (at most `MAX_FRAMES`). */
+export async function frameFiles(input: string): Promise<Array<{ file: string; contentType: FrameContentType }>> {
+  let info;
+  try {
+    info = await stat(input);
+  } catch {
+    throw new UsageError(`${input}: no such file or directory`);
+  }
+  if (info.isFile()) {
+    const contentType = FRAME_TYPES[path.extname(input).toLowerCase()];
+    if (!contentType) throw new UsageError(`${input}: expected a .jpg, .png or .webp image, or a directory of them`);
+    return [{ file: input, contentType }];
+  }
+  const source = await scanSource(input);
+  if (source.kind !== 'frames') throw new UsageError(`${input}: expected an image or a directory of images`);
+  return source.files;
+}
+
 /** A Blob read from disk only while it is uploaded. */
 export function fileBlob(file: string): Promise<Blob> {
   return openAsBlob(file);

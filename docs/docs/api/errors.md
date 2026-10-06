@@ -42,6 +42,7 @@ When the deep pass of a space scanned with the app could not finish, the documen
 | `SCANS_IN_PROGRESS` | 429 | Three scans are already processing; start again when one finishes. |
 | `INSUFFICIENT_FUNDS` | 402 | The balance does not cover the scan; `balance_cents` and `price_cents` say by how much. |
 | `SPENDING_CAP_REACHED` | 402 | The key's monthly cap is reached. |
+| `FRAME_CHECK_UNAVAILABLE` | 503 | `POST /frames/check` cannot run right now; try again shortly. |
 
 A scan that fails after starting carries its reason in `scan.error.code`, and is refunded:
 
@@ -49,6 +50,7 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 | --- | --- |
 | `VIDEO_UNREADABLE` | The video could not be decoded. |
 | `VIDEO_TOO_LONG` | Over 20 minutes. |
+| `FOOTAGE_UNUSABLE` | Every frame was too dark, blurred or covered, or showed no place (a drawing, a screen). Refused before the analysis; film again in good light. |
 | `ANALYSIS_EMPTY` | No space was recognised in the frames. |
 | `AI_ANALYSIS_FAILED`, `AI_OVERLOADED` | The analysis failed; scan again later. |
 | `PROCESSING_TIMEOUT` | Processing took more than 2 hours. |

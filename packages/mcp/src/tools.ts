@@ -128,7 +128,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
     {
       title: 'Read a space',
       description:
-        'Reads the current document of a space: summary, areas, items (location, condition, brand, visible text), issues, key locations (stopcock, fuse box, boiler…), how-to instructions, facts, Q&A and coverage gaps. Ask only for the sections you need on large spaces. With include_evidence, records carry signed photo URLs for get_evidence_photo.',
+        'Reads the current document of a space: summary, areas, items (location, condition, brand, visible text), issues, key locations (stopcock, fuse box, boiler…), how-to instructions, facts, Q&A and coverage gaps (including which key locations the recording did not film). Ask only for the sections you need on large spaces. With include_evidence, records carry signed photo URLs for get_evidence_photo.',
       inputSchema: z.object({
         space_id: spaceId,
         sections: z.array(z.enum(SECTIONS)).optional().describe('Sections to return. Omit for all.'),

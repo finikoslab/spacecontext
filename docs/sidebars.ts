@@ -32,7 +32,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Guides',
-      items: ['guides/claude-code-skill', 'guides/check-in-check-out'],
+      items: ['guides/claude-code-skill', 'guides/check-in-check-out', 'guides/guided-capture'],
     },
     'security-and-privacy',
     'limits',

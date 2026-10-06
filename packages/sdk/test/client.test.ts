@@ -59,6 +59,23 @@ afterEach(() => {
 });
 
 describe('SpaceContext client', () => {
+  it('checks a frame with the image as the body, and nothing else', async () => {
+    const answer = {
+      object: 'frame_check',
+      livemode: true,
+      usable: true,
+      quality: { score: 2.4, level: 'good' },
+      shows_space: 0.99,
+      key_locations: [{ kind: 'electrical_panel', probability: 0.91, seen: true }],
+    };
+    const { fetch, calls } = fakeFetch(() => json(answer));
+    const image = new Uint8Array([0xff, 0xd8, 0xff, 1]);
+    const result = await client(fetch).frames.check(image, 'image/jpeg');
+    expect(result.key_locations[0]!).toEqual({ kind: 'electrical_panel', probability: 0.91, seen: true });
+    expect(calls[0]!).toMatchObject({ url: `${BASE}/frames/check`, method: 'POST', body: image });
+    expect(calls[0]!.headers).toMatchObject({ 'content-type': 'image/jpeg', authorization: `Bearer ${LIVE}` });
+  });
+
   it('needs a well-formed key, reads the environment, and refuses plain http', () => {
     expect(() => new SpaceContext({ apiKey: 'nope' })).toThrow(SpaceContextError);
     vi.stubEnv('SPACECONTEXT_API_KEY', '');

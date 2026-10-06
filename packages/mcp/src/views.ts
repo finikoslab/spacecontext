@@ -121,7 +121,16 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
     out.qa = document.qa.map((entry) => compact({ question: entry.question, answer: entry.answer, source: entry.source, area: area(entry.area_id) }));
   }
   if (sections.has('coverage')) {
-    out.coverage = compact({ warnings: document.coverage.warnings, not_documented: document.coverage.not_documented });
+    // Every frame was checked for these key locations (empty when it was not).
+    const checklist = document.coverage.checklist ?? [];
+    out.coverage = compact({
+      warnings: document.coverage.warnings,
+      not_documented: document.coverage.not_documented,
+      key_locations_filmed: checklist
+        .filter((check) => check.seen)
+        .map((check) => (options.evidence ? compact({ kind: check.kind, evidence: evidence(check.evidence) }) : check.kind)),
+      key_locations_not_filmed: checklist.filter((check) => !check.seen).map((check) => check.kind),
+    });
   }
   return compact(out);
 }

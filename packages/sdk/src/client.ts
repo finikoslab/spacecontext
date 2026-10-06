@@ -19,6 +19,8 @@ export type ScanInput = Schemas['ScanCreateRequest']['input'];
 export type ScanUpload = Schemas['ScanUpload'];
 export type Wallet = Schemas['Wallet'];
 export type MeResponse = Schemas['MeResponse'];
+export type FrameCheck = Schemas['FrameCheck'];
+export type SpaceCoverageCheck = Schemas['SpaceCoverageCheck'];
 export type SpaceType = NonNullable<SpaceCreateRequest['space_type']>;
 
 export const DEFAULT_BASE_URL = 'https://api.spacecontext.finikos.it/v1';
@@ -250,6 +252,25 @@ export class SpaceContext {
       signal: options.signal,
     });
   }
+
+  // ---------------------------------------------------------------- frames
+
+  readonly frames = {
+    /**
+     * Checks one frame while a space is being filmed: is it usable, and which key
+     * locations (fuse box, stopcock, boiler…) does it show. About half a second;
+     * nothing is stored. Free within a daily allowance; needs `scans:write`.
+     */
+    check: (data: UploadBody, contentType: FrameContentType, options: RequestOptions = {}) =>
+      this.json<FrameCheck>({
+        method: 'POST',
+        path: '/frames/check',
+        body: data,
+        headers: { 'Content-Type': contentType },
+        idempotent: true,
+        signal: options.signal,
+      }),
+  };
 
   // ---------------------------------------------------------------- scans
 

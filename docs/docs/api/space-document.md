@@ -21,7 +21,7 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 | `areas`, `items`, `issues`, `key_locations`, `instructions`, `facts`, `qa` | The records, below |
 | `frames` | The evidence frames, with signed URLs |
 | `continuity` | How this scan was checked against the previous one, or `null`: `previous_scan_id`, `absent_items` and `resolved_issues` (each with the frame of this scan that shows the place). See [Compare two scans](skills-and-diff.md#gone-or-just-not-filmed) |
-| `coverage` | `warnings` (weak coverage, unreadable labels, withheld text) and `not_documented` (what a reader would expect but the video did not show) |
+| `coverage` | `warnings` (weak coverage, unreadable labels, withheld text), `not_documented` (what a reader would expect but the video did not show) and `checklist`: the key locations every frame was checked for (`electrical_panel`, `water_shutoff`, `water_heater`, `smoke_detector`, `fire_extinguisher`, `router`, `heating_control`, `gas_meter`), each `seen` or not, with its `probability` and best frames. Not seen means not filmed: a hint for the next recording. Empty for scans whose frames were not checked. |
 | `transcript` | Only with `include=transcript` and `spaces:sensitive` |
 
 ## Records

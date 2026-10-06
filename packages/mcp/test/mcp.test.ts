@@ -34,7 +34,14 @@ function fakeBackend(overrides: Partial<Record<string, (call: BackendCall) => Re
     facts: [],
     qa: [],
     frames: [{ id: 'frame-0', index: 0, timestamp_ms: 1200, url: 'https://api.example.test/v1/media/frames/u1/p1/frame-0.jpg?token=t&expires=9', url_expires_at: null }],
-    coverage: { warnings: [], not_documented: ['attic'] },
+    coverage: {
+      warnings: [],
+      not_documented: ['attic'],
+      checklist: [
+        { kind: 'water_shutoff', seen: true, probability: 0.94, evidence: [{ frame_id: 'frame-0', timestamp_ms: 1200 }] },
+        { kind: 'electrical_panel', seen: false, probability: 0.08, evidence: [] },
+      ],
+    },
   };
   const routes: Record<string, (call: BackendCall) => Response> = {
     'POST /auth/email/send': () => json({ sent: true }),
@@ -409,7 +416,9 @@ describe('MCP tools', () => {
     const full = JSON.parse((await tool(accessToken, 'get_space', { space_id: 'app_p1' })).content[0]!.text!);
     expect(full.items[0]).toEqual({ id: 'itm_1', name: 'Stopcock', area: 'Bathroom', location: 'under the sink', category: 'plumbing', quantity: 1, aliases: ['water shut-off'] });
     expect(full.frames).toBeUndefined();
-    expect(full.coverage).toEqual({ not_documented: ['attic'] });
+    expect(full.coverage).toEqual({ not_documented: ['attic'], key_locations_filmed: ['water_shutoff'], key_locations_not_filmed: ['electrical_panel'] });
+    const coverage = JSON.parse((await tool(accessToken, 'get_space', { space_id: 'app_p1', sections: ['coverage'], include_evidence: true })).content[0]!.text!);
+    expect(coverage.coverage.key_locations_filmed).toEqual([{ kind: 'water_shutoff', evidence: [{ frame_id: 'frame-0', timestamp_ms: 1200, url: expect.stringContaining('/v1/media/frames/u1/p1/frame-0.jpg') }] }]);
 
     const partial = JSON.parse((await tool(accessToken, 'get_space', { space_id: 'app_p1', sections: ['key_locations'], include_evidence: true })).content[0]!.text!);
     expect(Object.keys(partial)).not.toContain('items');

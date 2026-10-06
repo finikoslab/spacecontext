@@ -23,6 +23,9 @@ const { data } = await sc.search('where is the stopcock?');
 const answer = await sc.spaces.ask(space.id, 'Is there a dishwasher?');
 const skill = await sc.spaces.skill(space.id); // { name, files: [{ path, content }] }
 
+// While filming: is this frame usable, and which key locations does it show?
+const check = await sc.frames.check(await openAsBlob('frame.jpg'), 'image/jpeg');
+
 try {
   await sc.spaces.ask('app_…', 'Where is the boiler?');
 } catch (error) {
