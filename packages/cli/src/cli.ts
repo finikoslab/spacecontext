@@ -356,8 +356,10 @@ async function check(context: Context): Promise<void> {
     const width = Math.max(...checked.map(({ file }) => file.length));
     const lines = checked.map(({ file, check }) => {
       const state = check.usable ? 'usable' : 'NOT usable';
+      // A frame can be sharp and still show no place (a drawing, a document, a screen).
+      const why = check.shows_space < 0.5 ? 'not a place' : `${check.quality.level}, ${check.quality.score.toFixed(2)}`;
       const shows = check.key_locations.filter((entry) => entry.seen).map((entry) => kindLabel(entry.kind));
-      return `${file.padEnd(width)}  ${state} (${check.quality.level}, ${check.quality.score.toFixed(1)})${shows.length > 0 ? `  ${shows.join(', ')}` : ''}`;
+      return `${file.padEnd(width)}  ${state} (${why})${shows.length > 0 ? `  ${shows.join(', ')}` : ''}`;
     });
     lines.push('', `Usable: ${usable} of ${checked.length} frame${checked.length === 1 ? '' : 's'}`);
     lines.push(`Seen: ${seen.length > 0 ? seen.map((entry) => `${kindLabel(entry.kind)} (${entry.file})`).join(', ') : 'none'}`);

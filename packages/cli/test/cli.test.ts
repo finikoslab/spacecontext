@@ -255,8 +255,8 @@ describe('spacecontext CLI', () => {
     ], { SPACECONTEXT_API_KEY: KEY });
 
     expect(await main(['check', 'shots'], h.io)).toBe(0);
-    expect(h.stdout()).toContain('a-hall.jpg  usable (good, 2.4)  electrical panel');
-    expect(h.stdout()).toContain('b-blur.jpg  NOT usable (unusable, 0.3)');
+    expect(h.stdout()).toContain('a-hall.jpg  usable (good, 2.40)  electrical panel');
+    expect(h.stdout()).toContain('b-blur.jpg  NOT usable (unusable, 0.30)');
     expect(h.stdout()).toContain('Usable: 1 of 2 frames');
     expect(h.stdout()).toContain('Seen: electrical panel (a-hall.jpg)');
     expect(h.stdout()).toContain('Not seen yet: water shutoff, water heater.');

@@ -57,11 +57,12 @@ npx spacecontext check ./photos
 ```
 
 ```
-hall-1.jpg     usable (good, 2.4)  electrical panel
-kitchen-2.jpg  usable (excellent, 2.8)
-blur-3.jpg     NOT usable (unusable, 0.3)
+hall-1.jpg     usable (good, 2.41)  electrical panel
+kitchen-2.jpg  usable (excellent, 2.78)
+blur-3.jpg     NOT usable (unusable, 0.31)
+plan-4.jpg     NOT usable (not a place)
 
-Usable: 2 of 3 frames
+Usable: 2 of 4 frames
 Seen: electrical panel (hall-1.jpg)
 Not seen yet: water shutoff, water heater, smoke detector, fire extinguisher, router, heating control, gas meter. Film them before scanning if the space has them.
 ```
