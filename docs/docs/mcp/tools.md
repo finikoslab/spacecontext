@@ -118,14 +118,14 @@ The prepaid balance (`balance_cents`), the free scans left, the price of one sca
 
 ## `create_scan`
 
-Declares a new scan and returns `upload`, exactly as the API gives it, and a `next` step. Frames are sent one by one with `upload_frame`. For a video, `upload` is a one-off `PUT` URL: when it points at storage (headers given, no key needed) the agent can `PUT` the bytes there; when it points at the API it needs the user's own key, which the server never hands out, so the agent asks the user to upload with the CLI or the console. Nothing is charged until `start_scan`.
+Declares a new scan and returns `upload`, exactly as the API gives it, and a `next` step. Frames are sent one by one with `upload_frame`. For a video, `upload` is a one-off `PUT` URL: when it points at storage (headers given, no key needed) the agent can `PUT` the bytes there; when it points at the API it needs the user's own key, which the server never hands out, so the agent asks the user to upload with the CLI or the console. Nothing is charged until `start_scan`. Everything the server can check (a video over 100 MB, a missing `video` or `frames`) is refused before a `new_space` is created, and a space created for a scan the API then refuses is deleted again.
 
 | Argument | Type | |
 | --- | --- | --- |
 | `space_id` | string | Scan this space again (the new scan is checked against the previous one). Either this or `new_space`. |
 | `new_space` | `{ name, space_type? }` | Create a space for the scan. |
 | `source` | `"video"` \| `"frames"` | |
-| `video` | `{ content_type, content_length }` | With `source: "video"`: `video/mp4`, `video/quicktime` or `video/x-m4v`, and the exact size in bytes. |
+| `video` | `{ content_type, content_length }` | With `source: "video"`: `video/mp4`, `video/quicktime` or `video/x-m4v`, and the exact size in bytes. Up to 100 MB and 10 minutes. |
 | `frames` | `{ count }` | With `source: "frames"`: how many images (1–120). |
 | `language` | `"en"` \| `"it"` | Optional, default `en`. |
 

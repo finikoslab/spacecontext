@@ -697,6 +697,34 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/scans/scn_2')).toBe(true);
   });
 
+  it('refuses a video the API would refuse before creating a space, and never leaves a space empty', async () => {
+    const MB = 1024 * 1024;
+    const { accessToken } = await connect({ scans: true });
+    await initialize(accessToken);
+    const listed = (await rpc(accessToken, 'tools/list')).result.tools as Array<{ name: string; description: string; inputSchema: any }>;
+    const createScan = listed.find((entry) => entry.name === 'create_scan')!;
+    expect(createScan.description).toContain('up to 100 MB and 10 minutes');
+    expect(createScan.inputSchema.properties.video.properties.content_length.maximum).toBe(100 * MB);
+
+    const tooBig = await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 100 * MB + 1 } } });
+    expect(tooBig.error ?? tooBig.result?.isError).toBeTruthy();
+    expect(backend.calls.some((entry) => entry.method === 'POST' && entry.path === '/spaces')).toBe(false);
+
+    const largest = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 100 * MB } });
+    expect(largest.isError).toBeUndefined();
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/spaces/spc_new')).toBe(false);
+
+    // Refused by the API all the same: the space made for it goes too.
+    backend = fakeBackend({
+      'POST /spaces/spc_new/scans': () => new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Invalid scan input', request_id: 'r' } }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
+      'DELETE /spaces/spc_new': () => new Response(null, { status: 204 }),
+    });
+    const refused = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 1234 } });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0]!.text).toContain('VALIDATION_ERROR');
+    expect(backend.calls.filter((entry) => entry.method === 'DELETE').map((entry) => entry.path)).toEqual(['/spaces/spc_new']);
+  });
+
   it('answers follow_scan with final: false, not an error, when the scan outlasts the wait', async () => {
     backend = fakeBackend({ 'GET /scans/scn_2/events': () => sse([scanJson({ status: 'processing', stage: 'observing', upload: null })]) });
     const { accessToken } = await connect();

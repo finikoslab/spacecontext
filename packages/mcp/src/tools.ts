@@ -19,6 +19,8 @@ const WRITES = { readOnlyHint: false, destructiveHint: false, idempotentHint: fa
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 /** Frames one scan may declare (the API's limit). */
 const MAX_FRAMES = 120;
+/** The largest video a scan accepts (the API's limit, with 10 minutes at most). */
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LANGUAGES = ['en', 'it'] as const;
 const SPACE_TYPES = ['apartment', 'house', 'office', 'warehouse', 'vehicle', 'boat', 'camper', 'shop', 'garage', 'appliance', 'other'] as const;
 const FRAME_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
@@ -310,7 +312,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
     {
       title: 'Create a scan',
       description:
-        'Declares a new scan of a space (an existing one, or a space created now). Frames: then send each image with upload_frame (index 0…n-1). Video: the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
+        'Declares a new scan of a space (an existing one, or a space created now). Frames (up to 120 images): then send each image with upload_frame (index 0…n-1). Video (up to 100 MB and 10 minutes): the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
       inputSchema: z.object({
         space_id: spaceId.optional().describe('Scan this existing space again (the new scan is checked against the previous one).'),
         new_space: z
@@ -319,9 +321,9 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
           .describe('Create a space for the scan instead of space_id.'),
         source: z.enum(['video', 'frames']),
         video: z
-          .object({ content_type: z.enum(VIDEO_CONTENT_TYPES), content_length: z.number().int().min(1).max(524_288_000).describe('Exact size in bytes.') })
+          .object({ content_type: z.enum(VIDEO_CONTENT_TYPES), content_length: z.number().int().min(1).max(MAX_VIDEO_BYTES).describe('Exact size in bytes, at most 100 MB.') })
           .optional()
-          .describe('With source video.'),
+          .describe('With source video: up to 100 MB and 10 minutes.'),
         frames: z.object({ count: z.number().int().min(1).max(MAX_FRAMES) }).optional().describe('With source frames: how many images will be uploaded.'),
         language: z.enum(LANGUAGES).optional().describe('Language of the narration and of the document (default en).'),
       }),
@@ -332,12 +334,21 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
         if (Boolean(space_id) === Boolean(new_space)) return { isError: true, content: [{ type: 'text', text: 'Give either space_id or new_space.' }] };
         if (source === 'video' && !video) return { isError: true, content: [{ type: 'text', text: 'With source video, give video.content_type and video.content_length.' }] };
         if (source === 'frames' && !frames) return { isError: true, content: [{ type: 'text', text: 'With source frames, give frames.count.' }] };
-        const target = space_id ?? (await api.spaces.create({ name: new_space!.name, ...(new_space!.space_type ? { space_type: new_space!.space_type } : {}) })).id;
+        // Everything that can be checked here is checked (above and by the input
+        // schema) before a space is created for the scan.
         const input: ScanInput =
           source === 'video'
             ? { kind: 'video', language: language ?? 'en', video: { content_type: video!.content_type, content_length: video!.content_length } }
             : { kind: 'frames', language: language ?? 'en', frames: Array.from({ length: frames!.count }, () => ({ timestamp_ms: null })) };
-        const scan = await api.scans.create(target, input);
+        const created = new_space ? await api.spaces.create({ name: new_space.name, ...(new_space.space_type ? { space_type: new_space.space_type } : {}) }) : null;
+        let scan: Scan;
+        try {
+          scan = await api.scans.create(space_id ?? created!.id, input);
+        } catch (error) {
+          // A space made for a scan the API refused would be left empty: it goes too.
+          if (created) await api.spaces.delete(created.id).catch(() => undefined);
+          throw error;
+        }
         const direct = scan.upload?.kind === 'video' && typeof scan.upload.url === 'string' && !isApiUrl(api, scan.upload.url);
         return text({
           ...compactScan(scan),
