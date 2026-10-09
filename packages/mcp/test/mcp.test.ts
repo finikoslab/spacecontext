@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import type { Env } from '../src/env';
 import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/html';
+import { CARD_TOOLS } from '../src/card';
 
 const ORIGIN = 'https://mcp.example.test';
 const REDIRECT = 'https://claude.example/api/mcp/auth_callback';
@@ -454,6 +455,18 @@ describe('MCP tools', () => {
     expect(annotations.upload_frame).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     expect(annotations.cancel_scan).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(tools.every((entry) => !entry.annotations.openWorldHint)).toBe(true);
+    // The public Server Card lists exactly these tools.
+    expect(CARD_TOOLS.map((entry) => entry.name).sort()).toEqual(names);
+  });
+
+  it('publishes its Server Card without a token', async () => {
+    const response = await call(new Request(`${ORIGIN}/.well-known/mcp/server-card.json`));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    const card = (await response.json()) as { serverInfo: { name: string; version: string }; transport: { endpoint: string }; tools: unknown[] };
+    expect(card.serverInfo).toMatchObject({ name: 'spacecontext' });
+    expect(card.transport.endpoint).toBe(`${ORIGIN}/mcp`);
+    expect(card.tools.length).toBe(CARD_TOOLS.length);
   });
 
   it('answers with the API key of the grant and the caller IP', async () => {

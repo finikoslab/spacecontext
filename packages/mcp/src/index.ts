@@ -3,6 +3,7 @@ import { createMcpHandler } from 'agents/mcp/server';
 import { authHandler, REQUIRED_SCOPES, SCOPES_SUPPORTED } from './authorize.js';
 import { apiClient } from './backend.js';
 import type { Env, GrantProps } from './env.js';
+import { serverCard } from './card.js';
 import { createServer } from './tools.js';
 
 /**
@@ -56,8 +57,18 @@ function provider(publicUrl: string): OAuthProvider<Env> {
 
 const providers = new Map<string, OAuthProvider<Env>>();
 
+const SERVER_CARD_PATH = '/.well-known/mcp/server-card.json';
+
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // The MCP Server Card: public discovery, before any sign-in.
+    if (request.method === 'GET' && new URL(request.url).pathname === SERVER_CARD_PATH) {
+      return Promise.resolve(
+        Response.json(serverCard(new URL(env.PUBLIC_URL).origin), {
+          headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' },
+        })
+      );
+    }
     let current = providers.get(env.PUBLIC_URL);
     if (!current) {
       current = provider(env.PUBLIC_URL);
