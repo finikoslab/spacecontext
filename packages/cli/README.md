@@ -1,35 +1,95 @@
 # spacecontext
 
-Space Context from the terminal. Film a space once, then search it, ask it questions and hand it to your agents as a Skill.
+[![npm](https://img.shields.io/npm/v/spacecontext?logo=npm)](https://www.npmjs.com/package/spacecontext)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/finikoslab/spacecontext/blob/HEAD/LICENSE)
+[![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Docs](https://img.shields.io/badge/docs-spacecontext.app-7C3AED)](https://spacecontext.app/developers/docs/cli/install/)
+
+[Space Context](https://spacecontext.app/developers/) from the terminal. Film a space once, then search it, ask it questions, compare scans and hand it to your agents as an Agent Skill or a Markdown page.
 
 ```bash
-npx spacecontext login                            # approve a code in the console; the key comes back here
-npx spacecontext scan tour.mp4 --name "Seaside flat" --type apartment
-npx spacecontext search "where is the fuse box?"
-npx spacecontext ask spc_… "is there a hair dryer?"
+npx spacecontext --help
+```
+
+Needs Node.js 22 or later. Run it with `npx`, or install it with `npm install -g spacecontext`. Videos are analysed on the server, so you don't need ffmpeg.
+
+## Try it on the demo, for free
+
+```bash
+npx spacecontext login --test       # a code to approve in the console; a free test key comes back
+npx spacecontext spaces             # the demo space: spc_demo
+npx spacecontext ask spc_demo "where is the fuse box?"
+npx spacecontext skill spc_demo --out ./brisbane-apartment-skill
+```
+
+```text
+The fuse box is in the Open-plan Living, Dining and Kitchen, in the hallway cupboard behind the coats.
+
+Sources:
+  - Fuse box (Open-plan Living, Dining and Kitchen)
+```
+
+The demo space contains two real scans of an apartment in Brisbane (photos at check-in, a narrated video at check-out). Test keys are free and unlimited, and a test scan runs the whole flow and returns the demo content.
+
+## Scan your own space
+
+```bash
+npx spacecontext login                                   # a live key: the first live scan is free
+npx spacecontext check ./photos                          # optional: usable frames, key locations still missing
+npx spacecontext scan ./flat.mp4 --name "Seaside flat" --type apartment
+npx spacecontext search "where is the water shut-off?"
 npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 ```
 
+`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order). It then starts the analysis and prints each stage as it runs ("Reading the video", "Looking at the frames", "Extracting the context"…). After the free scan, each live scan costs US$1.00 from your prepaid balance, and failed scans are refunded. If an upload fails, the scan is cancelled and nothing is charged.
+
+## Commands
+
 | Command | |
 | --- | --- |
-| `login [--test] [--no-browser] [--key -]` / `logout` / `whoami` | Sign in (a code to approve in the console; `--key -` saves a key you have, typed without echo), forget, check |
+| `login [--test] [--no-browser] [--key -]` | Sign in: approve a code in the console, and the key comes back to the terminal |
+| `logout`, `whoami` | Forget the saved key; show the account, mode and scopes of the key |
 | `wallet` | Balance, free scans left, price per scan |
-| `spaces [--source app\|api]` | List your spaces |
-| `space <id> [--transcript]` | Show a space; `--json` for the full document |
-| `search <question…> [--space id] [--limit n]` | Search every space |
+| `spaces [--source app\|api]` | Every space the key can read: `app_…` from the iPhone app, `spc_…` from the API |
+| `space <space-id> [--transcript]` | A summary of a space; `--json` for the whole Space Document |
+| `search <question…> [--space <id>] [--limit <1-25>]` | Search every space, in any language |
 | `ask <space-id> <question…>` | A short answer with its sources |
-| `skill <space-id> [--out dir] [--transcript]` | Write the space as an Agent Skill folder |
-| `markdown <space-id> [--out file] [--transcript]` | The space as one Markdown page |
+| `skill <space-id> [--out <dir>] [--transcript]` | Write the space as an Agent Skill folder |
+| `markdown <space-id> [--out <file>] [--transcript]` | The space as one Markdown page |
 | `scans <space-id>` | The scan history of a space |
-| `diff <space-id> --from <scan> [--to <scan>]` | What changed between two scans |
-| `delete-space <space-id>` | Delete a space created through the API, with its scans |
-| `scan <video\|frames-dir> (--space id \| --name …) [--format text\|json\|markdown\|skill] [--out path]` | Upload (`.mp4 .mov .m4v` up to 100 MB, or a folder of up to 120 `.jpg .png .webp` of 2 MB each), follow the analysis live, print the result in the format you want |
-| `check <image\|frames-dir>` | Before a scan: which frames are usable, and which key locations (fuse box, stopcock, boiler…) they show |
+| `diff <space-id> --from <scan-id> [--to <scan-id>]` | What changed between two scans, with confirmed changes kept apart from what wasn't filmed |
+| `scan <video\|frames-dir> (--space <id> \| --name <name>)` | Upload, start and follow a scan. Options: `--type`, `--language en\|it`, `--format text\|json\|markdown\|skill`, `--out`, `--no-wait` |
+| `check <image\|frames-dir>` | Before a scan: which frames are usable, and which key locations (fuse box, stopcock, boiler…) they show. Free |
 | `scan-status <scan-id> [--follow]` | Where a scan is; `--follow` prints every change until it ends |
-| `cancel <scan-id>` | Cancel a scan that has not started; nothing is charged |
+| `cancel <scan-id>` | Cancel a scan that hasn't started; nothing is charged |
+| `delete-space <space-id>` | Delete a space created through the API, with its scans and files |
 
-Every command accepts `--json`, `--api-key` and `--base-url`. The key is read from `--api-key`, then `SPACECONTEXT_API_KEY`, then the file written by `login` (`~/.config/spacecontext/config.json`, readable by you only); a base URL saved by `login` is used only with the key saved with it. `login` shows a code, opens the console and receives the key there, never through the browser. To save a key you already have, `login --key -` asks for it without echoing it; `--key sc_…` works too, but leaves the key in your shell history. Exit codes: `0` success, `1` failure, `2` wrong usage.
+`--transcript` adds what was said in the video and needs a key with `spaces:sensitive`. Space types for `--type` are `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance` and `other`.
 
-Videos are analysed on the server: no ffmpeg needed. A test key (`sc_test_…`) runs the whole flow for free and returns the demo space.
+## Keys and sign-in
 
-MIT © Finikos S.r.l.
+`login` shows a code and opens the console. There you sign in with Apple, Google, GitHub or your email, type the code, choose what the key may do and approve. The key comes back to the terminal without passing through the browser. Approve only a code you're looking at in your own terminal: that's why the code is never carried in a link.
+
+The key is saved in `~/.config/spacecontext/config.json` (or `$XDG_CONFIG_HOME/spacecontext/`), readable only by your user. Every command uses the first key it finds in this order:
+
+1. `--api-key sc_…`
+2. `SPACECONTEXT_API_KEY` (an empty value counts as unset)
+3. the key saved by `login`
+
+To save a key you already have, run `login --key -`: it asks for the key without echoing it. `--key sc_…` works too, but leaves the key in your shell history. `--base-url` and `SPACECONTEXT_BASE_URL` point the CLI at another API. A base URL saved by `login` is used only with the key saved alongside it.
+
+## Scripts and CI
+
+Every command accepts `--json` and prints the API's JSON on standard output, while progress goes to standard error. Exit codes are `0` for success, `1` when the request failed and `2` for wrong usage. Errors show the API's code and request id:
+
+```text
+Error [INSUFFICIENT_FUNDS]: The wallet does not cover this scan (request 8f0c2b9e-…)
+```
+
+Use a test key in CI: it's free and never touches real data.
+
+## Links
+
+[Install and sign in](https://spacecontext.app/developers/docs/cli/install/) · [Commands](https://spacecontext.app/developers/docs/cli/commands/) · [Recording tips](https://spacecontext.app/developers/docs/cli/scanning/) · [Check-in and check-out](https://spacecontext.app/developers/docs/guides/check-in-check-out/) · [A space in Claude Code](https://spacecontext.app/developers/docs/guides/claude-code-skill/) · [Source](https://github.com/finikoslab/spacecontext/tree/HEAD/packages/cli)
+
+[MIT](https://github.com/finikoslab/spacecontext/blob/HEAD/LICENSE) © Finikos S.r.l.

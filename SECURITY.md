@@ -33,3 +33,7 @@ about it are in scope through the API.
   user revokes it from the console.
 - The CLI's sign-in code is typed by the person in the console and never
   carried in a link; approve only a code shown in your own terminal.
+
+More in [Security and privacy](https://spacecontext.app/developers/docs/security-and-privacy/):
+sensitive values, text that addresses an AI, where data is stored, webhook
+signatures and deletion.
