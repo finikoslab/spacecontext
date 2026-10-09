@@ -11,6 +11,7 @@
   // addresses. The API is reached through the BACKEND service binding.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
+  "preview_urls": false,
   "routes": [{ "pattern": "mcp.spacecontext.app", "custom_domain": true }],
   "vars": {
     "API_BASE_URL": "https://api.spacecontext.app/v1",
@@ -41,7 +42,9 @@
     // Staging: the dev branch deploys here (Workers Builds), against the dev API.
     "staging": {
       "name": "spacecontext-mcp-staging",
-      "workers_dev": true,
+      // Only on mcp-dev.spacecontext.app: no workers.dev hostname, no preview URLs.
+      "workers_dev": false,
+      "preview_urls": false,
       "routes": [{ "pattern": "mcp-dev.spacecontext.app", "custom_domain": true }],
       "vars": {
         "API_BASE_URL": "https://api-dev.spacecontext.app/v1",
