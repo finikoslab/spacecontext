@@ -413,7 +413,9 @@ export class SpaceContext {
 
   /**
    * Downloads an evidence frame from the signed URL of a document. Only URLs of
-   * this API are fetched.
+   * this API are fetched: the frames of the demo space (test keys) are public
+   * files on https://spacecontext.app/demo/brisbane/, not URLs of the API, and
+   * are refused with `INVALID_URL`. Fetch those directly; they need no key.
    */
   async evidenceFrame(url: string, options: RequestOptions = {}): Promise<{ contentType: string; data: ArrayBuffer }> {
     if (!this.isApiUrl(url)) {

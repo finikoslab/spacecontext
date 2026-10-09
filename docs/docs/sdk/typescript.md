@@ -88,6 +88,8 @@ const skill = await sc.spaces.skill('spc_…');                   // { name, fil
 
 Both are built from exactly the document the key may read: a key without `spaces:sensitive` gets them redacted, and 409 `ENRICHMENT_PENDING` until the space is screened.
 
+`sc.evidenceFrame(url)` downloads an evidence frame from a signed URL of the API (a document's `frames`, an answer's citations), without sending the key. It fetches nothing else: the frames of the demo space (test keys) are public files on `https://spacecontext.app/demo/brisbane/` and are refused with `INVALID_URL`; fetch those directly.
+
 ## Sign in from a tool
 
 The CLI's `login` is in the SDK too, for any tool without a browser session:

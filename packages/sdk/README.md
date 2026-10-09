@@ -7,6 +7,7 @@ npm install @spacecontext/sdk
 ```
 
 ```ts
+import { openAsBlob } from 'node:fs';
 import { SpaceContext, SpaceContextError } from '@spacecontext/sdk';
 
 const sc = new SpaceContext({ apiKey: process.env.SPACECONTEXT_API_KEY });
@@ -46,6 +47,7 @@ try {
 - **Real time:** `scans.events(id)` and `scans.wait(id)` follow the API's event stream, reconnecting until the deadline if it ends early or the connection drops; they poll only where streaming is not possible.
 - **Uploads:** pass a `Blob` (`fs.openAsBlob` streams from disk), `ArrayBuffer` or `Uint8Array`. Videos go straight to storage when the API offers a signed URL; the API key is only ever sent to the API itself.
 - **Redirects** are never followed.
-- **Types:** every schema of the [OpenAPI spec](../../openapi/openapi.json) is exported (`SpaceDocument`, `Scan`, `SearchResults`, … and `components`).
+- **Evidence frames:** `evidenceFrame(url)` downloads a frame from a signed URL of this API, without sending the key. The demo space's frames (test keys) are public files on `https://spacecontext.app/demo/brisbane/`: it refuses them (`INVALID_URL`); fetch them directly.
+- **Types:** every schema of the [OpenAPI spec](https://api.spacecontext.app/v1/openapi.json) is exported (`SpaceDocument`, `Scan`, `SearchResults`, … and `components`).
 
 MIT © Finikos S.r.l.

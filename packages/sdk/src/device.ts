@@ -9,7 +9,7 @@ import type { components } from './schema.js';
  * travels through the browser; the terminal never sees the console session.
  *
  * ```ts
- * const { apiKey, user } = await deviceSignIn({
+ * const { api_key, user } = await deviceSignIn({
  *   name: 'CLI on MacBook',
  *   onCode: ({ userCode, verificationUrl }) => console.log(`Open ${verificationUrl} and enter ${userCode}`),
  * });
