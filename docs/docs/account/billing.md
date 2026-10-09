@@ -33,7 +33,7 @@ In the console, tick the billing terms (below), then **Billing → Add $10 / $25
 
 ![Billing in the console: the balance with Add $10, $25 and $50 buttons, the automatic top-up settings and the spend of the last 30 days](/docs/console/billing.jpg)
 
-- Amounts from $5 to $500 per top-up (the API accepts any amount in that range).
+- Amounts from $10 to $500 per top-up (the API accepts any amount in that range).
 - The balance never expires and is used only for API scans.
 - Tick **Save the card for automatic top-ups** to allow automatic top-up later; that card is also the card on file that live keys that can scan need. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.
 
@@ -52,7 +52,7 @@ Before the payment page opens, the console asks you to accept these terms; Strip
 With a saved card, the console can top up for you:
 
 - **When the balance is below**: the threshold, in dollars.
-- **Add**: the amount to charge, from $5 to $500.
+- **Add**: the amount to charge, from $10 to $500.
 
 A top-up is attempted right after a paid scan starts and leaves the balance below the threshold. It is also attempted when the balance cannot pay for the next scan, and when a scan is refused for insufficient funds; in that last case the next attempt to start can succeed. Two attempts are at least 10 minutes apart, with at most 3 per day.
 
