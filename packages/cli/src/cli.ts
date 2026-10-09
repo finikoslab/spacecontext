@@ -605,7 +605,7 @@ function hint(code: string): string {
     case 'INSUFFICIENT_FUNDS':
       return 'Top up your wallet in the console: https://spacecontext.app/developers/console\n';
     case 'PRO_REQUIRED':
-      return 'Spaces scanned with the app are readable through the API with Space Context Pro.\n';
+      return 'Spaces scanned with the app need Space Context Pro on this deployment.\n';
     case 'ENRICHMENT_PENDING':
       return 'The space is being screened for sensitive values; try again in a minute.\n';
     case 'INSUFFICIENT_SCOPE':

@@ -42,7 +42,7 @@ function advice(error: SpaceContextError): string {
     case 'ENRICHMENT_PENDING':
       return 'The space is being screened for sensitive values; retry in about a minute.';
     case 'PRO_REQUIRED':
-      return 'Spaces scanned with the iPhone app are available here with Space Context Pro.';
+      return 'Spaces scanned with the iPhone app need Space Context Pro on this deployment.';
     case 'INSUFFICIENT_SCOPE':
       return 'The user did not grant this access when connecting; they can reconnect Space Context and tick the access they want to grant (sensitive values, or scanning).';
     case 'INSUFFICIENT_FUNDS':
@@ -101,7 +101,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
     {
       title: 'List spaces',
       description:
-        'Lists the spaces this connection can read (scanned with the app, for Space Context Pro users, or through the API), newest first, with their latest scan: counts of areas, items and issues. Pass the returned next_cursor to get the next page.',
+        'Lists the spaces this connection can read (scanned with the iPhone app or through the API), newest first, with their latest scan: counts of areas, items and issues. Pass the returned next_cursor to get the next page.',
       inputSchema: z.object({
         source: z.enum(['app', 'api']).optional().describe('Only spaces from this source. Omit for all.'),
         cursor: z.string().max(500).optional().describe('next_cursor from a previous call.'),

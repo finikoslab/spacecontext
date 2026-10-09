@@ -177,7 +177,7 @@ A tool that fails returns `isError: true` with the error code and a hint, for ex
 | Code | Hint given to the assistant |
 | --- | --- |
 | `ENRICHMENT_PENDING` | The space is being screened; retry in about a minute. |
-| `PRO_REQUIRED` | App spaces need Space Context Pro. |
+| `PRO_REQUIRED` | App spaces need Space Context Pro on this deployment (not the case today). |
 | `INSUFFICIENT_SCOPE` | The user did not grant this access (sensitive values, or scanning); they can reconnect and tick it. |
 | `INSUFFICIENT_FUNDS` | The balance does not cover a scan; top up in the console. |
 | `FRAME_CHECK_UNAVAILABLE` | Photo checks are not available right now. |

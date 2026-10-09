@@ -52,7 +52,7 @@ const page = await sc.spaces.markdown(spaceId); // the whole space as one page
 ## Pricing and keys
 
 - `sc_test_…` keys are free and unlimited: they return a hand-made demo space, never real data.
-- `sc_live_…` keys: one free scan per account, then a prepaid wallet in USD (top up in the console). Reading spaces scanned with the iPhone app requires Space Context Pro.
+- `sc_live_…` keys: one free scan per account, then a prepaid wallet in USD (top up in the console). Spaces scanned with the iPhone app are readable with the same account, included.
 - A connector's key is read-only unless you allow scanning when you connect; the console sets scopes and a monthly spending cap per key.
 
 ## Development

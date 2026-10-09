@@ -11,7 +11,7 @@ A **space** is a physical place you document: a flat, a house, an office, a ware
 
 | Id | Where it comes from | Who can read it through the API |
 | --- | --- | --- |
-| `app_…` | Scanned with the Space Context iPhone app | Live keys of **Space Context Pro** users |
+| `app_…` | Scanned with the Space Context iPhone app | Live keys of the same account |
 | `spc_…` | Created through the API, the CLI or the console | The keys of the same mode (test or live) |
 | `spc_demo` | The demo space | Test keys only |
 

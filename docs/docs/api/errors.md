@@ -16,7 +16,7 @@ Errors share one envelope: `{ "error": { "code", "message", "request_id", … } 
 | `INVALID_TOKEN` | 401 | The key does not exist or was revoked. |
 | `USER_NOT_FOUND` | 401 | The account of the key was deleted. |
 | `INSUFFICIENT_SCOPE` | 403 | The key lacks a scope; `required_scopes` lists it. |
-| `PRO_REQUIRED` | 403 | Spaces scanned with the app need Space Context Pro. |
+| `PRO_REQUIRED` | 403 | Spaces scanned with the app need Space Context Pro (only when the service turns this rule on; today every account reads its app spaces). |
 | `NOT_FOUND` | 404 | No such space, scan or record for this key (test and live data are separate). |
 | `RATE_LIMIT_EXCEEDED` | 429 | Wait `Retry-After` seconds (or `retry_after` for daily limits). |
 | `INTERNAL_ERROR` | 500 | Retry later; if it persists, contact support with the request id. |

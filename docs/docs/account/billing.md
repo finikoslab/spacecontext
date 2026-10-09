@@ -14,7 +14,7 @@ Reading, searching and asking spaces are included. **Live scans** are paid from 
 | Each live scan after that | **$1.00**, charged when the scan starts |
 | Failed scans | Refunded automatically |
 
-Spaces you scanned with the iPhone app are readable through the API and MCP with **Space Context Pro** (an app subscription). API scans are separate: they are always paid from the balance, never from app credits.
+Spaces you scanned with the iPhone app are readable through the API, the console and MCP with the same account, at no cost. Billing stays separate: the app's credits and Space Context Pro are App Store purchases; API scans are always paid from the balance, never from app credits.
 
 ## Add funds
 

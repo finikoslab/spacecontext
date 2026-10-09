@@ -87,7 +87,7 @@ Use the server URL with the client's "remote MCP server" or "custom connector" o
 | Space | Visible |
 | --- | --- |
 | Spaces created with the API or the CLI (live) | Yes |
-| Spaces scanned with the iPhone app | With Space Context Pro |
+| Spaces scanned with the iPhone app | Yes (same account) |
 | Spaces scanned with the app, not yet screened | Only after screening, unless you granted sensitive values: the first read starts it, and it takes a minute or two |
 
 ## Good to know

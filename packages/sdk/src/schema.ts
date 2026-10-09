@@ -80,7 +80,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the spaces this key can read: scanned with the app (Pro, live keys) and created through the API */
+        /** List the spaces this key can read: scanned with the app (live keys) and created through the API */
         get: operations["listSpaces"];
         put?: never;
         /**
@@ -248,7 +248,7 @@ export interface paths {
         };
         /**
          * Search across all your spaces
-         * @description Finds the records (items, areas, issues, key locations, instructions, facts, questions and answers) that best match a question in natural language, across every space this key can read, in any of 100+ languages: "where did I see a ladder?". Each result names its space, scan and record, so it can be opened with the other operations. The index holds only screened, redacted content: no result ever contains a sensitive value, whatever the key's scopes. A space appears once its current scan has been indexed: after a scan completes, or after the deep pass of a space scanned with the app (spaces scanned with the app require Pro). Test keys search the demo space, without a model. Limits: 20 a minute and, by default, 1000 a day per account.
+         * @description Finds the records (items, areas, issues, key locations, instructions, facts, questions and answers) that best match a question in natural language, across every space this key can read, in any of 100+ languages: "where did I see a ladder?". Each result names its space, scan and record, so it can be opened with the other operations. The index holds only screened, redacted content: no result ever contains a sensitive value, whatever the key's scopes. A space appears once its current scan has been indexed: after a scan completes, or after the deep pass of a space scanned with the app. Test keys search the demo space, without a model. Limits: 20 a minute and, by default, 1000 a day per account.
          */
         get: operations["searchSpaces"];
         put?: never;
@@ -1370,7 +1370,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string;
-                /** @description Only spaces from this source. Omitted: every space this key can read (app spaces need a live key of a Pro user; test keys see the demo space). */
+                /** @description Only spaces from this source. Omitted: every space this key can read (app spaces need a live key; test keys see the demo space). */
                 source?: "app" | "api";
             };
             header?: never;
