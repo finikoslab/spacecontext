@@ -14,7 +14,7 @@ try {
     type: 'apartment',
     format: 'markdown',
     onProgress: (p) => {
-      if (p.type === 'scan') console.log(`  ${p.label}…`);
+      if (p.type === 'scan') console.log(p.stage === 'complete' ? '  Done.' : `  ${p.label}…`);
       else if (p.type === 'uploading') console.log(`  Uploading ${p.part}/${p.parts}…`);
       else console.log(`  ${p.type}`);
     },
