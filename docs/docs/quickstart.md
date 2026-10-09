@@ -5,7 +5,7 @@ description: 'From zero to a searchable space in five minutes, with a free test 
 
 # Quickstart
 
-**Using a coding agent?** Paste the prompt in [Setup](setup.md) into Claude Code, Cursor or Codex: it connects your assistant, installs the skill and signs you in.
+**Using a coding agent?** Paste the prompt in [Setup](setup.md) into Claude Code, Cursor or Codex, or run `npx spacecontext@latest setup` yourself: it signs you in, connects your assistants and installs the skill.
 
 **No code at all?** Open the [console](https://spacecontext.app/developers/console/), sign in with Apple, Google, GitHub or your email, switch to **Test** and open the demo space: inventory, photos, questions and a comparison of two scans. Then add a card under **Billing → Add a card** (nothing is charged; live keys that can scan need one), switch to **Live**, open **New scan** and drop a video of a room: the first live scan is free. **Connect AI** adds your spaces to Claude or ChatGPT in a minute.
 

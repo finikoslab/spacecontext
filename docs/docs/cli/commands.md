@@ -5,7 +5,27 @@ description: 'Every command of the spacecontext CLI.'
 
 # CLI commands
 
-All commands accept `--json`, `--api-key <key>` and `--base-url <url>`. Ids are the ones the API uses: spaces `app_…` (scanned with the app) or `spc_…` (created with the API or the CLI), scans `scn_…`.
+All commands accept `--json`, `--api-key <key>` and `--base-url <url>`. New here? Start with [`setup`](#get-started). Ids are the ones the API uses: spaces `app_…` (scanned with the app) or `spc_…` (created with the API or the CLI), scans `scn_…`.
+
+## Get started
+
+```bash
+spacecontext setup [--client claude-code,codex,cursor,vscode,all] [--test] [--yes] [--json]
+                   [--no-browser] [--skip-login] [--skip-mcp] [--skip-skill]
+```
+
+Everything in one go: signs in (the device sign-in of `login`, unless the key the CLI has is accepted), adds the MCP server to Claude Code, Codex, Cursor and VS Code (the ones it finds, or those named with `--client`), saves the skill as `~/.claude/skills/spacecontext/SKILL.md`, checks the card on file of a live account, and ends with what is left to do. Each step prints ✓ done, – skipped or ✗ failed with one line on why, and none stops the others.
+
+| Option | |
+| --- | --- |
+| `--client <list>` | `claude-code`, `codex`, `cursor`, `vscode`, comma-separated, or `all`. Default: the clients found on this machine. A client named but not installed fails; with `all` it is skipped. |
+| `--test` | Sign in with a test key (free, the demo space). |
+| `--yes` | No questions and no browser, for agents. Also replaces a skill file you edited (kept as `SKILL.md.bak`) and a `spacecontext` server that points elsewhere. |
+| `--json` | Only the summary on standard output: `{ "steps": [{ "id", "status", "detail" }], "next": [...] }`. Progress and the sign-in code go to standard error. |
+| `--no-browser` | Print links instead of opening them. |
+| `--skip-login`, `--skip-mcp`, `--skip-skill` | Leave out a step. |
+
+Claude Code gets the server for your user (`claude mcp add --transport http --scope user`); Codex through `codex mcp add`, and its MCP login runs in your terminal (not with `--yes` or `--no-browser`); Cursor in `~/.cursor/mcp.json`, written in one step, keeping your other servers, with the original copied once to `mcp.json.bak` (a file that is not plain JSON is left alone); VS Code through `code --add-mcp`. Programs are run directly, never through a shell, with a timeout; on Windows, where Codex and VS Code are batch files that need a shell, setup prints their command instead. The exit code is `0` when you are signed in and at least one assistant is connected (or those steps were skipped), `1` otherwise, `2` for wrong usage.
 
 ## Account
 

@@ -13,6 +13,8 @@ The Space Context MCP server gives an AI assistant access to your spaces: it can
 https://mcp.spacecontext.app/mcp
 ```
 
+**From a terminal:** `npx spacecontext@latest setup` adds the server to the Claude Code, Codex, Cursor and VS Code it finds, installs the skill and signs you in to the CLI ([Setup](../setup.md#set-up-from-a-terminal)). The sections below do the same by hand, client by client.
+
 It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client registration and client ID metadata documents), so any client that supports remote MCP servers with OAuth can connect. There is no key to paste: you sign in with Apple, Google or your email.
 
 ![Connect AI in the console: the server URL to copy, the steps for Claude, Claude Code, ChatGPT and Cursor, the assistants already connected, and questions to ask](/docs/console/connect.jpg)

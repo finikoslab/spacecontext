@@ -1,25 +1,41 @@
 ---
 title: 'Setup'
-description: 'Set up Space Context in two minutes: paste one prompt into your coding agent, or follow the steps for Claude, Codex, Cursor, VS Code and the SDK.'
+description: 'Set up Space Context in two minutes: one command (or one prompt for your coding agent), or the steps by hand for Claude, Codex, Cursor, VS Code and the SDK.'
 ---
 
 # Setup
 
-Two ways to the same result: your assistant connected to your spaces, the skill that tells it how to use them, and a key for the SDK, the CLI and the API.
+One command, or the steps by hand, for the same result: your assistant connected to your spaces, the skill that tells it how to use them, and a key for the SDK, the CLI and the API.
 
 ## Set up with your agent
 
-Paste this into **Claude Code**, **Cursor**, **Codex** or any coding agent. It does the setup and asks you only to approve the sign-in in your browser.
+Paste this into **Claude Code**, **Cursor**, **Codex** or any coding agent:
 
 ```text
-Set up Space Context for me.
-1. Add the Space Context MCP server to this tool. Claude Code: `claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp`. Codex: `codex mcp add spacecontext --url https://mcp.spacecontext.app/mcp` then `codex mcp login spacecontext`. Cursor: add {"mcpServers":{"spacecontext":{"url":"https://mcp.spacecontext.app/mcp"}}} to ~/.cursor/mcp.json. I will sign in in the browser.
-2. Install the Space Context skill: save https://spacecontext.app/.well-known/agent-skills/spacecontext/SKILL.md as ~/.claude/skills/spacecontext/SKILL.md (Claude Code), or keep it as project instructions.
-3. For code: `npm install @spacecontext/sdk`, then run `npx spacecontext login` and wait while I approve the code in the browser (the key is saved locally; never print it or commit it).
-4. Read https://spacecontext.app/developers/docs/llms.txt, then list my spaces. Live scans need a card on file in the console (nothing is charged when it is added; the first live scan is free).
+Set up Space Context for me. Run `npx spacecontext@latest setup --yes --json`, then follow its `next` steps; I will approve the sign-in in the browser.
 ```
 
-What the agent cannot do for you, on purpose: approving the sign-in, and adding a card. Both happen in your browser, in the [console](https://spacecontext.app/developers/console/).
+The command prints a link and a code, then waits up to ten minutes while you open the link, type the code and approve (give the agent a long timeout for it). It then adds the MCP server to the Claude Code, Codex, Cursor and VS Code it finds, installs the skill and checks your card on file. Its JSON tells the agent what was done and what is left for you.
+
+What the agent cannot do for you, on purpose: approving the sign-in, signing in to the MCP server inside each assistant, and adding a card. All three happen in your browser.
+
+## Set up from a terminal
+
+```bash
+npx spacecontext@latest setup
+```
+
+The same command, run by you: it opens the browser for the sign-in, and for Codex it runs the MCP login in your terminal. Each step ends with ✓ done, – skipped or ✗ failed and one line on why; a step that fails never stops the others, and a failed one says what to run by hand.
+
+| Step | What it does |
+| --- | --- |
+| Sign in | Uses the key the CLI already has (saved, or `SPACECONTEXT_API_KEY`) if the API accepts it; otherwise the device sign-in of [`login`](cli/install.md#sign-in). `--test` asks for a test key. The key is saved for the CLI and never printed. |
+| Assistants | Claude Code (`claude mcp add`, user scope), Codex (`codex mcp add`), Cursor (adds the server to `~/.cursor/mcp.json`, keeping your other servers and a copy in `mcp.json.bak`) and VS Code (`code --add-mcp`). By default the ones it finds; `--client codex,cursor` or `--client all` to choose. |
+| Skill | Saves the [skill](#3-install-the-skill) as `~/.claude/skills/spacecontext/SKILL.md`. A copy you have edited is kept unless you pass `--yes`. |
+| Card | With a live key, reads the wallet: if there is no card on file, it opens **Billing** in the console (adding a card charges nothing, and the first live scan stays free). It never asks for card details in the terminal. |
+| Next | What is left to do, a few lines of SDK code and the docs. |
+
+`--yes` runs without questions and without opening the browser (for agents); `--json` prints only a summary, `{ "steps": [{ "id", "status", "detail" }], "next": [...] }`, on standard output. `--no-browser` prints links instead of opening them; `--skip-login`, `--skip-mcp` and `--skip-skill` leave a step out. The exit code is `0` when you are signed in and at least one assistant is connected (or you skipped those steps), `1` otherwise. → [CLI commands](cli/commands.md#get-started)
 
 ## Set up step by step
 
