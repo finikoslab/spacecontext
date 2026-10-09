@@ -52,4 +52,4 @@ Exceeding a rate answers `429 RATE_LIMIT_EXCEEDED` with `Retry-After`.
 | Search query | 300 characters |
 | Space list page | 50 spaces |
 
-Need more? Write to [support](https://spacecontext.app/support).
+Need more? Write to [support](https://spacecontext.app/support/).

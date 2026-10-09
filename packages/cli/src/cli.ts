@@ -72,7 +72,7 @@ Options
   -h, --help                    Show this help
   -v, --version                 Show the version
 
-Docs: https://spacecontext.app/developers
+Docs: https://spacecontext.app/developers/
 `;
 
 const OPTIONS = {
@@ -624,7 +624,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
 function hint(code: string): string {
   switch (code) {
     case 'INSUFFICIENT_FUNDS':
-      return 'Top up your wallet in the console: https://spacecontext.app/developers/console\n';
+      return 'Top up your wallet in the console: https://spacecontext.app/developers/console/\n';
     case 'PRO_REQUIRED':
       return 'Spaces scanned with the app need Space Context Pro on this deployment.\n';
     case 'ENRICHMENT_PENDING':

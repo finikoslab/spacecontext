@@ -10,7 +10,7 @@ This repository holds the open-source (MIT) tools to use Space Context from code
 | [`packages/cli`](packages/cli) — `spacecontext` | `npx spacecontext scan tour.mp4 --name "My flat"`, then search, ask, export a Skill |
 | [`packages/mcp`](packages/mcp) — `@spacecontext/mcp` | Remote MCP server (Cloudflare Workers, OAuth): connect Claude or any MCP client to your spaces |
 | [`openapi/openapi.json`](openapi/openapi.json) | The API contract |
-| [`docs`](docs) | The documentation, published at [spacecontext.app/developers/docs](https://spacecontext.app/developers/docs) (also as `llms.txt`, Markdown twins and a ZIP) |
+| [`docs`](docs) | The documentation, published at [spacecontext.app/developers/docs](https://spacecontext.app/developers/docs/) (also as `llms.txt`, Markdown twins and a ZIP) |
 
 The analysis pipeline itself (vision, fusion, the deep pass, the sensitive-value screening) runs in the Space Context API and is not part of this repository.
 

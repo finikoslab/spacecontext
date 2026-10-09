@@ -1,6 +1,6 @@
 # @spacecontext/sdk
 
-TypeScript client for the [Space Context](https://spacecontext.app/developers) API: turn a video of a space into structured context, then search it, ask it questions, compare scans and export it as an Agent Skill. No runtime dependencies; Node 22+, browsers, Deno, Cloudflare Workers.
+TypeScript client for the [Space Context](https://spacecontext.app/developers/) API: turn a video of a space into structured context, then search it, ask it questions, compare scans and export it as an Agent Skill. No runtime dependencies; Node 22+, browsers, Deno, Cloudflare Workers.
 
 ```bash
 npm install @spacecontext/sdk

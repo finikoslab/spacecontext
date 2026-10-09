@@ -288,7 +288,7 @@ export interface paths {
         };
         /**
          * Status of a scan
-         * @description Poll until `status` is `complete` or `failed`. A failed scan is never charged: `charge.refunded` says so. Needs `scans:read`.
+         * @description Poll until `status` is `complete` or `failed`. A failed scan costs nothing: it is charged at start and refunded on failure, and `charge.refunded` says so. Needs `scans:read`.
          */
         get: operations["getScan"];
         put?: never;

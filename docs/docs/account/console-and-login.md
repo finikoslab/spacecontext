@@ -5,7 +5,7 @@ description: 'The developer console: sign in with Apple, Google, GitHub or an em
 
 # Console and sign-in
 
-The [console](https://spacecontext.app/developers/console) is where you see and manage everything without writing code: your spaces, new scans, the assistants you connected, [API keys](api-keys.md), [billing](billing.md), [webhooks](../api/webhooks.md) and the audit log.
+The [console](https://spacecontext.app/developers/console/) is where you see and manage everything without writing code: your spaces, new scans, the assistants you connected, [API keys](api-keys.md), [billing](billing.md), [webhooks](../api/webhooks.md) and the audit log.
 
 ![The console overview: spaces, documented items, scans and questions this month, the balance, and 30-day charts of scans, API requests, questions and spend](/docs/console/overview.jpg)
 
