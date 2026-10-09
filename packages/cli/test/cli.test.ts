@@ -463,7 +463,7 @@ describe('spacecontext CLI, housekeeping', () => {
     h.io.env.SPACECONTEXT_API_KEY = 'sc_live_otherkeyfromenv';
     await main(['whoami'], h.io);
     expect(h.calls.at(-1)!.headers.get('authorization')).toBe('Bearer sc_live_otherkeyfromenv');
-    expect(h.urls.at(-1)).toMatch(/^https:\/\/api\.spacecontext\.finikos\.it\/v1\/me/);
+    expect(h.urls.at(-1)).toMatch(/^https:\/\/api\.spacecontext\.app\/v1\/me/);
     expect(h.urls.at(-2)).toMatch(/^http:\/\/localhost:8787\/v1\/me/);
   });
 
