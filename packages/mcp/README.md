@@ -27,7 +27,7 @@ It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client
 You never paste a key. Connecting works like this:
 
 1. Your assistant opens a Space Context page. You sign in with Apple, Google or a code sent to your email, using the same account as the iPhone app.
-2. You choose whether the assistant may see **sensitive values** (Wi-Fi passwords, door and alarm codes, the narration) and whether it may **scan spaces** for you. By default it can do neither.
+2. You choose whether the assistant may see **sensitive values** (Wi-Fi passwords, door and alarm codes, the narration) and whether it may **scan spaces** for you. By default it can do neither. Scanning needs a card on file in your account (added in the console, nothing charged): without one, the page offers to connect read-only instead, or to try again once the card is added.
 3. The server creates an API key for this connection only, listed as `MCP · <assistant>` in the [console](https://spacecontext.app/developers/console/). Its scopes are `spaces:read` and `scans:read`, plus `spaces:sensitive` and `scans:write` if you ticked them.
 
 Revoking that key in the console ends the connection, and the assistant asks you to sign in again. Connecting the same assistant again replaces its previous key. The assistant sees your live spaces, including the ones scanned with the iPhone app. A space from the app becomes readable once it has been screened for sensitive values: the first read starts the screening, which takes a minute or two. Full guide: [Connect an assistant](https://spacecontext.app/developers/docs/mcp/connect/).

@@ -1,6 +1,6 @@
 ---
 title: 'Billing'
-description: 'Free scan, prepaid balance, card top-ups through Stripe, automatic top-up, refunds and the ledger.'
+description: 'Free scan, prepaid balance, the card on file for live keys that can scan, card top-ups through Stripe, automatic top-up, refunds and the ledger.'
 ---
 
 # Billing
@@ -13,8 +13,19 @@ Reading, searching and asking spaces are included. **Live scans** are paid from 
 | First live scan of an account | Free |
 | Each live scan after that | **$1.00**, charged when the scan starts |
 | Failed scans | Refunded automatically |
+| Live keys that can scan | Need a card on file, added in the console; nothing is charged |
 
 Spaces you scanned with the iPhone app are readable through the API, the console and MCP with the same account, at no cost. Billing stays separate: the app's credits and Space Context Pro are App Store purchases; API scans are always paid from the balance, never from app credits.
+
+## Add a card
+
+A **live key that can scan** (`scans:write`), whether you create it in the console, approve it for `spacecontext login` or allow scanning when you connect an assistant, needs a **card on file**. [Test keys](api-keys.md#test-and-live) and read-only live keys never do. Without a card, creating such a key answers `402 PAYMENT_METHOD_REQUIRED`.
+
+In the console, open **Billing → Add a card** (a new account also finds it in the **Get started** checklist of the Overview). As for a top-up, you first accept the billing terms (below). A **Stripe Checkout** page saves the card and **charges nothing**; your bank may ask you to confirm it with **3-D Secure**. The card counts once Stripe confirms it, within a few seconds of coming back to the console.
+
+- The card is stored by Stripe, never by us. It is the same saved card that automatic top-up uses, but saving it does not turn automatic top-up on.
+- Your first live scan stays free. Scans are paid from the balance: the card is charged only by a top-up you make or an automatic top-up you turn on.
+- A new card replaces the previous one. **Remove saved card** deletes it from Stripe; keys you already created keep working.
 
 ## Add funds
 
@@ -24,11 +35,11 @@ In the console, tick the billing terms (below), then **Billing → Add $10 / $25
 
 - Amounts from $5 to $500 per top-up (the API accepts any amount in that range).
 - The balance never expires and is used only for API scans.
-- Tick **Save the card for automatic top-ups** to allow automatic top-up later. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.
+- Tick **Save the card for automatic top-ups** to allow automatic top-up later; that card is also the card on file that live keys that can scan need. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.
 
 ## What you accept when you add funds
 
-Before the payment page opens, the console asks you to accept these terms; Stripe's page repeats them next to the pay button.
+Before the payment page opens, the console asks you to accept these terms; Stripe's page repeats them next to the pay button. Adding a card asks for the same acceptance, and nothing is charged on that page.
 
 - **The credit is supplied at once.** It is added to your balance as soon as the payment succeeds, and the scans you start use it: you ask for it to be supplied now.
 - **Credit already used cannot be refunded.** A scan that fails is refunded to your balance automatically (see below). Money goes back to a card only if you ask: write to support about unused credit. Statutory rights, where they apply, are not affected.

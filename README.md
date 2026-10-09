@@ -72,7 +72,7 @@ The **demo space** (`spc_demo`) contains two real scans of an apartment in Brisb
 https://mcp.spacecontext.app/mcp
 ```
 
-In Claude Code, run `claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → Authenticate. ChatGPT, Cursor and VS Code are covered in [Connect an assistant](https://spacecontext.app/developers/docs/mcp/connect/). You sign in with Apple, Google or an emailed code. The connection is read-only unless you allow scanning. It sees the spaces of your account (the demo is for test keys), so use the paths below to explore the demo first.
+In Claude Code, run `claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → Authenticate. ChatGPT, Cursor and VS Code are covered in [Connect an assistant](https://spacecontext.app/developers/docs/mcp/connect/). You sign in with Apple, Google or an emailed code. The connection is read-only unless you allow scanning, which needs a card on file. It sees the spaces of your account (the demo is for test keys), so use the paths below to explore the demo first.
 
 **2. CLI.**
 
@@ -113,7 +113,7 @@ curl -X POST https://api.spacecontext.app/v1/spaces/spc_demo/ask \
   -d '{"question": "Where is the fuse box?"}'
 ```
 
-When you're ready to scan your own spaces, sign in with `npx spacecontext login` to get a live key and scan a video. Your first live scan is free. Full walkthrough: [Quickstart](https://spacecontext.app/developers/docs/quickstart/).
+When you're ready to scan your own spaces, add a card in the console (nothing is charged: a live key that can scan needs one), sign in with `npx spacecontext login` to get a live key and scan a video. Your first live scan is free. Full walkthrough: [Quickstart](https://spacecontext.app/developers/docs/quickstart/).
 
 ## What you get
 
@@ -139,6 +139,7 @@ When you're ready to scan your own spaces, sign in with `npx spacecontext login`
 | Failed scans | Refunded automatically |
 | Reading, search, questions and frame checks | Included, within the [limits](https://spacecontext.app/developers/docs/limits/) |
 | Spaces scanned with the iPhone app | Readable at no cost |
+| Live keys that can scan | Need a card on file, added in the console; nothing is charged |
 
 You top up the balance by card through Stripe ($5 to $500 per payment), with optional automatic top-up and a monthly spending cap per key. Every top-up comes with an invoice. See [Billing](https://spacecontext.app/developers/docs/account/billing/).
 

@@ -36,6 +36,7 @@ Exceeding a rate answers `429 RATE_LIMIT_EXCEEDED` with `Retry-After`.
 | | Limit |
 | --- | --- |
 | Active API keys | 20 |
+| Live keys with `scans:write` | Only with a card on file ([Billing](account/billing.md#add-a-card)) |
 | Webhook endpoints | 10 per mode (test and live) |
 | Top-up | $5 to $500 per payment |
 | Automatic top-up | At most 3 per day, 10 minutes apart |

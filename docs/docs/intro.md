@@ -35,7 +35,7 @@ All three use the same account as the Space Context iPhone app, and the same [AP
 
 A **test key** (`sc_test_…`) runs every flow for free on the demo space, two real scans of an apartment in Brisbane (photos at check-in, a narrated video at check-out): scans complete instantly, nothing is charged and none of your data is involved. Create one in the [console](https://spacecontext.app/developers/console/) and follow the [quickstart](quickstart.md).
 
-Your first **live** scan is free as well. After that, live scans are paid from a prepaid balance: see [Billing](account/billing.md).
+Your first **live** scan is free as well. After that, live scans are paid from a prepaid balance. A live key that can scan needs a card on file, added in the console without a charge: see [Billing](account/billing.md).
 
 ## Use these docs from an agent
 
