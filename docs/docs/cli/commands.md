@@ -11,7 +11,7 @@ All commands accept `--json`, `--api-key <key>` and `--base-url <url>`. Ids are 
 
 | Command | |
 | --- | --- |
-| `spacecontext login [--test] [--no-browser]` | Sign in from the terminal: a code to approve in the console, the key comes back here. `--key sc_…` saves a key you already have. |
+| `spacecontext login [--test] [--no-browser]` | Sign in from the terminal: a code to approve in the console, the key comes back here. `--key -` saves a key you already have, typed without echo (`--key sc_…` works but stays in your shell history). |
 | `spacecontext logout` | Forget the saved key. |
 | `spacecontext whoami` | The account, mode (test or live) and scopes of the key. |
 | `spacecontext wallet` | Balance, free scans left and price per scan. Needs `scans:read`. |

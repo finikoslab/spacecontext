@@ -165,6 +165,32 @@ describe('spacecontext CLI', () => {
     await expect(readFile(path.join(directory, 'config', 'config.json'))).rejects.toThrow();
   });
 
+  it('reads the key of `login --key -` from a prompt that does not echo it, out of the shell history', async () => {
+    const h = harness([me]);
+    const asked: string[] = [];
+    h.io.prompt = async (question) => {
+      asked.push(question);
+      return `  ${KEY}\n`;
+    };
+    expect(await main(['login', '--key', '-'], h.io)).toBe(0);
+    expect(asked).toEqual(['API key (input hidden): ']);
+    expect(h.calls.at(-1)!.headers.get('authorization')).toBe(`Bearer ${KEY}`);
+    expect(JSON.parse(await readFile(path.join(directory, 'config', 'config.json'), 'utf8'))).toEqual({ apiKey: KEY });
+    expect(h.stdout() + h.stderr()).not.toContain(KEY);
+
+    // Nothing typed, or no terminal to type in: nothing sent, nothing saved.
+    await rm(path.join(directory, 'config'), { recursive: true });
+    const empty = harness([me]);
+    empty.io.prompt = async () => '   ';
+    expect(await main(['login', '--key', '-'], empty.io)).toBe(2);
+    expect(empty.stderr()).toContain('No key entered');
+    const piped = harness([me]);
+    expect(await main(['login', '--key', '-'], piped.io)).toBe(2);
+    expect(piped.stderr()).toContain('reads the key from a terminal');
+    expect([...empty.calls, ...piped.calls]).toEqual([]);
+    await expect(readFile(path.join(directory, 'config', 'config.json'))).rejects.toThrow();
+  });
+
   it('does not save a key the API refuses', async () => {
     const h = harness([() => json({ error: { code: 'INVALID_TOKEN', message: 'Invalid token', request_id: 'req_9' } }, 401)]);
     expect(await main(['login', '--key', KEY], h.io)).toBe(1);
@@ -180,6 +206,17 @@ describe('spacecontext CLI', () => {
     expect(h.calls.at(-1)!.headers.get('authorization')).toBe('Bearer sc_live_fromenvironment');
     await main(['whoami', '--api-key', 'sc_test_fromflag'], h.io);
     expect(h.calls.at(-1)!.headers.get('authorization')).toBe('Bearer sc_test_fromflag');
+  });
+
+  it('treats an empty SPACECONTEXT_API_KEY as unset, so the saved key and its base URL are used', async () => {
+    const h = harness([me], { SPACECONTEXT_BASE_URL: '' });
+    await main(['login', '--key', KEY, '--base-url', 'http://localhost:8787/v1'], h.io);
+    for (const blank of ['', '   ']) {
+      h.io.env.SPACECONTEXT_API_KEY = blank;
+      expect(await main(['whoami'], h.io)).toBe(0);
+      expect(h.calls.at(-1)!.headers.get('authorization')).toBe(`Bearer ${KEY}`);
+      expect(h.urls.at(-1)).toBe('http://localhost:8787/v1/me');
+    }
   });
 
   it('searches and asks, in text or JSON', async () => {

@@ -15,7 +15,7 @@ export type Io = {
   stderr: (text: string) => void;
   env: Record<string, string | undefined>;
   cwd: string;
-  /** Reads a line typed by the user. Null when there is no terminal. */
+  /** Reads a line typed by the user without echoing it (`login --key -`). Null when there is no terminal. */
   prompt: ((question: string) => Promise<string>) | null;
   fetch?: typeof fetch;
   /** Opens a URL in the browser (device sign-in). Null never opens one; undefined uses the system opener. */
@@ -29,9 +29,11 @@ const HELP = `spacecontext ${VERSION} — the context layer for the physical wor
 Usage: spacecontext <command> [options]
 
 Account
-  login [--key sc_…] [--test] [--no-browser]
+  login [--test] [--no-browser] [--key -]
                                 Sign in: approve a code in the console (opens the
-                                browser), or save a key you already have
+                                browser); --key - saves a key you already have,
+                                typed without echo (--key sc_… works too, but
+                                stays in your shell history)
   logout                        Forget the saved key
   whoami                        Show the account, mode and scopes of the key
   wallet                        Show the prepaid balance and the free scans left
@@ -121,15 +123,22 @@ function words(args: string[], what: string): string {
   return text;
 }
 
+/** A variable of the environment; empty or blank counts as unset (`SPACECONTEXT_API_KEY=` must not hide the saved key). */
+function setting(env: Io['env'], name: string): string | undefined {
+  const value = env[name]?.trim();
+  return value ? value : undefined;
+}
+
 async function client(context: Context): Promise<SpaceContext> {
   const { io, values } = context;
   const stored = await readConfig(configDirectory(io.env));
-  const apiKey = values['api-key'] ?? io.env.SPACECONTEXT_API_KEY ?? stored.apiKey;
+  const environmentKey = setting(io.env, 'SPACECONTEXT_API_KEY');
+  const apiKey = values['api-key'] ?? environmentKey ?? stored.apiKey;
   if (!apiKey) throw new UsageError('No API key: run `spacecontext login`, or set SPACECONTEXT_API_KEY');
   // The base URL saved by `login` belongs to the key saved with it: a key from
   // the flag or the environment never goes to it.
-  const usesStoredKey = values['api-key'] === undefined && io.env.SPACECONTEXT_API_KEY === undefined;
-  const baseUrl = values['base-url'] ?? io.env.SPACECONTEXT_BASE_URL ?? (usesStoredKey ? stored.baseUrl : undefined);
+  const usesStoredKey = values['api-key'] === undefined && environmentKey === undefined;
+  const baseUrl = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL') ?? (usesStoredKey ? stored.baseUrl : undefined);
   return new SpaceContext({
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
@@ -223,12 +232,24 @@ function openBrowser(url: string): void {
   }
 }
 
+/**
+ * `login --key -`: the key typed at a prompt that does not echo it. A key given
+ * on the command line stays in the shell's history.
+ */
+async function typedKey(io: Io): Promise<string> {
+  if (!io.prompt) throw new UsageError('--key - reads the key from a terminal: run it in one, or set SPACECONTEXT_API_KEY');
+  const key = (await io.prompt('API key (input hidden): ')).trim();
+  if (!key) throw new UsageError('No key entered');
+  return key;
+}
+
 async function login(context: Context): Promise<void> {
   const { io, values } = context;
   // Only a base URL given explicitly is saved with the key (see `client`).
   const baseUrl = values['base-url'];
-  const requestBase = baseUrl ?? io.env.SPACECONTEXT_BASE_URL;
+  const requestBase = baseUrl ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
   let key = values.key ?? values['api-key'];
+  if (key === '-') key = await typedKey(io);
   if (!key) {
     // Device sign-in: a code to approve in the console; the key comes back here, never through the browser.
     const signedIn = await deviceSignIn({

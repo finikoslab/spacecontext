@@ -29,7 +29,7 @@ The terminal shows a code and opens the [console](https://spacecontext.app/devel
 
 Approve only a code you are looking at in your own terminal: the name shown in the console is what the terminal said about itself. The code is never carried in a link for that reason. `--no-browser` only prints the link.
 
-Already have a key? `spacecontext login --key sc_…` checks it with the API and saves it (`--key` is not echoed).
+Already have a key? `spacecontext login --key -` asks for it without echoing it, checks it with the API and saves it. Prefer it, or the code above, to `--key sc_…`: that works too, but leaves the key in your shell history.
 
 ```bash
 spacecontext whoami      # account, mode and scopes of the saved key
@@ -41,7 +41,7 @@ spacecontext logout      # forget it
 The CLI uses the first of:
 
 1. `--api-key sc_…` on the command line;
-2. the `SPACECONTEXT_API_KEY` environment variable (handy in CI);
+2. the `SPACECONTEXT_API_KEY` environment variable (handy in CI; empty counts as unset);
 3. the key saved by `login`.
 
 `--base-url` and `SPACECONTEXT_BASE_URL` point the CLI at another API base. A base URL saved by `login --base-url …` is used only together with the key saved with it, so a key from the environment never goes to a URL meant for another key.
