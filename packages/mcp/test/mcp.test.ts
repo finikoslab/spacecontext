@@ -325,6 +325,17 @@ describe('authorization', () => {
     expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
   });
 
+  it('approves, never denies, when Enter is pressed in the code field, with Deny still shown first', async () => {
+    const page = await openAuthorize(await registerClient());
+    const consent = await (await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie)).text();
+    const form = /<form method="post" action="\/authorize\/approve">([\s\S]*?)<\/form>/.exec(consent)![1]!;
+    // Implicit submission uses the form's first submit button.
+    const buttons = [...form.matchAll(/<button[^>]*type="submit"[^>]*>/g)].map((match) => /value="([a-z]+)"/.exec(match[0])?.[1]);
+    expect(buttons).toEqual(['approve', 'deny']);
+    expect(form).toContain('<div class="actions decide">');
+    expect(consent).toMatch(/\.decide\{flex-direction:row-reverse\}/);
+  });
+
   it('accepts its own form posted with an opaque origin, as browsers do under some policies', async () => {
     const page = await openAuthorize(await registerClient());
     expect(page.headers.get('Referrer-Policy')).toBe('same-origin');
