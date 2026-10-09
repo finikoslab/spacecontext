@@ -3,6 +3,19 @@
   "version": "0.2.0",
   "description": "Space Context from the terminal: scan a video of a space, then search it, ask it, and export it as an Agent Skill.",
   "license": "MIT",
+  "author": "Finikos S.r.l.",
+  "homepage": "https://spacecontext.finikos.it/developers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/finikoslab/spacecontext.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/finikoslab/spacecontext/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -22,5 +35,12 @@
   "dependencies": {
     "@spacecontext/sdk": "0.2.0"
   },
-  "keywords": ["spacecontext", "cli", "agents", "skill", "video", "inventory"]
+  "keywords": [
+    "spacecontext",
+    "cli",
+    "agents",
+    "skill",
+    "video",
+    "inventory"
+  ]
 }

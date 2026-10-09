@@ -4,6 +4,16 @@
   "private": true,
   "description": "Remote MCP server for Space Context, on Cloudflare Workers: your agent knows your spaces.",
   "license": "MIT",
+  "author": "Finikos S.r.l.",
+  "homepage": "https://spacecontext.finikos.it/developers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/finikoslab/spacecontext.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/finikoslab/spacecontext/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "wrangler dev -e dev --port 8788",

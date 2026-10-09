@@ -19,6 +19,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      # The SDK's generated types must match the contract that is checked in.
+      - run: npm run generate -w @spacecontext/sdk && git diff --exit-code -- packages/sdk/src/schema.ts
 
   docs:
     runs-on: ubuntu-latest

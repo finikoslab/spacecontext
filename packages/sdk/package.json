@@ -3,6 +3,19 @@
   "version": "0.2.0",
   "description": "TypeScript client for the Space Context API: spaces, scans, search and questions about physical spaces.",
   "license": "MIT",
+  "author": "Finikos S.r.l.",
+  "homepage": "https://spacecontext.finikos.it/developers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/finikoslab/spacecontext.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/finikoslab/spacecontext/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
