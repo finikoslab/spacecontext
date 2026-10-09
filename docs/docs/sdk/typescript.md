@@ -103,7 +103,7 @@ const { api_key, user } = await deviceSignIn({
 });
 ```
 
-It asks the API for a code, shows it, and polls until the person approves it in the console; the key arrives here, never through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves.
+It asks the API for a code, shows it, and polls until the person approves it in the console; the key arrives here, never through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves. A live key that can scan needs a card on file: without one, the console asks the person to add it (nothing is charged) or to approve a key without `scans:write`.
 
 ## Errors
 

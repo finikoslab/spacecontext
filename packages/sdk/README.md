@@ -88,7 +88,7 @@ const { api_key } = await deviceSignIn({
 });
 ```
 
-The person types the code in the console and approves it, and the key arrives in your tool. The key never travels through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves.
+The person types the code in the console and approves it, and the key arrives in your tool. A live key that can scan needs a card on file: without one, the console asks the person to add it (nothing is charged) or to approve a key without `scans:write`. The key never travels through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves.
 
 ## Errors
 

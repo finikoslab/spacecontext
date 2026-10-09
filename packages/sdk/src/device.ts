@@ -26,7 +26,12 @@ export type DeviceToken = Schemas['DeviceToken'];
 export interface DeviceSignInOptions {
   /** What is asking, shown to the person: "CLI on MacBook". */
   name?: string;
-  /** The mode of the key asked for; the person can change it. Default live. */
+  /**
+   * The mode of the key asked for; the person can change it. Default live. A
+   * live key with `scans:write` needs a card on file: the console asks for one
+   * before approving it (nothing is charged), or the person approves a key
+   * without that scope.
+   */
   mode?: 'live' | 'test';
   /** Defaults to `SPACECONTEXT_BASE_URL`, then the production API. */
   baseUrl?: string;
