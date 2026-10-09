@@ -8,4 +8,4 @@ npm start          # http://localhost:3000
 npm run build      # static site in build/, fails on any broken link
 ```
 
-Write facts only after checking them in the API (`../../spacecontext-backend/src/v1`) or the packages (`../packages`).
+Write facts only after checking them against the API (its behaviour and the [OpenAPI contract](../openapi/openapi.json)) or the packages (`../packages`).

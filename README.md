@@ -30,11 +30,15 @@ Text captured in a space is always treated as data: sentences addressed to an AI
 ## Quick start
 
 ```bash
-# 1. Create an API key in the console: https://spacecontext.app/developers/console
-npx spacecontext login --test                # approve a code in the console: a free test key, the demo space
+# Free, on the demo space: a test key
+npx spacecontext login --test                   # approve the code in the console; the key comes back here
+npx spacecontext search "where is the fuse box?"
+npx spacecontext ask spc_demo "where is the fuse box?"
+
+# Your own spaces: a live key (the first live scan is free)
+npx spacecontext login                          # approve a live key the same way
 npx spacecontext check ./photos                 # usable frames, and the key locations still missing
-npx spacecontext search "where is the stopcock?"
-npx spacecontext scan tour.mp4 --name "Seaside flat"   # a live key analyses your video
+npx spacecontext scan tour.mp4 --name "Seaside flat"
 npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 ```
 
@@ -51,7 +55,7 @@ const page = await sc.spaces.markdown(spaceId); // the whole space as one page
 
 ## Pricing and keys
 
-- `sc_test_…` keys are free and unlimited: they return a hand-made demo space, never real data.
+- `sc_test_…` keys are free and unlimited: they return the demo space (two real scans of an apartment in Brisbane, photos at check-in and a narrated video at check-out), never your data.
 - `sc_live_…` keys: one free scan per account, then a prepaid wallet in USD (top up in the console). Spaces scanned with the iPhone app are readable with the same account, included.
 - A connector's key is read-only unless you allow scanning when you connect; the console sets scopes and a monthly spending cap per key.
 

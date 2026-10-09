@@ -5,7 +5,7 @@ description: 'From zero to a searchable space in five minutes, with a free test 
 
 # Quickstart
 
-**No code at all?** Open the [console](https://spacecontext.app/developers/console), sign in with Apple, Google or your email, switch to **Test** and open the demo space: inventory, photos, questions and a comparison of two scans. Then switch to **Live**, open **New scan** and drop a video of a room: the first live scan is free. **Connect AI** adds your spaces to Claude or ChatGPT in a minute.
+**No code at all?** Open the [console](https://spacecontext.app/developers/console), sign in with Apple, Google, GitHub or your email, switch to **Test** and open the demo space: inventory, photos, questions and a comparison of two scans. Then switch to **Live**, open **New scan** and drop a video of a room: the first live scan is free. **Connect AI** adds your spaces to Claude or ChatGPT in a minute.
 
 ![The Spaces page of the console in Test mode: the demo space, with its areas, items and issues, and a search box across every space](/docs/console/spaces.jpg)
 
@@ -21,7 +21,7 @@ You need Node.js 22 or later.
 npx spacecontext login --test
 ```
 
-The terminal shows a code and opens the [console](https://spacecontext.app/developers/console): sign in with Apple, Google or your email (the same account as the iPhone app), type the code, approve. The terminal receives a **test** key: free, unlimited, the demo space. → [Console and sign-in](account/console-and-login.md)
+The terminal shows a code and opens the [console](https://spacecontext.app/developers/console): sign in with Apple, Google, GitHub or your email (the same account as the iPhone app), type the code, approve. The terminal receives a **test** key: free, unlimited, the demo space. → [Console and sign-in](account/console-and-login.md)
 
 ## 2. Use it
 

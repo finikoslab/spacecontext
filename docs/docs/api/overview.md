@@ -27,7 +27,7 @@ curl https://api.spacecontext.app/v1/me \
 }
 ```
 
-The console endpoints (`/auth/*`, `/keys`, `/billing`, `/webhook-endpoints`) take a console session instead and are meant for the [console](../account/console-and-login.md).
+The console endpoints (`/keys`, `/billing`, `/webhook-endpoints`, and `/auth/*` except the sign-in steps themselves) take a console session instead and are meant for the [console](../account/console-and-login.md). The terminal sign-in, `POST /auth/device` and `POST /auth/device/token`, takes no credential at all: it is how a tool without a key gets one (what `spacecontext login` does).
 
 ## Errors
 

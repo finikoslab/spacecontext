@@ -36,7 +36,7 @@ Exceeding a rate answers `429 RATE_LIMIT_EXCEEDED` with `Retry-After`.
 | | Limit |
 | --- | --- |
 | Active API keys | 20 |
-| Webhook endpoints | 10 |
+| Webhook endpoints | 10 per mode (test and live) |
 | Top-up | $5 to $500 per payment |
 | Automatic top-up | At most 3 per day, 10 minutes apart |
 | Console session | 30 days, in one browser tab |

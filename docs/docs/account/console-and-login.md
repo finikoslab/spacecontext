@@ -1,6 +1,6 @@
 ---
 title: 'Console and sign-in'
-description: 'The developer console: sign in with Apple, Google or an emailed code, see what your spaces hold, scan from the browser, connect assistants, manage keys, billing, webhooks and the audit log.'
+description: 'The developer console: sign in with Apple, Google, GitHub or an emailed code, see what your spaces hold, scan from the browser, connect assistants, manage keys, billing, webhooks and the audit log.'
 ---
 
 # Console and sign-in
@@ -11,9 +11,9 @@ The [console](https://spacecontext.app/developers/console) is where you see and 
 
 ## Sign in
 
-Choose **Continue with Apple**, **Continue with Google**, or enter your email and the one-time code we send you (valid for 10 minutes).
+Choose **Continue with Apple**, **Continue with Google**, **Continue with GitHub**, or enter your email and the one-time code we send you (valid for 10 minutes).
 
-It is the **same account as the Space Context iPhone app**, whichever way you signed up there: the console finds it by the email of your Apple or Google account. If you used Apple's *Hide My Email* in the app, sign in here with Apple too: you reach the same account.
+It is the **same account as the Space Context iPhone app**, whichever way you signed up there: the console finds it by the email of your Apple, Google or GitHub account (for GitHub, its primary verified email). If you used Apple's *Hide My Email* in the app, sign in here with Apple too: you reach the same account.
 
 ## Approve a sign-in from the terminal
 

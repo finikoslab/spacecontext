@@ -7,7 +7,7 @@
 - The SDK has no runtime dependencies and runs in Node 22+, browsers, Deno and Workers. Do not add any.
 - The CLI depends only on the SDK and Node built-ins.
 - `packages/sdk/LICENSE` and `packages/cli/LICENSE` are copies of the root `LICENSE` (npm publishes only the package folder); their tests check that they match. `npm pack --dry-run -w <package>` shows what would be published.
-- The MCP server is read-only by default: a grant's key has `spaces:read` and `scans:read` (plus `spaces:sensitive` when the user ticks it). The scanning tools (`create_scan`, `upload_frame`, `start_scan`, `cancel_scan`, `check_frame`) work only when the user ticks "let it scan spaces" on the consent page, which adds `scans:write`; they are annotated as writing (and `cancel_scan` as destructive). Any new tool that writes or spends must sit behind that scope and be annotated honestly.
+- The MCP server is read-only by default: a grant's key has `spaces:read` and `scans:read` (plus `spaces:sensitive` when the user ticks it). The scanning tools (`create_scan`, `upload_frame`, `start_scan`, `cancel_scan`) and `check_frame` work only when the user ticks "let it scan spaces" on the consent page, which adds `scans:write`; the scanning tools are annotated as writing (and `cancel_scan` as destructive), `check_frame` as read-only (it stores nothing and spends nothing). Any new tool that writes or spends must sit behind that scope and be annotated honestly.
 
 ## Security invariants (tested)
 
@@ -20,4 +20,4 @@
 
 ## Checks
 
-`npm run check` must pass: build, typecheck and tests of all packages. After a deploy, run the SDK's smoke test against the host with a **test** key (free, the demo space): `SPACECONTEXT_SMOKE_KEY=sc_test_… SPACECONTEXT_SMOKE_BASE_URL=https://api.spacecontext.app/v1 npx vitest run test/smoke.test.ts -w @spacecontext/sdk` — it reads the demo in every form, asks, searches, runs a whole scan live and checks a frame. The MCP tests run in workerd (`@cloudflare/vitest-pool-workers`) and drive the full OAuth flow (registration, PKCE, consent, token) and real MCP calls against a fake API.
+`npm run check` must pass: build, typecheck and tests of all packages. After a deploy, run the SDK's smoke test against the host with a **test** key (free, the demo space): `SPACECONTEXT_SMOKE_KEY=sc_test_… SPACECONTEXT_SMOKE_BASE_URL=https://api.spacecontext.app/v1 npm exec -w @spacecontext/sdk -- vitest run test/smoke.test.ts` — it reads the demo in every form, asks, searches, runs a whole scan live and checks a frame. The MCP tests run in workerd (`@cloudflare/vitest-pool-workers`) and drive the full OAuth flow (registration, PKCE, consent, token) and real MCP calls against a fake API.
