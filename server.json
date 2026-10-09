@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "app.spacecontext/spacecontext",
+  "title": "Space Context",
+  "description": "Your filmed spaces for AI: inventory, key locations, how-tos and photo evidence.",
+  "version": "0.2.0",
+  "websiteUrl": "https://spacecontext.app/developers/",
+  "repository": {
+    "url": "https://github.com/finikoslab/spacecontext",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.spacecontext.app/mcp"
+    }
+  ]
+}
