@@ -36,3 +36,13 @@ All three use the same account as the Space Context iPhone app, and the same [AP
 A **test key** (`sc_test_…`) runs every flow for free on the demo space, two real scans of an apartment in Brisbane (photos at check-in, a narrated video at check-out): scans complete instantly, nothing is charged and none of your data is involved. Create one in the [console](https://spacecontext.finikos.it/developers/console) and follow the [quickstart](quickstart.md).
 
 Your first **live** scan is free as well. After that, live scans are paid from a prepaid balance: see [Billing](account/billing.md).
+
+## Use these docs from an agent
+
+Every page of this documentation is also served as plain Markdown (the page's URL with `.md`), and the whole set comes in the formats agents read best:
+
+- **`llms.txt`** — https://spacecontext.finikos.it/developers/docs/llms.txt: an index of every page with a one-line description. Give this URL to an agent; it fetches only the pages it needs.
+- **`llms-full.txt`** — https://spacecontext.finikos.it/developers/docs/llms-full.txt: everything in one file, to paste into a conversation or add to a project's files.
+- **The MCP server** — `https://mcp.spacecontext.finikos.it/mcp`: connect Claude or any MCP client to read your spaces themselves, not only the docs. → [Connect an assistant](mcp/connect.md)
+
+For tooling: the [OpenAPI contract](https://spacecontext.finikos.it/developers/docs/openapi.json) (code generation, validation) and a [ZIP of every page](https://spacecontext.finikos.it/developers/docs/spacecontext-docs.zip) with the contract, for offline use.
