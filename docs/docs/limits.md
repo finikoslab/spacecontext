@@ -25,7 +25,7 @@ description: 'Sizes, rates and quotas of the Space Context API.'
 | Search | 20 per minute and 1 000 per day per account |
 | Questions (`ask`) | 20 per minute and 200 answered per day per account |
 | Frame checks (`POST /frames/check`) | 2 000 per day per account (free) |
-| Scans processing at once | 3 per account |
+| Scans processing at once | 10 per account; more on request |
 | Event stream (`GET /scans/{id}/events`) | 30 minutes per connection; reconnect to keep following |
 | Evidence frames | Signed links expire; read the document again for fresh ones |
 

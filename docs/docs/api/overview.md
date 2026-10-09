@@ -68,7 +68,7 @@ curl "https://api.spacecontext.app/v1/spaces?limit=20&cursor=$NEXT" -H "Authoriz
 | Search, per account | 20 per minute, 1 000 per day |
 | Questions (`ask`), per account | 20 per minute, 200 answered per day |
 | Frame checks, per account | 2 000 per day |
-| Scans processing at once, per account | 3 |
+| Scans processing at once, per account | 10 (more on request) |
 
 A refused request answers `429 RATE_LIMIT_EXCEEDED` with a `Retry-After` header (seconds), or `retry_after` in the body for daily limits. The SDK and the CLI wait and retry short waits for you. See [Limits](../limits.md).
 

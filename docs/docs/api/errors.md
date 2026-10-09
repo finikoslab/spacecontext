@@ -39,7 +39,7 @@ When the deep pass of a space scanned with the app could not finish, the documen
 | `INVALID_CONTENT_TYPE` | 415 | Not a JPEG, PNG or WebP frame, or not an MP4, MOV or M4V video. |
 | `FILE_TOO_LARGE` | 413 | Over 2 MB per frame, or over the video size of the upload. |
 | `EMPTY_FILE` | 400 | The upload has no bytes. |
-| `SCANS_IN_PROGRESS` | 429 | Three scans are already processing; start again when one finishes. |
+| `SCANS_IN_PROGRESS` | 429 | Ten scans of the account are already processing; start again when one finishes. |
 | `INSUFFICIENT_FUNDS` | 402 | The balance does not cover the scan; `balance_cents` and `price_cents` say by how much. |
 | `SPENDING_CAP_REACHED` | 402 | The key's monthly cap is reached. |
 | `FRAME_CHECK_UNAVAILABLE` | 503 | `POST /frames/check` cannot run right now; try again shortly. |

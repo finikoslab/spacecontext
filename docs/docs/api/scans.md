@@ -86,7 +86,7 @@ curl -X POST $API/scans/scn_8a…/start -H "$AUTH" -H "Content-Type: application
 | `202` | Started |
 | `200` | Already started; nothing charged again |
 | `409 UPLOAD_INCOMPLETE` | Some photos or the video are missing |
-| `429 SCANS_IN_PROGRESS` | Three scans are already processing; start again when one finishes |
+| `429 SCANS_IN_PROGRESS` | Ten scans of the account are already processing; start again when one finishes |
 | `402 INSUFFICIENT_FUNDS` | Add funds (automatic top-up, if enabled, starts now) |
 | `402 SPENDING_CAP_REACHED` | The key's monthly cap is reached |
 
