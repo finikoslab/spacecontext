@@ -43,7 +43,8 @@ export function serverCard(origin: string): Record<string, unknown> {
     tools: CARD_TOOLS.map((tool) => ({
       name: tool.name,
       title: tool.title,
-      description: tool.scans ? `${tool.description} Only on a connection allowed to scan.` : tool.description,
+      // Listed on every connection; the API refuses them unless the user allowed scanning.
+      description: tool.scans ? `${tool.description} Needs a connection allowed to scan.` : tool.description,
     })),
     resources: [
       { uri: 'spacecontext://spaces', name: 'spaces', mimeType: 'application/json' },

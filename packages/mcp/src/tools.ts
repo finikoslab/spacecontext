@@ -224,7 +224,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
     'get_scan_status',
     {
       title: 'Scan status',
-      description: 'Where a scan made through the API or the CLI is: queued, processing (and the stage), complete or failed.',
+      description: 'Where a scan made through the API or the CLI is: awaiting_upload, queued, processing (and the stage), complete, failed or cancelled.',
       inputSchema: z.object({ scan_id: scanId }),
       annotations: { title: 'Scan status', ...READ_ONLY },
     },
@@ -392,7 +392,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
     {
       title: 'Start a scan',
       description:
-        'Starts the analysis of an uploaded scan and charges it: the free scan first, then the prepaid balance (see wallet). Then follow it with follow_scan. A failed scan is never charged.',
+        'Starts the analysis of an uploaded scan and charges it now: the free scan first, then the prepaid balance (see wallet). Then follow it with follow_scan. A scan that fails is refunded.',
       inputSchema: z.object({ scan_id: scanId }),
       annotations: { title: 'Start a scan', ...WRITES, idempotentHint: true },
     },

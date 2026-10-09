@@ -2,7 +2,7 @@
 
 A remote MCP server on Cloudflare Workers that lets Claude and other MCP clients read your spaces. Stateless (`createMcpHandler`, MCP SDK v2) behind `@cloudflare/workers-oauth-provider`.
 
-**Connect:** add `https://mcp.spacecontext.app/mcp` as a custom connector. You sign in with Apple, Google or your email (one-time code) and decide whether the assistant may see sensitive values (Wi-Fi passwords, door codes, narration) and whether it may scan spaces for you (paid from your balance). The server then creates an API key for that grant only, labelled `MCP · <client>` in the console. Revoking it there ends the connection: the assistant asks you to sign in again. Connecting the same assistant again replaces the previous key.
+**Connect:** add `https://mcp.spacecontext.app/mcp` as a custom connector. You sign in with Apple, Google or your email (one-time code) and decide whether the assistant may see sensitive values (Wi-Fi passwords, door codes, narration) and whether it may scan spaces for you (paid from your balance). The server then creates an API key for that grant only, labelled `MCP · <client>` in the console. Revoking it there ends the connection: the assistant asks you to sign in again. Connecting the same assistant again (the same installation) replaces its previous key.
 
 ## Tools
 
@@ -20,7 +20,7 @@ Read-only, always:
 | `get_scan_status` / `follow_scan` | Where a scan is; `follow_scan` waits on the API's event stream and reports progress |
 | `wallet` | Balance, free scans left, price per scan |
 
-Only when the user ticks **"let it scan spaces"** on the consent page (which adds `scans:write` to the grant and to its key):
+Listed on every connection, these need one where the user ticked **"let it scan spaces"** on the consent page (which adds `scans:write` to the grant and to its key); otherwise the API refuses them and the tool says how to reconnect:
 
 | Tool | |
 | --- | --- |
@@ -37,9 +37,12 @@ Resources: `spacecontext://spaces` (the list) and `spacecontext://spaces/{space_
 
 ```bash
 wrangler kv namespace create OAUTH_KV          # put the id in wrangler.jsonc
+wrangler secret put GOOGLE_WEB_CLIENT_SECRET   # sign-in with Google (with GOOGLE_WEB_CLIENT_ID in vars)
 npm run deploy -w @spacecontext/mcp
 ```
 
+- Sign-in with Google: register `${PUBLIC_URL}/authorize/google/callback` as an authorized redirect URI of the web OAuth client (`GOOGLE_WEB_CLIENT_ID`). Without the client id and the secret, the button is not shown.
+- Sign in with Apple: register `${PUBLIC_URL}/authorize/apple/callback` as a return URL of the Services ID (`APPLE_SERVICES_ID`). Without it, the button is not shown.
 - `BACKEND` is a service binding to the API Worker (`spacecontext-backend`): the API sees each user's own IP for its rate limits and sign-in protection. Without the binding the server calls `API_BASE_URL` over the internet and every user shares this Worker's IP.
 - `PUBLIC_URL` must be the server's origin: it names the protected resource (`/.well-known/oauth-protected-resource/mcp`) and is the only origin the consent forms accept posts from.
 - The API must have `API_V1_ENABLED = "true"`.

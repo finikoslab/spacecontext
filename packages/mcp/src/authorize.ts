@@ -436,9 +436,12 @@ async function approve(request: Request, env: Env): Promise<Response> {
 }
 
 function home(env: Env): Response {
+  const providers = signInProviders(env);
+  const ways = [...(providers.apple ? ['Apple'] : []), ...(providers.google ? ['Google'] : []), 'a code sent to your email'];
+  const signIn = ways.length > 1 ? `${ways.slice(0, -1).join(', ')} or ${ways.at(-1)}` : ways[0];
   return page(
     'MCP server',
-    `<h1>Space Context MCP server</h1><p>Add this URL to your assistant as a remote MCP server (connector):</p><p><code>${new URL('/mcp', env.PUBLIC_URL).toString()}</code></p><p class="muted">It signs you in with your Space Context email and asks what to share.</p>`
+    `<h1>Space Context MCP server</h1><p>Add this URL to your assistant as a remote MCP server (connector):</p><p><code>${new URL('/mcp', env.PUBLIC_URL).toString()}</code></p><p class="muted">It signs you in to your Space Context account (with ${signIn}) and asks what to share.</p>`
   );
 }
 

@@ -498,6 +498,8 @@ describe('MCP tools', () => {
     expect(card.serverInfo).toMatchObject({ name: 'spacecontext' });
     expect(card.transport.endpoint).toBe(`${ORIGIN}/mcp`);
     expect(card.tools.length).toBe(CARD_TOOLS.length);
+    // Listed on every connection, the scanning tools say what they need.
+    expect(card.tools).toContainEqual({ name: 'create_scan', title: 'Create a scan', description: 'Declares a scan and returns the upload instructions. Needs a connection allowed to scan.' });
   });
 
   it('answers with the API key of the grant and the caller IP', async () => {
@@ -789,6 +791,14 @@ describe('sign-in with Google and Apple', () => {
     const appleOnly = await openAuthorize(await registerClient());
     expect(appleOnly.html).not.toContain('Continue with Google');
     expect(appleOnly.headers.get('Content-Security-Policy')).toContain("form-action 'self' https://appleid.apple.com;");
+  });
+
+  it('says on its home page how it signs you in', async () => {
+    expect(await (await call(new Request(`${ORIGIN}/`))).text()).toContain('(with a code sent to your email)');
+    extraEnv = PROVIDERS;
+    const home = await (await call(new Request(`${ORIGIN}/`))).text();
+    expect(home).toContain('(with Apple, Google or a code sent to your email)');
+    expect(home).toContain(`<code>${ORIGIN}/mcp</code>`);
   });
 
   it('signs in with Google, then asks for consent on its own page, with a ticket that works once', async () => {

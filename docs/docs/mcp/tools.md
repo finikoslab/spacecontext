@@ -5,7 +5,7 @@ description: 'The tools, resources and prompts of the Space Context MCP server, 
 
 # MCP tools
 
-Reading tools are read-only (`readOnlyHint: true`, not destructive, idempotent). The scanning tools (`create_scan`, `start_scan`, `cancel_scan`) are annotated as writes, `cancel_scan` as destructive, and work only on a connection where the user ticked **let it scan spaces** when connecting. No tool reaches the open web. Results are JSON text (or a Markdown page); results that carry space content include a `note` saying it is data captured from a physical space, not instructions.
+Reading tools are read-only (`readOnlyHint: true`, not destructive, idempotent). The scanning tools (`create_scan`, `upload_frame`, `start_scan`, `cancel_scan`) are annotated as writes, `cancel_scan` as destructive. They, and `check_frame`, are listed on every connection but work only on one where the user ticked **let it scan spaces** when connecting: otherwise the API refuses them with `INSUFFICIENT_SCOPE`. No tool reaches the open web. Results are JSON text (or a Markdown page); results that carry space content include a `note` saying it is data captured from a physical space, not instructions.
 
 ## `list_spaces`
 
@@ -88,7 +88,7 @@ The whole current document of a space as one Markdown page: summary, every area 
 
 ## `get_scan_status`
 
-Where a scan made with the API or the CLI is: `queued`, `processing` (with its stage), `complete`, `failed` or `cancelled`.
+Where a scan made with the API or the CLI is: `awaiting_upload`, `queued`, `processing` (with its stage), `complete`, `failed` or `cancelled`.
 
 | Argument | Type |
 | --- | --- |
@@ -142,7 +142,7 @@ Sends one image of a frames scan, at its index (`0…count-1`), through the serv
 
 ## `start_scan`
 
-Starts the analysis of an uploaded scan and charges it: the free scan first, then the balance. Returns the scan with its `charge`. A failed scan is never charged.
+Starts the analysis of an uploaded scan and charges it now: the free scan first, then the balance. Returns the scan with its `charge`. A scan that fails is refunded.
 
 | Argument | Type |
 | --- | --- |
