@@ -25,7 +25,7 @@ export type FrameCheck = Schemas['FrameCheck'];
 export type SpaceCoverageCheck = Schemas['SpaceCoverageCheck'];
 export type SpaceType = NonNullable<SpaceCreateRequest['space_type']>;
 
-export const DEFAULT_BASE_URL = 'https://api.spacecontext.finikos.it/v1';
+export const DEFAULT_BASE_URL = 'https://api.spacecontext.app/v1';
 
 /** Statuses after which a scan no longer changes. */
 export const FINAL_SCAN_STATUSES: ReadonlySet<Scan['status']> = new Set(['complete', 'failed', 'cancelled']);

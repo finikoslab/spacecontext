@@ -25,7 +25,7 @@ spacecontext login            # a live key
 spacecontext login --test     # a test key: free, the demo space
 ```
 
-The terminal shows a code and opens the [console](https://spacecontext.finikos.it/developers/console) (sign in with Apple, Google or your email if you are not yet). Type the code there, check what is asking, choose what the key may do, and approve: the terminal receives its key and saves it in `~/.config/spacecontext/config.json` (or `$XDG_CONFIG_HOME/spacecontext/`), readable by your user only. The key never passes through the browser, and the console never sees your terminal.
+The terminal shows a code and opens the [console](https://spacecontext.app/developers/console) (sign in with Apple, Google or your email if you are not yet). Type the code there, check what is asking, choose what the key may do, and approve: the terminal receives its key and saves it in `~/.config/spacecontext/config.json` (or `$XDG_CONFIG_HOME/spacecontext/`), readable by your user only. The key never passes through the browser, and the console never sees your terminal.
 
 Approve only a code you are looking at in your own terminal: the name shown in the console is what the terminal said about itself. The code is never carried in a link for that reason. `--no-browser` only prints the link.
 
@@ -52,7 +52,7 @@ Every command accepts `--json` and prints the API's JSON on standard output; pro
 
 ```text
 Error [INSUFFICIENT_FUNDS]: The wallet does not cover this scan (request req_…)
-Top up your wallet in the console: https://spacecontext.finikos.it/developers/console
+Top up your wallet in the console: https://spacecontext.app/developers/console
 ```
 
 Next: [the commands](commands.md).

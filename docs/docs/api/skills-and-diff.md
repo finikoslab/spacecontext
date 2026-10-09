@@ -37,7 +37,7 @@ Write the files to a folder and point your agent at it; the CLI does it for you:
 ## Compare two scans
 
 ```bash
-curl "https://api.spacecontext.finikos.it/v1/spaces/spc_3f…/diff?from=scn_old…&to=scn_new…" \
+curl "https://api.spacecontext.app/v1/spaces/spc_3f…/diff?from=scn_old…&to=scn_new…" \
   -H "Authorization: Bearer $SPACECONTEXT_API_KEY"
 ```
 

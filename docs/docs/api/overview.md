@@ -6,17 +6,17 @@ description: 'Base URL, authentication, errors, pagination, idempotency and rate
 # API overview
 
 ```text
-https://api.spacecontext.finikos.it/v1
+https://api.spacecontext.app/v1
 ```
 
-A JSON API over HTTPS. Field names are `snake_case`, timestamps ISO 8601 in UTC, money in US cents. The contract is the [OpenAPI document](https://api.spacecontext.finikos.it/v1/openapi.json), browsable in the [API reference](/api-reference); it lists exactly what you call with a key (the console's own endpoints are not in it). `GET /v1` answers a short descriptor with the links to the contract, the docs, `llms.txt` and the MCP server.
+A JSON API over HTTPS. Field names are `snake_case`, timestamps ISO 8601 in UTC, money in US cents. The contract is the [OpenAPI document](https://api.spacecontext.app/v1/openapi.json), browsable in the [API reference](/api-reference); it lists exactly what you call with a key (the console's own endpoints are not in it). `GET /v1` answers a short descriptor with the links to the contract, the docs, `llms.txt` and the MCP server.
 
 ## Authentication
 
 Send an [API key](../account/api-keys.md) as a bearer token:
 
 ```bash
-curl https://api.spacecontext.finikos.it/v1/me \
+curl https://api.spacecontext.app/v1/me \
   -H "Authorization: Bearer $SPACECONTEXT_API_KEY"
 ```
 
@@ -52,7 +52,7 @@ See [all error codes](errors.md).
 Lists that can grow take `limit` and `cursor` and answer `next_cursor` (`null` on the last page):
 
 ```bash
-curl "https://api.spacecontext.finikos.it/v1/spaces?limit=20&cursor=$NEXT" -H "Authorization: Bearer $KEY"
+curl "https://api.spacecontext.app/v1/spaces?limit=20&cursor=$NEXT" -H "Authorization: Bearer $KEY"
 ```
 
 ## Idempotency

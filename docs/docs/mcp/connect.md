@@ -10,7 +10,7 @@ The Space Context MCP server gives an AI assistant access to your spaces: it can
 **Server URL:**
 
 ```text
-https://mcp.spacecontext.finikos.it/mcp
+https://mcp.spacecontext.app/mcp
 ```
 
 It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client registration and client ID metadata documents), so any client that supports remote MCP servers with OAuth can connect. There is no key to paste: you sign in with Apple, Google or your email.
@@ -38,7 +38,7 @@ On Team and Enterprise plans, an owner may need to add the connector for the org
 ## Claude Code
 
 ```bash
-claude mcp add --transport http spacecontext https://mcp.spacecontext.finikos.it/mcp
+claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp
 ```
 
 Then run `/mcp` in Claude Code and choose **Authenticate** for `spacecontext`. To give Claude Code a space without a connection, you can also export it as a [skill](../guides/claude-code-skill.md).
@@ -56,7 +56,7 @@ Add the server to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):
 ```json
 {
   "mcpServers": {
-    "spacecontext": { "url": "https://mcp.spacecontext.finikos.it/mcp" }
+    "spacecontext": { "url": "https://mcp.spacecontext.app/mcp" }
   }
 }
 ```
@@ -70,7 +70,7 @@ Add to `.vscode/mcp.json`:
 ```json
 {
   "servers": {
-    "spacecontext": { "type": "http", "url": "https://mcp.spacecontext.finikos.it/mcp" }
+    "spacecontext": { "type": "http", "url": "https://mcp.spacecontext.app/mcp" }
   }
 }
 ```
@@ -79,8 +79,8 @@ Add to `.vscode/mcp.json`:
 
 Use the server URL with the client's "remote MCP server" or "custom connector" option. The OAuth metadata is published at:
 
-- `https://mcp.spacecontext.finikos.it/.well-known/oauth-protected-resource/mcp`
-- `https://mcp.spacecontext.finikos.it/.well-known/oauth-authorization-server`
+- `https://mcp.spacecontext.app/.well-known/oauth-protected-resource/mcp`
+- `https://mcp.spacecontext.app/.well-known/oauth-authorization-server`
 
 ## Which spaces the assistant sees
 

@@ -5,7 +5,7 @@ description: 'Signed events when a scan completes or fails, or an automatic top-
 
 # Webhooks
 
-Instead of polling, let Space Context call you. Add an endpoint in the [console](https://spacecontext.finikos.it/developers/console) under **Webhooks**: an HTTPS URL, the events, and the mode (test events come from test keys, live events from live keys). The **signing secret** (`whsec_…`) is shown once.
+Instead of polling, let Space Context call you. Add an endpoint in the [console](https://spacecontext.app/developers/console) under **Webhooks**: an HTTPS URL, the events, and the mode (test events come from test keys, live events from live keys). The **signing secret** (`whsec_…`) is shown once.
 
 ## Events
 

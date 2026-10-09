@@ -17,7 +17,7 @@ stay within these rules.
 ## Scope
 
 - This repository: the SDK, the CLI and the MCP server.
-- The API at `api.spacecontext.finikos.it`, the console and the website.
+- The API at `api.spacecontext.app`, the console and the website.
 
 The analysis pipeline runs server-side and is not in this repository; findings
 about it are in scope through the API.

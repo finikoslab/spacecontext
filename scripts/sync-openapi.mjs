@@ -2,7 +2,7 @@
 //
 //   node scripts/sync-openapi.mjs                      (backend checked out at ../spacecontext-backend)
 //   node scripts/sync-openapi.mjs --backend <path>
-//   node scripts/sync-openapi.mjs --url https://api.spacecontext.finikos.it/v1/openapi.json
+//   node scripts/sync-openapi.mjs --url https://api.spacecontext.app/v1/openapi.json
 //
 // Then regenerate the SDK types: npm run generate -w @spacecontext/sdk
 import { execFileSync } from 'node:child_process';

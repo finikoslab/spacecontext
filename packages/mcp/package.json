@@ -5,7 +5,7 @@
   "description": "Remote MCP server for Space Context, on Cloudflare Workers: your agent knows your spaces.",
   "license": "MIT",
   "author": "Finikos S.r.l.",
-  "homepage": "https://spacecontext.finikos.it/developers",
+  "homepage": "https://spacecontext.app/developers",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/finikoslab/spacecontext.git",

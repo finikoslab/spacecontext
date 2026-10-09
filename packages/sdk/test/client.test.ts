@@ -83,7 +83,7 @@ describe('SpaceContext client', () => {
     vi.stubEnv('SPACECONTEXT_API_KEY', TEST);
     const fromEnv = new SpaceContext();
     expect(fromEnv.mode).toBe('test');
-    expect(fromEnv.baseUrl).toBe('https://api.spacecontext.finikos.it/v1');
+    expect(fromEnv.baseUrl).toBe('https://api.spacecontext.app/v1');
     expect(new SpaceContext({ apiKey: LIVE, baseUrl: `${BASE}/` }).baseUrl).toBe(BASE);
     expect(() => new SpaceContext({ apiKey: LIVE, baseUrl: 'http://api.example.test/v1' })).toThrow(/https/);
     expect(new SpaceContext({ apiKey: LIVE, baseUrl: 'http://localhost:8787/v1' }).baseUrl).toBe('http://localhost:8787/v1');

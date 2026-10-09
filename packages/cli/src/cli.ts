@@ -66,11 +66,11 @@ Scans
 Options
   --json                        Print the API response as JSON
   --api-key <key>               Use this key instead of the saved one or SPACECONTEXT_API_KEY
-  --base-url <url>              API base URL (default https://api.spacecontext.finikos.it/v1)
+  --base-url <url>              API base URL (default https://api.spacecontext.app/v1)
   -h, --help                    Show this help
   -v, --version                 Show the version
 
-Docs: https://spacecontext.finikos.it/developers
+Docs: https://spacecontext.app/developers
 `;
 
 const OPTIONS = {
@@ -603,7 +603,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
 function hint(code: string): string {
   switch (code) {
     case 'INSUFFICIENT_FUNDS':
-      return 'Top up your wallet in the console: https://spacecontext.finikos.it/developers/console\n';
+      return 'Top up your wallet in the console: https://spacecontext.app/developers/console\n';
     case 'PRO_REQUIRED':
       return 'Spaces scanned with the app are readable through the API with Space Context Pro.\n';
     case 'ENRICHMENT_PENDING':

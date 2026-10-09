@@ -30,7 +30,7 @@ A sign, a sticker or a sentence said on camera can try to give orders to the age
 
 - Videos, frames and documents are stored on Cloudflare (R2 in the EU jurisdiction, D1).
 - Source videos are deleted as soon as their frames are extracted; frames are kept as evidence and served through short-lived signed links.
-- Frames, audio and text are processed by AI providers (OpenAI for vision and language, Cloudflare Workers AI for transcription and search) as described in the [privacy policy](https://spacecontext.finikos.it/privacy).
+- Frames, audio and text are processed by AI providers (OpenAI for vision and language, Cloudflare Workers AI for transcription and search) as described in the [privacy policy](https://spacecontext.app/privacy).
 - Card payments are handled by Stripe; card details never reach Space Context.
 
 ## Webhooks

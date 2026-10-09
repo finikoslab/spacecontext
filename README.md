@@ -10,7 +10,7 @@ This repository holds the open-source (MIT) tools to use Space Context from code
 | [`packages/cli`](packages/cli) — `spacecontext` | `npx spacecontext scan tour.mp4 --name "My flat"`, then search, ask, export a Skill |
 | [`packages/mcp`](packages/mcp) — `@spacecontext/mcp` | Remote MCP server (Cloudflare Workers, OAuth): connect Claude or any MCP client to your spaces |
 | [`openapi/openapi.json`](openapi/openapi.json) | The API contract |
-| [`docs`](docs) | The documentation, published at [spacecontext.finikos.it/developers/docs](https://spacecontext.finikos.it/developers/docs) (also as `llms.txt`, Markdown twins and a ZIP) |
+| [`docs`](docs) | The documentation, published at [spacecontext.app/developers/docs](https://spacecontext.app/developers/docs) (also as `llms.txt`, Markdown twins and a ZIP) |
 
 The analysis pipeline itself (vision, fusion, the deep pass, the sensitive-value screening) runs in the Space Context API and is not part of this repository.
 
@@ -30,7 +30,7 @@ Text captured in a space is always treated as data: sentences addressed to an AI
 ## Quick start
 
 ```bash
-# 1. Create an API key in the console: https://spacecontext.finikos.it/developers/console
+# 1. Create an API key in the console: https://spacecontext.app/developers/console
 npx spacecontext login --test                # approve a code in the console: a free test key, the demo space
 npx spacecontext check ./photos                 # usable frames, and the key locations still missing
 npx spacecontext search "where is the stopcock?"
@@ -47,7 +47,7 @@ const answer = await sc.spaces.ask(spaceId, 'Where are the spare bulbs?');
 const page = await sc.spaces.markdown(spaceId); // the whole space as one page
 ```
 
-**MCP:** add `https://mcp.spacecontext.finikos.it/mcp` as a custom connector in Claude, ChatGPT or any MCP client that supports OAuth. You sign in with Apple, Google or your email and choose whether the assistant may see sensitive values and whether it may scan spaces for you.
+**MCP:** add `https://mcp.spacecontext.app/mcp` as a custom connector in Claude, ChatGPT or any MCP client that supports OAuth. You sign in with Apple, Google or your email and choose whether the assistant may see sensitive values and whether it may scan spaces for you.
 
 ## Pricing and keys
 

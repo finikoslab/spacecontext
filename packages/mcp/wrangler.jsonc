@@ -11,10 +11,10 @@
   // addresses. The API is reached through the BACKEND service binding.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
-  "routes": [{ "pattern": "mcp.spacecontext.finikos.it", "custom_domain": true }],
+  "routes": [{ "pattern": "mcp.spacecontext.app", "custom_domain": true }],
   "vars": {
-    "API_BASE_URL": "https://api.spacecontext.finikos.it/v1",
-    "PUBLIC_URL": "https://mcp.spacecontext.finikos.it"
+    "API_BASE_URL": "https://api.spacecontext.app/v1",
+    "PUBLIC_URL": "https://mcp.spacecontext.app"
   },
   // OAuth clients, grants and tokens (encrypted by the library).
   // Create with: wrangler kv namespace create OAUTH_KV

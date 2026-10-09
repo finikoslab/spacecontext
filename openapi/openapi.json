@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "https://api.spacecontext.finikos.it/v1"
+      "url": "https://api.spacecontext.app/v1"
     }
   ],
   "paths": {

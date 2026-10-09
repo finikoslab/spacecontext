@@ -2,8 +2,8 @@ import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import { themes as prismThemes } from 'prism-react-renderer';
 
-// Space Context developer documentation: published at spacecontext.finikos.it/developers/docs,
-// buildable on its own at docs.spacecontext.finikos.it.
+// Space Context developer documentation: published at spacecontext.app/developers/docs,
+// buildable on its own at docs.spacecontext.app.
 // The API reference is rendered by Scalar from static/openapi.json, copied from
 // ../openapi/openapi.json before every start and build (scripts/copy-openapi.mjs).
 
@@ -11,7 +11,7 @@ const config: Config = {
   title: 'Space Context Docs',
   tagline: 'The context layer for the physical world: API, CLI and MCP server.',
   favicon: 'img/favicon.svg',
-  url: 'https://docs.spacecontext.finikos.it',
+  url: 'https://docs.spacecontext.app',
   baseUrl: '/',
   trailingSlash: false,
   onBrokenLinks: 'throw',
@@ -46,7 +46,7 @@ const config: Config = {
         cdn: 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.4',
         configuration: {
           url: '/openapi.json',
-          servers: [{ url: 'https://api.spacecontext.finikos.it/v1', description: 'Production' }],
+          servers: [{ url: 'https://api.spacecontext.app/v1', description: 'Production' }],
           authentication: { preferredSecurityScheme: 'apiKey' },
           // Only the reference: no Scalar assistant, MCP generator, toolbar or telemetry.
           agent: { disabled: true },
@@ -68,7 +68,7 @@ const config: Config = {
       items: [
         { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs' },
         { to: '/api-reference', label: 'API reference', position: 'left' },
-        { href: 'https://spacecontext.finikos.it/developers/console', label: 'Console', position: 'right' },
+        { href: 'https://spacecontext.app/developers/console', label: 'Console', position: 'right' },
         { href: 'https://github.com/finikoslab/spacecontext', label: 'GitHub', position: 'right' },
       ],
     },
@@ -78,9 +78,9 @@ const config: Config = {
         {
           title: 'Product',
           items: [
-            { label: 'Space Context', href: 'https://spacecontext.finikos.it' },
-            { label: 'Developers', href: 'https://spacecontext.finikos.it/developers' },
-            { label: 'Console', href: 'https://spacecontext.finikos.it/developers/console' },
+            { label: 'Space Context', href: 'https://spacecontext.app' },
+            { label: 'Developers', href: 'https://spacecontext.app/developers' },
+            { label: 'Console', href: 'https://spacecontext.app/developers/console' },
           ],
         },
         {
@@ -94,9 +94,9 @@ const config: Config = {
         {
           title: 'Legal',
           items: [
-            { label: 'Terms', href: 'https://spacecontext.finikos.it/terms' },
-            { label: 'Privacy', href: 'https://spacecontext.finikos.it/privacy' },
-            { label: 'Support', href: 'https://spacecontext.finikos.it/support' },
+            { label: 'Terms', href: 'https://spacecontext.app/terms' },
+            { label: 'Privacy', href: 'https://spacecontext.app/privacy' },
+            { label: 'Support', href: 'https://spacecontext.app/support' },
           ],
         },
       ],

@@ -8,7 +8,7 @@ description: 'Create a space, declare a scan, upload a video or photos, start it
 A scan goes through four calls: **create**, **upload**, **start**, then **follow** it (an event stream, polling, or [webhooks](webhooks.md)). The [SDK](../sdk/typescript.md) does all of it in one call, `sc.scan()`.
 
 ```bash
-API=https://api.spacecontext.finikos.it/v1
+API=https://api.spacecontext.app/v1
 AUTH="Authorization: Bearer $SPACECONTEXT_API_KEY"
 ```
 

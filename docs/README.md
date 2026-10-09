@@ -1,6 +1,6 @@
 # Space Context docs
 
-The developer documentation, published at https://spacecontext.finikos.it/developers/docs (the website builds it from `docs/` and `../openapi/openapi.json`). This folder is also a standalone Docusaurus site, with the API reference rendered by Scalar from `../openapi/openapi.json` (copied to `static/` before every start and build).
+The developer documentation, published at https://spacecontext.app/developers/docs (the website builds it from `docs/` and `../openapi/openapi.json`). This folder is also a standalone Docusaurus site, with the API reference rendered by Scalar from `../openapi/openapi.json` (copied to `static/` before every start and build).
 
 ```bash
 npm install

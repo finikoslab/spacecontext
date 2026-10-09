@@ -46,7 +46,7 @@ export function redirectSource(redirectUri: string): string | null {
 }
 
 export function page(title: string, body: string, status = 200, headers?: Headers, formTargets: string[] = []): Response {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Space Context</title><style>${STYLE}</style></head><body><main><div class="card">${body}</div><p class="muted" style="text-align:center">Space Context · <a href="https://spacecontext.finikos.it/privacy">Privacy</a></p></main><script>${SUBMIT_ONCE_SCRIPT}</script></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Space Context</title><style>${STYLE}</style></head><body><main><div class="card">${body}</div><p class="muted" style="text-align:center">Space Context · <a href="https://spacecontext.app/privacy">Privacy</a></p></main><script>${SUBMIT_ONCE_SCRIPT}</script></body></html>`;
   const responseHeaders = new Headers(headers);
   responseHeaders.set('Content-Type', 'text/html; charset=utf-8');
   responseHeaders.set('Cache-Control', 'no-store');

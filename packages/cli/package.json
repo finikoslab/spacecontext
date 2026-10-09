@@ -4,7 +4,7 @@
   "description": "Space Context from the terminal: scan a video of a space, then search it, ask it, and export it as an Agent Skill.",
   "license": "MIT",
   "author": "Finikos S.r.l.",
-  "homepage": "https://spacecontext.finikos.it/developers",
+  "homepage": "https://spacecontext.app/developers",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/finikoslab/spacecontext.git",

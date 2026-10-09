@@ -8,7 +8,7 @@ description: 'Search across all your spaces in any language, and ask one space a
 ## Search across spaces
 
 ```bash
-curl "https://api.spacecontext.finikos.it/v1/search?q=where+did+I+see+a+ladder&limit=5" \
+curl "https://api.spacecontext.app/v1/search?q=where+did+I+see+a+ladder&limit=5" \
   -H "Authorization: Bearer $SPACECONTEXT_API_KEY"
 ```
 
@@ -43,7 +43,7 @@ Records are items, areas, issues, key locations, instructions, facts and Q&A. Se
 ## Ask one space
 
 ```bash
-curl -X POST https://api.spacecontext.finikos.it/v1/spaces/spc_3f…/ask \
+curl -X POST https://api.spacecontext.app/v1/spaces/spc_3f…/ask \
   -H "Authorization: Bearer $SPACECONTEXT_API_KEY" -H "Content-Type: application/json" \
   -d '{"question": "Where is the water shut-off?"}'
 ```
@@ -59,7 +59,7 @@ curl -X POST https://api.spacecontext.finikos.it/v1/spaces/spc_3f…/ask \
     {
       "record_type": "key_location", "record_id": "loc_1",
       "title": "Main water valve", "area": "Bathroom",
-      "evidence": [{ "frame_id": "frame-14", "timestamp_ms": 41200, "url": "https://api.spacecontext.finikos.it/v1/media/…" }]
+      "evidence": [{ "frame_id": "frame-14", "timestamp_ms": 41200, "url": "https://api.spacecontext.app/v1/media/…" }]
     }
   ]
 }
