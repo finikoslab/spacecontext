@@ -4,7 +4,7 @@ import * as z from 'zod';
 import { compact, compactDocument, compactScan, DATA_NOTE, SECTIONS } from './views.js';
 
 export const SERVER_NAME = 'spacecontext';
-export const SERVER_VERSION = '0.1.0';
+export const SERVER_VERSION = '0.2.0';
 
 const INSTRUCTIONS = `Space Context gives you the physical spaces of the user: homes, rentals, offices, vehicles, appliances, each filmed once and turned into structured records (areas, items with location and condition, issues, key locations such as the stopcock or the fuse box, how-to instructions, facts, Q&A), with photo evidence.
 

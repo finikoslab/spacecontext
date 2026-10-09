@@ -1,6 +1,6 @@
 {
   "name": "@spacecontext/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Remote MCP server for Space Context, on Cloudflare Workers: your agent knows your spaces.",
   "license": "MIT",
@@ -19,7 +19,7 @@
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^1.2.1",
     "@modelcontextprotocol/server": "2.0.0",
-    "@spacecontext/sdk": "0.1.0",
+    "@spacecontext/sdk": "0.2.0",
     "agents": "^0.26.0",
     "zod": "^4.4.3"
   }

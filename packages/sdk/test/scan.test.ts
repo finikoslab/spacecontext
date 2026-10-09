@@ -257,12 +257,12 @@ describe('scan() in one call', () => {
   it('refuses what it cannot scan before touching the API', async () => {
     const { fetch, calls } = flow();
     const sc = client(fetch);
-    await expect(sc.scan(new Blob([1]), { name: 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(sc.scan(new Blob([new Uint8Array([1])]), { name: 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(sc.scan({ frames: [] }, { name: 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(sc.scan({ video: new Uint8Array(4), contentType: 'video/mp4' }, {})).rejects.toThrow(/space.*name/);
     await expect(sc.scan({ video: new Uint8Array(4), contentType: 'video/mp4' }, { space: SPACE_ID, name: 'x' })).rejects.toThrow(/space.*name/);
     await expect(sc.scan(path.join(tmpdir(), 'sc-nope-' + crypto.randomUUID()), { name: 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-    await expect(sc.scan({ frames: [new Blob([1])] }, { name: 'x' })).rejects.toThrow(/Frame 0/);
+    await expect(sc.scan({ frames: [new Blob([new Uint8Array([1])])] }, { name: 'x' })).rejects.toThrow(/Frame 0/);
     expect(calls).toHaveLength(0);
   });
 

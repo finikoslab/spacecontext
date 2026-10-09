@@ -6,7 +6,7 @@ import { clearConfig, configDirectory, readConfig, writeConfig } from './config.
 import { stat } from 'node:fs/promises';
 import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 export type Io = {
   stdout: (text: string) => void;
