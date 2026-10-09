@@ -21,7 +21,7 @@
     "node": ">=22.0.0"
   },
   "bin": {
-    "spacecontext": "./dist/bin.js"
+    "spacecontext": "dist/bin.js"
   },
   "files": [
     "dist",
