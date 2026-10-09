@@ -1,12 +1,13 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { describeScan, deviceSignIn, SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
-import { spawn } from 'node:child_process';
-import { hostname } from 'node:os';
+import { describeScan, SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
 import { writeFile } from 'node:fs/promises';
-import { clearConfig, configDirectory, readConfig, writeConfig } from './config.js';
+import { clearConfig, configDirectory, readConfig, setting, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
 import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
+import { setup } from './setup.js';
+import { deviceLogin } from './signin.js';
+import type { Runner } from './system.js';
 
 export const VERSION = '0.2.0';
 
@@ -20,6 +21,14 @@ export type Io = {
   fetch?: typeof fetch;
   /** Opens a URL in the browser (device sign-in). Null never opens one; undefined uses the system opener. */
   openBrowser?: ((url: string) => void) | null;
+  /** Which of stdin, stdout and stderr are terminals (colours, interactive logins). Unset: none. */
+  terminal?: { stdin: boolean; stdout: boolean; stderr: boolean };
+  /** Runs a program with an argument array (`setup`). Undefined: a child process, never a shell. */
+  run?: Runner;
+  /** The absolute path of a program on PATH, or null (`setup`). Undefined: looks in `env.PATH`. */
+  which?: (program: string) => Promise<string | null>;
+  /** Defaults to `process.platform`. */
+  platform?: NodeJS.Platform;
 };
 
 const SPACE_TYPES: SpaceType[] = ['apartment', 'house', 'office', 'warehouse', 'vehicle', 'boat', 'camper', 'shop', 'garage', 'appliance', 'other'];
@@ -27,6 +36,14 @@ const SPACE_TYPES: SpaceType[] = ['apartment', 'house', 'office', 'warehouse', '
 const HELP = `spacecontext ${VERSION} — the context layer for the physical world
 
 Usage: spacecontext <command> [options]
+
+Get started
+  setup [--client claude-code,codex,cursor,vscode,all] [--test] [--yes]
+        [--no-browser] [--skip-login] [--skip-mcp] [--skip-skill]
+                                Sign in, connect your assistants (MCP), install
+                                the skill and check the card on file, in one go;
+                                --yes runs without questions or browser (agents),
+                                --json prints a summary with the next steps
 
 Account
   login [--test] [--no-browser] [--key -]
@@ -97,6 +114,11 @@ const OPTIONS = {
   follow: { type: 'boolean' },
   test: { type: 'boolean' },
   'no-browser': { type: 'boolean' },
+  client: { type: 'string' },
+  yes: { type: 'boolean', short: 'y' },
+  'skip-login': { type: 'boolean' },
+  'skip-mcp': { type: 'boolean' },
+  'skip-skill': { type: 'boolean' },
 } satisfies ParseArgsConfig['options'];
 
 type Values = { [K in keyof typeof OPTIONS]?: (typeof OPTIONS)[K]['type'] extends 'boolean' ? boolean : string };
@@ -121,12 +143,6 @@ function words(args: string[], what: string): string {
   const text = args.join(' ').trim();
   if (!text) throw new UsageError(`Missing ${what}`);
   return text;
-}
-
-/** A variable of the environment; empty or blank counts as unset (`SPACECONTEXT_API_KEY=` must not hide the saved key). */
-function setting(env: Io['env'], name: string): string | undefined {
-  const value = env[name]?.trim();
-  return value ? value : undefined;
 }
 
 async function client(context: Context): Promise<SpaceContext> {
@@ -221,17 +237,6 @@ async function exportMarkdown(context: Context, sc: SpaceContext, id: string, pa
 
 // ------------------------------------------------------------------ commands
 
-/** Opens a URL in the person's browser, best effort: a failure only means they open it themselves. */
-function openBrowser(url: string): void {
-  const [command, args] =
-    process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
-  try {
-    spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => undefined).unref();
-  } catch {
-    // Nothing: the link is printed anyway.
-  }
-}
-
 /**
  * `login --key -`: the key typed at a prompt that does not echo it. A key given
  * on the command line stays in the shell's history.
@@ -247,26 +252,11 @@ async function login(context: Context): Promise<void> {
   const { io, values } = context;
   // Only a base URL given explicitly is saved with the key (see `client`).
   const baseUrl = values['base-url'];
-  const requestBase = baseUrl ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
   let key = values.key ?? values['api-key'];
   if (key === '-') key = await typedKey(io);
   if (!key) {
     // Device sign-in: a code to approve in the console; the key comes back here, never through the browser.
-    const signedIn = await deviceSignIn({
-      name: `CLI on ${hostname()}`,
-      mode: values.test ? 'test' : 'live',
-      ...(requestBase ? { baseUrl: requestBase } : {}),
-      ...(io.fetch ? { fetch: io.fetch } : {}),
-      onCode: ({ userCode, verificationUrl, expiresIn }) => {
-        io.stderr(`\nOpen ${verificationUrl}\nand enter this code:  ${userCode}\n\n(valid for ${Math.round(expiresIn / 60)} minutes; approve only a code you see here)\n`);
-        // The console refuses a live key that can scan until the account has a card on file.
-        if (!values.test) io.stderr('A live key that can scan needs a card on file (adding one charges nothing); the console tells you. Read-only keys need none.\n');
-        if (!values['no-browser'] && io.openBrowser !== null) (io.openBrowser ?? openBrowser)(verificationUrl);
-        io.stderr('Waiting for your approval…\n');
-      },
-    });
-    key = signedIn.api_key;
-    const file = await writeConfig(configDirectory(io.env), { apiKey: key, ...(baseUrl ? { baseUrl } : {}) });
+    const { signedIn, file } = await deviceLogin(io, { mode: values.test ? 'test' : 'live', baseUrl, openBrowser: !values['no-browser'] });
     print(io, values, { user: signedIn.user, key: signedIn.key }, () =>
       `Logged in as ${signedIn.user.email} with a ${signedIn.key.mode} key (${signedIn.key.scopes.join(', ')}).\nSaved in ${file}\n`
     );
@@ -561,7 +551,27 @@ async function scan(context: Context): Promise<void> {
   print(io, values, document, () => `${documentSummary(document)}\nNext: spacecontext ask ${spaceId} "where is the fuse box?"\n`);
 }
 
-const COMMANDS: Record<string, (context: Context) => Promise<void>> = {
+/** Everything a developer or an agent needs, in one command; the exit code says whether it worked. */
+async function setupCommand(context: Context): Promise<number> {
+  const { io, values } = context;
+  if (context.args.length > 0) throw new UsageError(`setup takes no arguments (got "${context.args[0]}")`);
+  return setup(io, {
+    clients: values.client,
+    test: Boolean(values.test),
+    yes: Boolean(values.yes),
+    json: Boolean(values.json),
+    noBrowser: Boolean(values['no-browser']),
+    skipLogin: Boolean(values['skip-login']),
+    skipMcp: Boolean(values['skip-mcp']),
+    skipSkill: Boolean(values['skip-skill']),
+    apiKey: values['api-key'],
+    baseUrl: values['base-url'],
+  });
+}
+
+/** A command returns nothing (exit 0) or its own exit code. */
+const COMMANDS: Record<string, (context: Context) => Promise<void | number>> = {
+  setup: setupCommand,
   login,
   logout,
   whoami,
@@ -606,8 +616,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     return 2;
   }
   try {
-    await run({ io, values, args });
-    return 0;
+    return (await run({ io, values, args })) ?? 0;
   } catch (error) {
     if (error instanceof UsageError) {
       io.stderr(`${error.message}\n`);

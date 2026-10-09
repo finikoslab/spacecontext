@@ -6,6 +6,7 @@ All packages of this repository share a version.
 
 ### Before the first publish
 
+- CLI: `spacecontext setup` does the whole setup in one command: signs in (device sign-in, `--test` for a test key), adds the MCP server to Claude Code, Codex, Cursor and VS Code (the ones found, or `--client …`/`all`), installs the Space Context skill in `~/.claude/skills/spacecontext/` (from spacecontext.app, or the plugin's copy shipped in the package when offline; a file you edited is kept unless `--yes`), checks the card on file of a live account, and prints the next steps and an SDK snippet. Every step reports done, skipped or failed without stopping the others; `--yes` runs without questions or browser for agents, `--json` prints `{ steps, next }`; exit code `0` when signed in and at least one assistant is connected. Programs run with argument arrays (never a shell) and timeouts; `~/.cursor/mcp.json` is merged, written atomically and backed up once. The Setup page's agent prompt is now one line.
 - Claude Code plugin marketplace (`.claude-plugin/marketplace.json`, `plugins/spacecontext`): the MCP server and a Space Context skill in one install.
 - Codex: `codex mcp add spacecontext --url https://mcp.spacecontext.app/mcp` documented.
 - Live scans, and live keys that can scan, need a card on file (saved without a charge, or a paid top-up): `PAYMENT_METHOD_REQUIRED` (402) is documented, the MCP consent page offers to add a card or connect read-only, and a live `login` says so.

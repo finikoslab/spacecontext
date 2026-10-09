@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Copied from plugins/spacecontext/skills at build time (packages/cli/scripts/bundle-skill.mjs).
+packages/cli/skill/
 .wrangler/
 .dev.vars
 *.log

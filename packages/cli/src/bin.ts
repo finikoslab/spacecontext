@@ -22,5 +22,6 @@ const code = await main(process.argv.slice(2), {
   env: process.env,
   cwd: process.cwd(),
   prompt: process.stdin.isTTY ? prompt : null,
+  terminal: { stdin: Boolean(process.stdin.isTTY), stdout: Boolean(process.stdout.isTTY), stderr: Boolean(process.stderr.isTTY) },
 });
 process.exitCode = code;

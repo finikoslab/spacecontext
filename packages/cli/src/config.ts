@@ -4,6 +4,12 @@ import path from 'node:path';
 
 export type StoredConfig = { apiKey?: string; baseUrl?: string };
 
+/** A variable of the environment; empty or blank counts as unset (`SPACECONTEXT_API_KEY=` must not hide the saved key). */
+export function setting(env: Record<string, string | undefined>, name: string): string | undefined {
+  const value = env[name]?.trim();
+  return value ? value : undefined;
+}
+
 /** `$SPACECONTEXT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/spacecontext`, else `~/.config/spacecontext`. */
 export function configDirectory(env: Record<string, string | undefined>): string {
   if (env.SPACECONTEXT_CONFIG_DIR) return env.SPACECONTEXT_CONFIG_DIR;

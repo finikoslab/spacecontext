@@ -13,6 +13,14 @@ npx spacecontext --help
 
 Needs Node.js 22 or later. Run it with `npx`, or install it with `npm install -g spacecontext`. Videos are analysed on the server, so you don't need ffmpeg.
 
+## Set up everything at once
+
+```bash
+npx spacecontext@latest setup
+```
+
+It signs you in, adds the MCP server to the Claude Code, Codex, Cursor and VS Code it finds, installs the Space Context skill in `~/.claude/skills/spacecontext/`, checks that live scans have a card on file, and ends with what is left to do. Every step reports done, skipped or failed, and none stops the others. A coding agent runs it as `npx spacecontext@latest setup --yes --json`: no questions, no browser, a JSON summary with the next steps.
+
 ## Try it on the demo, for free
 
 ```bash
@@ -47,6 +55,7 @@ npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 
 | Command | |
 | --- | --- |
+| `setup [--client <list>] [--test] [--yes] [--json] [--no-browser] [--skip-login\|--skip-mcp\|--skip-skill]` | Sign in, connect Claude Code, Codex, Cursor and VS Code (`--client claude-code,codex,cursor,vscode` or `all`), install the skill, check the card on file. `--yes` for agents (no questions, no browser); exit code `0` when signed in and at least one assistant is connected |
 | `login [--test] [--no-browser] [--key -]` | Sign in: approve a code in the console, and the key comes back to the terminal |
 | `logout`, `whoami` | Forget the saved key; show the account, mode and scopes of the key |
 | `wallet` | Balance, free scans left, price per scan |
