@@ -9,15 +9,15 @@ The [console](https://spacecontext.finikos.it/developers/console) is where you s
 
 ![The console overview: spaces, documented items, scans and questions this month, the balance, and 30-day charts of scans, API requests, questions and spend](/docs/console/overview.jpg)
 
-## Approve a sign-in from the terminal
-
-`spacecontext login` shows a code and sends you to **Approve a sign-in** in the console. Type the code, read what is asking (the name a terminal gives is what it said about itself), choose what the key may do and its mode, and approve: the terminal receives a key of its own, listed under **API keys** as `CLI · …`, revocable at any time. Approve only a code you are looking at in your own terminal; a code never travels in a link.
-
 ## Sign in
 
 Choose **Continue with Apple**, **Continue with Google**, or enter your email and the one-time code we send you (valid for 10 minutes).
 
 It is the **same account as the Space Context iPhone app**, whichever way you signed up there: the console finds it by the email of your Apple or Google account. If you used Apple's *Hide My Email* in the app, sign in here with Apple too: you reach the same account.
+
+## Approve a sign-in from the terminal
+
+`spacecontext login` shows a code and sends you to **Approve a sign-in** in the console. Type the code, read what is asking (the name a terminal gives is what it said about itself), choose what the key may do and its mode, and approve: the terminal receives a key of its own, listed under **API keys** as `CLI · …`, revocable at any time. Approve only a code you are looking at in your own terminal; a code never travels in a link.
 
 ## What the console shows
 
@@ -27,7 +27,7 @@ It is the **same account as the Space Context iPhone app**, whichever way you si
 | **Spaces** | Every space you can read, and a search across all of them. Open one for its summary, issues, key locations, how-tos and facts, the inventory by area with the **original photos**, questions answered with sources, the scan history with **before/after comparisons**, and exports (Agent Skill, JSON). |
 | **New scan** | Drop a walkthrough video or photos, see the price (the first live scan is free), follow the analysis step by step, and land on the result. |
 | **Connect AI** | The MCP server URL and the steps for Claude, Claude Code, ChatGPT and Cursor, with the assistants already connected. |
-| **API keys** | Create test and live keys with scopes and a monthly spending cap; revoke them. Keys created by the MCP connector carry an **MCP** badge. |
+| **API keys** | Create test and live keys with scopes and a monthly spending cap; revoke them. Keys created by the MCP connector carry an **MCP** badge; keys approved for a terminal are named `CLI · …`. |
 | **Billing** | Balance, top-ups by card through Stripe, automatic top-up, spend chart, every movement, and invoices. |
 | **Webhooks** | HTTPS endpoints, events, test deliveries, delivery history. |
 | **Security** | The audit log: sign-ins, keys, webhooks, payments and deletions, with who did them, kept 400 days. |

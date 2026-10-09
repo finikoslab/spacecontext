@@ -24,7 +24,9 @@ description: 'Sizes, rates and quotas of the Space Context API.'
 | Requests per IP address | 1 200 per minute |
 | Search | 20 per minute and 1 000 per day per account |
 | Questions (`ask`) | 20 per minute and 200 answered per day per account |
+| Frame checks (`POST /frames/check`) | 2 000 per day per account (free) |
 | Scans processing at once | 3 per account |
+| Event stream (`GET /scans/{id}/events`) | 30 minutes per connection; reconnect to keep following |
 | Evidence frames | Signed links expire; read the document again for fresh ones |
 
 Exceeding a rate answers `429 RATE_LIMIT_EXCEEDED` with `Retry-After`.
@@ -38,7 +40,8 @@ Exceeding a rate answers `429 RATE_LIMIT_EXCEEDED` with `Retry-After`.
 | Top-up | $5 to $500 per payment |
 | Automatic top-up | At most 3 per day, 10 minutes apart |
 | Console session | 30 days, in one browser tab |
-| Sign-in code | Valid 10 minutes |
+| Email sign-in code | Valid 10 minutes |
+| Terminal sign-in code (`spacecontext login`) | Valid 10 minutes; polled at most every 5 seconds |
 
 ## Results
 

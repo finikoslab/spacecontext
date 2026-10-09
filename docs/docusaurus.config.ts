@@ -2,7 +2,8 @@ import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import { themes as prismThemes } from 'prism-react-renderer';
 
-// Space Context developer documentation (docs.spacecontext.finikos.it).
+// Space Context developer documentation: published at spacecontext.finikos.it/developers/docs,
+// buildable on its own at docs.spacecontext.finikos.it.
 // The API reference is rendered by Scalar from static/openapi.json, copied from
 // ../openapi/openapi.json before every start and build (scripts/copy-openapi.mjs).
 

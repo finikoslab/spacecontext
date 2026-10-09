@@ -9,7 +9,7 @@ description: 'Base URL, authentication, errors, pagination, idempotency and rate
 https://api.spacecontext.finikos.it/v1
 ```
 
-A JSON API over HTTPS. Field names are `snake_case`, timestamps ISO 8601 in UTC, money in US cents. The full contract is the [OpenAPI document](https://api.spacecontext.finikos.it/v1/openapi.json), browsable in the [API reference](/api-reference).
+A JSON API over HTTPS. Field names are `snake_case`, timestamps ISO 8601 in UTC, money in US cents. The contract is the [OpenAPI document](https://api.spacecontext.finikos.it/v1/openapi.json), browsable in the [API reference](/api-reference); it lists exactly what you call with a key (the console's own endpoints are not in it). `GET /v1` answers a short descriptor with the links to the contract, the docs, `llms.txt` and the MCP server.
 
 ## Authentication
 
@@ -67,6 +67,7 @@ curl "https://api.spacecontext.finikos.it/v1/spaces?limit=20&cursor=$NEXT" -H "A
 | Per IP address | 1 200 requests per minute |
 | Search, per account | 20 per minute, 1 000 per day |
 | Questions (`ask`), per account | 20 per minute, 200 answered per day |
+| Frame checks, per account | 2 000 per day |
 | Scans processing at once, per account | 3 |
 
 A refused request answers `429 RATE_LIMIT_EXCEEDED` with a `Retry-After` header (seconds), or `retry_after` in the body for daily limits. The SDK and the CLI wait and retry short waits for you. See [Limits](../limits.md).
@@ -88,12 +89,15 @@ The API is meant to be called from servers, scripts and agents. Browser calls ar
 | `GET /spaces/{id}`, `DELETE /spaces/{id}` | Read a space (Space Document), delete an API space |
 | `GET /spaces/{id}/scans`, `POST /spaces/{id}/scans` | Scan history, create a scan |
 | `GET /spaces/{id}/scans/{scan_id}` | A past scan as recorded |
-| `GET /spaces/{id}/skill` | The space as an Agent Skill |
+| `GET /spaces/{id}/skill`, `GET /spaces/{id}/markdown` | The space as an Agent Skill, or as one Markdown page |
 | `POST /spaces/{id}/ask` | Ask a question |
 | `GET /spaces/{id}/diff` | Compare two scans |
 | `GET /search` | Search across spaces |
 | `GET /scans/{id}`, `DELETE /scans/{id}` | A scan, cancel a scan |
+| `GET /scans/{id}/events` | Follow a scan live (Server-Sent Events) |
 | `PUT /scans/{id}/frames/{index}`, `PUT /scans/{id}/video` | Upload |
 | `POST /scans/{id}/start` | Start and charge |
+| `POST /frames/check` | Is this frame usable, which key locations does it show |
 | `GET /wallet` | Balance and free scans |
+| `POST /auth/device`, `POST /auth/device/token` | Sign in from a terminal (what `spacecontext login` does) |
 | `GET /media/{key}` | An evidence frame (signed URL) |

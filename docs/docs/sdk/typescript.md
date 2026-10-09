@@ -49,6 +49,10 @@ const { data } = await sc.search('spare light bulbs', { limit: 5 });
 const answer = await sc.spaces.ask('spc_…', 'Is there a dishwasher?');
 const diff = await sc.spaces.diff('spc_…', { from: 'scn_old…' });
 const skill = await sc.spaces.skill('spc_…');                      // { name, files: [{ path, content }] }
+
+const me = await sc.me();                                          // the account and the key's mode and scopes
+const wallet = await sc.wallet();                                  // balance_cents, free scans left, scan_price_cents
+const check = await sc.frames.check(bytes, 'image/jpeg');          // usable? which key locations? (guided capture)
 ```
 
 ## Scanning

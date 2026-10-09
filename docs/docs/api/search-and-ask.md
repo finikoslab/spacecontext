@@ -69,4 +69,4 @@ curl -X POST https://api.spacecontext.finikos.it/v1/spaces/spc_3f…/ask \
 - Every citation is a record of the document; evidence URLs are signed and expire.
 - A key without `spaces:sensitive` never gets a sensitive value in an answer, and the model never sees one.
 - Spaces scanned with the app answer `409 ENRICHMENT_PENDING` to such a key until they are screened (usually a minute or two after the first read).
-- Up to 500 characters per question; questions count against the daily limit only when they are answered.
+- Up to 500 characters per question. A question counts against the daily limit only once it is going to be answered: one refused for its length, or because the space is still being screened, does not. Test keys never count.

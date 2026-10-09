@@ -43,6 +43,12 @@ claude mcp add --transport http spacecontext https://mcp.spacecontext.finikos.it
 
 Then run `/mcp` in Claude Code and choose **Authenticate** for `spacecontext`. To give Claude Code a space without a connection, you can also export it as a [skill](../guides/claude-code-skill.md).
 
+## ChatGPT
+
+1. Open **Settings → Apps & Connectors → Advanced** and turn on **Developer mode**.
+2. **Create** a connector: name `Space Context`, the server URL above, authentication **OAuth**.
+3. Sign in with Apple, Google or your email, choose what the assistant may do, and approve.
+
 ## Cursor
 
 Add the server to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):

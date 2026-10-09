@@ -56,6 +56,16 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 | `PROCESSING_TIMEOUT` | Processing took more than 2 hours. |
 | `UPLOAD_EXPIRED` | Not started within 24 hours (status `cancelled`, never charged). |
 
+## Terminal sign-in (`POST /auth/device/token`)
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `AUTHORIZATION_PENDING` | 400 | Not decided yet in the console; poll again after `interval` seconds. |
+| `SLOW_DOWN` | 400 | Polled faster than `interval`; wait longer. |
+| `DEVICE_CODE_EXPIRED` | 400 | The code lived its ten minutes; start again. |
+| `DEVICE_CODE_INVALID` | 400 | Unknown device code, or the key was already handed out. |
+| `ACCESS_DENIED` | 403 | Denied in the console. |
+
 ## Evidence frames
 
 | Code | Status | Meaning |
@@ -69,5 +79,6 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 | Code | Status | Meaning |
 | --- | --- | --- |
 | `INVALID_CREDENTIALS` | 401 | Wrong or expired sign-in code. |
+| `SIGN_IN_UNAVAILABLE` | 503 | That sign-in provider is not configured on this deployment. |
 | `PAYMENTS_UNAVAILABLE` | 503 | Card payments are temporarily unavailable. |
 | `PAYMENT_FAILED` | 502 | Stripe could not create the payment page; try again. |

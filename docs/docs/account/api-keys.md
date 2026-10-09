@@ -31,8 +31,8 @@ Use test keys for development and CI; switch to a live key when you go to produc
 | Scope | Allows | Default |
 | --- | --- | --- |
 | `spaces:read` | `GET /spaces`, `GET /spaces/{id}`, search, ask, skills, comparisons | ✓ |
-| `scans:read` | `GET /scans/{id}`, `GET /wallet` | ✓ |
-| `scans:write` | Creating spaces and scans, uploading, starting, cancelling, deleting spaces | ✓ |
+| `scans:read` | `GET /scans/{id}`, the event stream, `GET /wallet` | ✓ |
+| `scans:write` | Creating spaces and scans, uploading, starting, cancelling, deleting spaces, frame checks | ✓ |
 | `spaces:sensitive` | Wi-Fi passwords, door and alarm codes, the transcript, the owner's own answers, past scans of app spaces | — |
 
 A key without `spaces:sensitive` reads the **redacted** document. For spaces scanned with the app, it reads them only once they have been screened; see [Security and privacy](../security-and-privacy.md). A request that needs a missing scope answers `403 INSUFFICIENT_SCOPE`.
@@ -47,7 +47,7 @@ A live key can have a **monthly cap** in US dollars. Scans that would take the k
 
 **Revoke** in the console takes effect at once: the next call with the key answers `401 INVALID_TOKEN`.
 
-Keys created by the [MCP connector](../mcp/connect.md) carry the name of the assistant and an **MCP** badge. Revoking one disconnects that assistant: it asks you to sign in again on its next request. Connecting the same assistant again replaces its previous key automatically.
+Keys created by the [MCP connector](../mcp/connect.md) carry the name of the assistant and an **MCP** badge; they have `scans:write` only if you allowed scanning when you connected. Revoking one disconnects that assistant: it asks you to sign in again on its next request. Connecting the same assistant again replaces its previous key automatically. Keys created by `spacecontext login` are named `CLI · …` after the terminal that asked.
 
 ## Limits
 

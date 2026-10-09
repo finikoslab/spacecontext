@@ -2,7 +2,7 @@
 
 A remote MCP server on Cloudflare Workers that lets Claude and other MCP clients read your spaces. Stateless (`createMcpHandler`, MCP SDK v2) behind `@cloudflare/workers-oauth-provider`.
 
-**Connect:** add `https://mcp.spacecontext.finikos.it/mcp` as a custom connector. You sign in with the email of your Space Context account (one-time code) and decide whether the assistant may see sensitive values (Wi-Fi passwords, door codes, narration) and whether it may scan spaces for you (paid from your balance). The server then creates an API key for that grant only, labelled `MCP · <client>` in the console. Revoking it there ends the connection: the assistant asks you to sign in again. Connecting the same assistant again replaces the previous key.
+**Connect:** add `https://mcp.spacecontext.finikos.it/mcp` as a custom connector. You sign in with Apple, Google or your email (one-time code) and decide whether the assistant may see sensitive values (Wi-Fi passwords, door codes, narration) and whether it may scan spaces for you (paid from your balance). The server then creates an API key for that grant only, labelled `MCP · <client>` in the console. Revoking it there ends the connection: the assistant asks you to sign in again. Connecting the same assistant again replaces the previous key.
 
 ## Tools
 

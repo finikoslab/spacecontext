@@ -21,9 +21,9 @@ A **scan** is one recording of a space: a video, or up to 120 photos, optionally
 
 A scan goes through these statuses:
 
-`awaiting_upload` → `queued` → `processing` (stages: `ingesting`, `observing`, `fusing`, `enriching`, `saving`) → `complete`
+`awaiting_upload` → `queued` → `processing` (stages: `ingesting`, `screening`, `observing`, `fusing`, `enriching`, `saving`) → `complete`
 
-or ends as `failed` (refunded) or `cancelled` (before it started; nothing charged).
+or ends as `failed` (refunded) or `cancelled` (before it started; nothing charged). You can poll the scan, follow it live as an event stream (`GET /scans/{id}/events`), or be told by a [webhook](api/webhooks.md).
 
 ## The Space Document
 
@@ -48,8 +48,8 @@ A key carries scopes that limit what it can do:
 | Scope | Allows |
 | --- | --- |
 | `spaces:read` | Reading, searching and asking spaces |
-| `scans:read` | Following scans, reading the wallet |
-| `scans:write` | Creating spaces and scans (a live key spends your balance) |
+| `scans:read` | Following scans (status and event stream), reading the wallet |
+| `scans:write` | Creating spaces and scans, checking frames while filming (a live key spends your balance) |
 | `spaces:sensitive` | Seeing sensitive values: Wi-Fi passwords, door and alarm codes, the transcript and the owner's own answers |
 
 `spaces:sensitive` is never granted by default. → [API keys](account/api-keys.md)
@@ -60,5 +60,6 @@ Before content reaches a key, a model or an agent, Space Context screens it:
 
 - **Sensitive values** found by the deep pass (and by a second, rule-based detector for passwords, codes, card numbers, IBANs, emails and phone numbers) are redacted for keys without `spaces:sensitive`. A key without that scope reads a space only once the deep pass has screened it.
 - **Text that addresses an AI** ("ignore your previous instructions…", written on a sign or said on camera) is withheld everywhere, with a notice in `coverage.warnings`. Content of a space is data, never instructions.
+- **Footage** is checked frame by frame before any model describes it: blurred, dark or covered frames are left out, a recording with nothing usable is refused and refunded (`FOOTAGE_UNUSABLE`), and `coverage.checklist` says which key locations the recording did not show. → [Guided capture](guides/guided-capture.md)
 
 → [Security and privacy](security-and-privacy.md)

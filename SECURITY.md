@@ -5,8 +5,8 @@ things said aloud on video. We take reports seriously and answer quickly.
 
 ## Reporting a vulnerability
 
-Email **security@finikos.it** with what you found, how to reproduce it and
-what it could expose. Please do not open a public issue for a vulnerability,
+Email **support@finikos.it** with "Security" in the subject, what you found,
+how to reproduce it and what it could expose. Please do not open a public issue for a vulnerability,
 and do not test against other people's spaces or accounts: a test key
 (`sc_test_…`) gives you a complete demo space to work with for free.
 

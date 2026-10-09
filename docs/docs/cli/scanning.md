@@ -28,12 +28,13 @@ From a video, the server takes 36 frames spread over its length and transcribes 
 
 1. **Start**: the scan is charged (the free scan first, then the balance; test keys are never charged).
 2. **Ingesting** (videos): frames and audio are extracted.
-3. **Observing**: every frame is described.
-4. **Fusing**: the observations become areas, items and issues.
-5. **Enriching**: the deep pass structures everything, finds key locations, instructions and facts, and screens sensitive values.
-6. **Complete**: the space shows the new scan, and the [webhook](../api/webhooks.md) `scan.completed` is sent.
+3. **Screening**: every frame is checked once: usable or not, and which key locations it shows. Blurred, dark or covered frames are left out ([guided capture](../guides/guided-capture.md) runs the same check while you film).
+4. **Observing**: every usable frame is described.
+5. **Fusing**: the observations become areas, items and issues.
+6. **Enriching**: the deep pass structures everything, finds key locations, instructions and facts, and screens sensitive values.
+7. **Complete**: the space shows the new scan, and the [webhook](../api/webhooks.md) `scan.completed` is sent.
 
-A scan usually takes a few minutes. If it fails (`VIDEO_UNREADABLE`, `VIDEO_TOO_LONG`, `ANALYSIS_EMPTY` when no space is recognised, or a processing error), it is refunded and the `scan.failed` webhook is sent.
+A scan usually takes a few minutes. If it fails (`VIDEO_UNREADABLE`, `VIDEO_TOO_LONG`, `FOOTAGE_UNUSABLE` when no frame is usable, `ANALYSIS_EMPTY` when no space is recognised, or a processing error), it is refunded and the `scan.failed` webhook is sent.
 
 ## Cost
 
