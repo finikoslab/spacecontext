@@ -15,7 +15,10 @@
   "routes": [{ "pattern": "mcp.spacecontext.app", "custom_domain": true }],
   "vars": {
     "API_BASE_URL": "https://api.spacecontext.app/v1",
-    "PUBLIC_URL": "https://mcp.spacecontext.app"
+    "PUBLIC_URL": "https://mcp.spacecontext.app",
+    "APPLE_SERVICES_ID": "it.spacecontext.ai.web",
+    // Same Google Cloud project as the iPhone app; GOOGLE_WEB_CLIENT_SECRET is a secret.
+    "GOOGLE_WEB_CLIENT_ID": "98828797984-ga8912fmogmkk7g71dtdbubtm7pju350.apps.googleusercontent.com"
   },
   // OAuth clients, grants and tokens (encrypted by the library).
   // Create with: wrangler kv namespace create OAUTH_KV
@@ -49,7 +52,8 @@
       "vars": {
         "API_BASE_URL": "https://api-dev.spacecontext.app/v1",
         "PUBLIC_URL": "https://mcp-dev.spacecontext.app",
-        "APPLE_SERVICES_ID": "it.spacecontext.ai.web"
+        "APPLE_SERVICES_ID": "it.spacecontext.ai.web",
+        "GOOGLE_WEB_CLIENT_ID": "98828797984-8a9im4pl24nf7c7g80o4i92po2hhvf0g.apps.googleusercontent.com"
       },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "21f82a0549ce432fa7aadf47c5a2d415" }],
       "services": [{ "binding": "BACKEND", "service": "spacecontext-backend-staging" }]
