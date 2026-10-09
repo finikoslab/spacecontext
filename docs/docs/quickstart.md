@@ -7,6 +7,8 @@ description: 'From zero to a searchable space in five minutes, with a free test 
 
 **No code at all?** Open the [console](https://spacecontext.finikos.it/developers/console), sign in with Apple, Google or your email, switch to **Test** and open the demo space: inventory, photos, questions and a comparison of two scans. Then switch to **Live**, open **New scan** and drop a video of a room: the first live scan is free. **Connect AI** adds your spaces to Claude or ChatGPT in a minute.
 
+![The Spaces page of the console in Test mode: the demo space, with its areas, items and issues, and a search box across every space](/docs/console/spaces.jpg)
+
 The rest of this page does the same from the terminal. It takes about five minutes and costs nothing: it uses a **test key**, which works on the demo space.
 
 The demo is real output, not a mock-up: a one-bedroom apartment in Brisbane scanned twice through the API, with five photos at check-in and a narrated video at check-out, checked against the check-in. The narration (Wi-Fi, fuse box, bins, a loose heater cable) is invented for the example; the photos are by Chris Olszewski on Wikimedia Commons (CC BY-SA 4.0).
@@ -44,6 +46,8 @@ With a test key the whole scan flow runs, and the result is the demo space under
 ```bash
 npx spacecontext scan ./tour.mp4 --name "Test flat"
 ```
+
+![The demo space in the console: summary, issues with their evidence frames and severity, key locations, and the tabs Inventory, Ask, History & compare and Export](/docs/console/space.jpg)
 
 ## 5. Go live
 

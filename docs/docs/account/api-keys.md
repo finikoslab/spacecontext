@@ -13,6 +13,8 @@ Authorization: Bearer sc_live_…
 
 Create keys in the [console](https://spacecontext.finikos.it/developers/console) under **API keys**. The key is shown **once**: we store only its hash. If you lose it, revoke it and create another.
 
+![Creating a key in the console: name, Test or Live mode, the four scopes, an optional monthly spending cap](/docs/console/keys.jpg)
+
 ## Test and live
 
 | | `sc_test_…` | `sc_live_…` |

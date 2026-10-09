@@ -32,6 +32,8 @@ npx spacecontext diff spc_3f… --from scn_checkin…        # add --json for th
 
 The check-out scan is analysed against the check-in one: the same objects keep their names, and something is reported **gone** only when a frame shows its place empty. The comparison lists items added, gone, moved, with a changed quantity or condition, issues new or fixed, and, apart, what the check-out scan simply did not show (`not_seen`): it may be missing, or not filmed. Every entry links to its evidence frames in both scans: the original frames, with their time in the video, never retouched.
 
+![A space in the console after a check-out scan: the loose heater cable as a high-severity issue with its evidence frames, the fuse box and the water shut-off as key locations; History & compare holds the before/after](/docs/console/space.jpg)
+
 ## With an agent
 
 Connected through [MCP](../mcp/connect.md), an assistant can do it for you:

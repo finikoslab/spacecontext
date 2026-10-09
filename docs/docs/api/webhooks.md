@@ -83,3 +83,5 @@ def verify_spacecontext(raw_body: bytes, header: str, secret: str, tolerance: in
 ## In the console
 
 **Send test event** delivers a sample event (`data: { "test": true }`) and shows the answer. **Deliveries** lists recent attempts with their status and the last answer. Up to 10 endpoints per account.
+
+![Webhooks in the console: add an HTTPS endpoint for test or live events, choose scan.completed, scan.failed and wallet.auto_recharge_failed, and see your endpoints](/docs/console/webhooks.jpg)

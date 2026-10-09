@@ -20,6 +20,8 @@ Spaces you scanned with the iPhone app are readable through the API and MCP with
 
 In the console, **Billing → Add $10 / $25 / $50**. You are taken to a **Stripe Checkout** page. Pay by card, and you come back to the console. The balance updates within a few seconds, when Stripe confirms the payment.
 
+![Billing in the console: the balance with Add $10, $25 and $50 buttons, the automatic top-up settings and the spend of the last 30 days](/docs/console/billing.jpg)
+
 - Amounts from $5 to $500 per top-up (the API accepts any amount in that range).
 - The balance never expires and is used only for API scans.
 - Tick **Save the card for automatic top-ups** to allow automatic top-up later. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.

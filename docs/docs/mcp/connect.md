@@ -15,6 +15,8 @@ https://mcp.spacecontext.finikos.it/mcp
 
 It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client registration and client ID metadata documents), so any client that supports remote MCP servers with OAuth can connect. There is no key to paste: you sign in with Apple, Google or your email.
 
+![Connect AI in the console: the server URL to copy, the steps for Claude, Claude Code, ChatGPT and Cursor, the assistants already connected, and questions to ask](/docs/console/connect.jpg)
+
 ## What happens when you connect
 
 1. Your assistant opens a Space Context page in the browser.

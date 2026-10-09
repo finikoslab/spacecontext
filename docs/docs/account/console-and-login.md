@@ -7,6 +7,8 @@ description: 'The developer console: sign in with Apple, Google or an emailed co
 
 The [console](https://spacecontext.finikos.it/developers/console) is where you see and manage everything without writing code: your spaces, new scans, the assistants you connected, [API keys](api-keys.md), [billing](billing.md), [webhooks](../api/webhooks.md) and the audit log.
 
+![The console overview: spaces, documented items, scans and questions this month, the balance, and 30-day charts of scans, API requests, questions and spend](/docs/console/overview.jpg)
+
 ## Sign in
 
 Choose **Continue with Apple**, **Continue with Google**, or enter your email and the one-time code we send you (valid for 10 minutes).
@@ -25,6 +27,8 @@ It is the **same account as the Space Context iPhone app**, whichever way you si
 | **Billing** | Balance, top-ups by card through Stripe, automatic top-up, spend chart, every movement, and invoices. |
 | **Webhooks** | HTTPS endpoints, events, test deliveries, delivery history. |
 | **Security** | The audit log: sign-ins, keys, webhooks, payments and deletions, with who did them, kept 400 days. |
+
+![API keys in the console: create a key with a mode, scopes and a monthly cap; your keys with their mode, scopes, last use and a Revoke button](/docs/console/keys.jpg)
 
 The **Live / Test** switch at the top changes what the spaces, scans and overview show: **Test** is the demo space and free, instant scans that return demo content; **Live** is your real spaces. Nothing in Test mode is ever charged.
 
