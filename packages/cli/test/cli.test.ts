@@ -145,6 +145,8 @@ describe('spacecontext CLI', () => {
     expect(h.stderr()).toContain('enter this code:  BCDF-2345');
     expect(h.stderr()).toContain('https://spacecontext.example/developers/console/authorize/');
     expect(h.stderr()).not.toContain('code=BCDF');
+    // A test key never needs a card.
+    expect(h.stderr()).not.toContain('card on file');
     expect(opened).toEqual(['https://spacecontext.example/developers/console/authorize/']);
     expect(h.stdout()).toContain('Logged in as dev@example.com with a test key (spaces:read, scans:read)');
     // The base URL came from the environment, not from --base-url: it is not saved with the key.
@@ -161,6 +163,8 @@ describe('spacecontext CLI', () => {
     denied.io.openBrowser = (url) => openedDenied.push(url);
     expect(await main(['login', '--no-browser'], denied.io)).toBe(1);
     expect(denied.stderr()).toContain('Error [ACCESS_DENIED]');
+    // A live sign-in says that a key that can scan needs a card on file.
+    expect(denied.stderr()).toContain('A live key that can scan needs a card on file (adding one charges nothing)');
     expect(openedDenied).toEqual([]);
     await expect(readFile(path.join(directory, 'config', 'config.json'))).rejects.toThrow();
   });

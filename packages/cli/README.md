@@ -41,7 +41,7 @@ npx spacecontext search "where is the water shut-off?"
 npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 ```
 
-`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order). It then starts the analysis and prints each stage as it runs ("Reading the video", "Looking at the frames", "Extracting the context"…). After the free scan, each live scan costs US$1.00 from your prepaid balance, and failed scans are refunded. If an upload fails, the scan is cancelled and nothing is charged.
+`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order). It then starts the analysis and prints each stage as it runs ("Reading the video", "Looking at the frames", "Extracting the context"…). After the free scan, each live scan costs US$1.00 from your prepaid balance, and failed scans are refunded. If an upload fails, the scan is cancelled and nothing is charged. A live key that can scan needs a card on file in the console first: adding one charges nothing.
 
 ## Commands
 
@@ -68,7 +68,7 @@ npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 
 ## Keys and sign-in
 
-`login` shows a code and opens the console. There you sign in with Apple, Google, GitHub or your email, type the code, choose what the key may do and approve. The key comes back to the terminal without passing through the browser. Approve only a code you're looking at in your own terminal: that's why the code is never carried in a link.
+`login` shows a code and opens the console. There you sign in with Apple, Google, GitHub or your email, type the code, choose what the key may do and approve. A live key that can scan (`scans:write`) needs a card on file, and the console asks you to add one (nothing is charged); test keys and read-only keys need none. The key comes back to the terminal without passing through the browser. Approve only a code you're looking at in your own terminal: that's why the code is never carried in a link.
 
 The key is saved in `~/.config/spacecontext/config.json` (or `$XDG_CONFIG_HOME/spacecontext/`), readable only by your user. Every command uses the first key it finds in this order:
 

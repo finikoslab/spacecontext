@@ -259,6 +259,8 @@ async function login(context: Context): Promise<void> {
       ...(io.fetch ? { fetch: io.fetch } : {}),
       onCode: ({ userCode, verificationUrl, expiresIn }) => {
         io.stderr(`\nOpen ${verificationUrl}\nand enter this code:  ${userCode}\n\n(valid for ${Math.round(expiresIn / 60)} minutes; approve only a code you see here)\n`);
+        // The console refuses a live key that can scan until the account has a card on file.
+        if (!values.test) io.stderr('A live key that can scan needs a card on file (adding one charges nothing); the console tells you. Read-only keys need none.\n');
         if (!values['no-browser'] && io.openBrowser !== null) (io.openBrowser ?? openBrowser)(verificationUrl);
         io.stderr('Waiting for your approval…\n');
       },
@@ -630,7 +632,7 @@ function hint(code: string): string {
     case 'ENRICHMENT_PENDING':
       return 'The space is being screened for sensitive values; try again in a minute.\n';
     case 'INSUFFICIENT_SCOPE':
-      return 'This key lacks a scope for this request; create one with the right scopes in the console.\n';
+      return 'This key lacks a scope for this request; create one with the right scopes in the console (a live key that can scan needs a card on file).\n';
     case 'INVALID_TOKEN':
     case 'MISSING_AUTH_HEADER':
       return 'Run `spacecontext login` with a valid key.\n';
