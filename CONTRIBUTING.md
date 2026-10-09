@@ -19,4 +19,4 @@
 
 ## Checks
 
-`npm run check` must pass: build, typecheck and tests of all packages. The MCP tests run in workerd (`@cloudflare/vitest-pool-workers`) and drive the full OAuth flow (registration, PKCE, consent, token) and real MCP calls against a fake API.
+`npm run check` must pass: build, typecheck and tests of all packages. After a deploy, run the SDK's smoke test against the host with a **test** key (free, the demo space): `SPACECONTEXT_SMOKE_KEY=sc_test_… SPACECONTEXT_SMOKE_BASE_URL=https://api.spacecontext.finikos.it/v1 npx vitest run test/smoke.test.ts -w @spacecontext/sdk` — it reads the demo in every form, asks, searches, runs a whole scan live and checks a frame. The MCP tests run in workerd (`@cloudflare/vitest-pool-workers`) and drive the full OAuth flow (registration, PKCE, consent, token) and real MCP calls against a fake API.
