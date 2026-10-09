@@ -18,13 +18,23 @@ Spaces you scanned with the iPhone app are readable through the API, the console
 
 ## Add funds
 
-In the console, **Billing → Add $10 / $25 / $50**. You are taken to a **Stripe Checkout** page. Pay by card, and you come back to the console. The balance updates within a few seconds, when Stripe confirms the payment.
+In the console, tick the billing terms (below), then **Billing → Add $10 / $25 / $50**. You are taken to a **Stripe Checkout** page. Pay by card, and you come back to the console. The balance updates within a few seconds, when Stripe confirms the payment.
 
 ![Billing in the console: the balance with Add $10, $25 and $50 buttons, the automatic top-up settings and the spend of the last 30 days](/docs/console/billing.jpg)
 
 - Amounts from $5 to $500 per top-up (the API accepts any amount in that range).
 - The balance never expires and is used only for API scans.
 - Tick **Save the card for automatic top-ups** to allow automatic top-up later. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.
+
+## What you accept when you add funds
+
+Before the payment page opens, the console asks you to accept these terms; Stripe's page repeats them next to the pay button.
+
+- **The credit is supplied at once.** It is added to your balance as soon as the payment succeeds, and the scans you start use it: you ask for it to be supplied now.
+- **Credit already used cannot be refunded.** A scan that fails is refunded to your balance automatically (see below). Money goes back to a card only if you ask: write to support about unused credit. Statutory rights, where they apply, are not affected.
+- **Unused credit never expires.**
+- Payments ask your bank for **3-D Secure** when your card supports it, and show on your statement as **FINIKOS\* SPACECONTEXT**.
+- The console records the time you accepted, the version of these terms and your IP address. That record, the ledger and your usage are what we show Stripe if a payment is disputed.
 
 ## Automatic top-up
 
