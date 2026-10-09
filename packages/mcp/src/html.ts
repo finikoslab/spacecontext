@@ -142,8 +142,9 @@ ${
 <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12">`
 }
 ${input.error ? `<p class="error">${escapeHtml(input.error)}</p>` : ''}
-<p><strong>It will be able to:</strong> read your spaces (areas, items, issues, key locations, instructions, facts and photos), search them and ask them questions. It cannot change or delete anything, and cannot spend money.</p>
+<p><strong>It will be able to:</strong> read your spaces (areas, items, issues, key locations, instructions, facts and photos), search them and ask them questions. It cannot change or delete anything, and cannot spend money, unless you allow it below.</p>
 <label class="check"><input type="checkbox" name="sensitive" value="1"><span>Also show <strong>sensitive values</strong> such as Wi-Fi passwords, door and alarm codes, and the narration of your videos.</span></label>
+<label class="check"><input type="checkbox" name="scans" value="1"><span>Also let it <strong>scan spaces</strong> for you and check photos: each scan uses your free scan or is paid from your Space Context balance.</span></label>
 <p class="muted">You can revoke this access at any time from the console (API keys).</p>
 <div class="actions"><button type="submit" name="action" value="deny">Deny</button><button class="primary" type="submit" name="action" value="approve">Approve</button></div>
 </form>

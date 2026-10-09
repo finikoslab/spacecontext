@@ -4,10 +4,14 @@ import type { Env, GrantProps } from './env.js';
 import { consentPage, emailPage, errorPage, page, type SignInProviders } from './html.js';
 
 /** Scopes this server can grant, as advertised in its OAuth metadata. */
-export const SCOPES_SUPPORTED = ['spaces:read', 'spaces:sensitive', 'offline_access'];
+export const SCOPES_SUPPORTED = ['spaces:read', 'spaces:sensitive', 'scans:write', 'offline_access'];
 /** What any access needs: clients ask for it first. */
 export const REQUIRED_SCOPES = ['spaces:read'];
-/** What the API key of a grant may do: read spaces and follow scans. Never write, never spend. */
+/**
+ * What the API key of a grant may do: read spaces and follow scans. Writing
+ * (scans paid from the balance, photo checks) only when the user ticks it on
+ * the consent page: `scans:write` is then added to the key and to the grant.
+ */
 const KEY_SCOPES = ['spaces:read', 'scans:read'];
 
 type VerifyResponse = { session_token: string; user: { id: string; email: string } };
@@ -354,15 +358,16 @@ async function approve(request: Request, env: Env): Promise<Response> {
   try {
     // 2. Consent: the handle works once and only in the browser that opened the page.
     const sensitive = form.sensitive === '1';
+    const scanning = form.scans === '1';
     let approved;
     try {
       approved = await env.OAUTH_PROVIDER.approveConsent(request, handle, {
-        scope: sensitive ? ['spaces:read', 'spaces:sensitive'] : ['spaces:read'],
+        scope: ['spaces:read', ...(sensitive ? ['spaces:sensitive'] : []), ...(scanning ? ['scans:write'] : [])],
       });
     } catch (error) {
       return expired(error);
     }
-    const scopes = sensitive ? [...KEY_SCOPES, 'spaces:sensitive'] : KEY_SCOPES;
+    const scopes = [...KEY_SCOPES, ...(sensitive ? ['spaces:sensitive'] : []), ...(scanning ? ['scans:write'] : [])];
 
     // 3. A key for this grant only, labelled as such in the console.
     key = await backendJson<CreatedKey>(env, '/keys', {

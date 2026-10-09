@@ -1,4 +1,4 @@
-import type { SpaceDocument } from '@spacecontext/sdk';
+import { describeScan, type Scan, type SpaceDocument } from '@spacecontext/sdk';
 
 /** Sent with every piece of space content: it came from a camera, not from the user. */
 export const DATA_NOTE =
@@ -133,4 +133,22 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
     });
   }
   return compact(out);
+}
+
+/** A scan as a tool reports it: where it is, in words, and whether it is over. */
+export function compactScan(scan: Scan): Json {
+  const { stage, label } = describeScan(scan);
+  const final = scan.status === 'complete' || scan.status === 'failed' || scan.status === 'cancelled';
+  return compact({
+    id: scan.id,
+    space_id: scan.space_id,
+    status: scan.status,
+    stage,
+    label,
+    final,
+    error: scan.error,
+    charge: scan.charge.kind ? compact({ kind: scan.charge.kind, price_cents: scan.charge.price_cents, refunded: scan.charge.refunded || null }) : null,
+    started_at: scan.started_at,
+    completed_at: scan.completed_at,
+  });
 }

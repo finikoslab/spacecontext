@@ -5,7 +5,7 @@ description: 'Add the Space Context MCP server to Claude, Claude Code, Cursor, V
 
 # Connect an assistant (MCP)
 
-The Space Context MCP server gives an AI assistant **read-only** access to your spaces: it can list them, search them, read them by section, ask them questions, compare scans and look at the evidence photos. It cannot change, delete or scan anything, and it cannot spend money.
+The Space Context MCP server gives an AI assistant access to your spaces: it can list them, search them, read them by section or as one page, ask them questions, compare scans and look at the evidence photos. By default it is **read-only**: it cannot change, delete or scan anything, and cannot spend money. When you connect, you can also let it **scan spaces** for you (and check photos): each scan then uses your free scan or is paid from your balance, and the assistant can tell you the price first.
 
 **Server URL:**
 
@@ -19,7 +19,7 @@ It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client
 
 1. Your assistant opens a Space Context page in the browser.
 2. You sign in with Apple, with Google, or with your email and the one-time code we send you. It is the same account as the iPhone app.
-3. You choose whether the assistant may also see **sensitive values** (Wi-Fi passwords, door and alarm codes, the narration of your videos). By default it may not.
+3. You choose whether the assistant may also see **sensitive values** (Wi-Fi passwords, door and alarm codes, the narration of your videos), and whether it may **scan spaces** for you. By default it may do neither.
 4. You approve. Space Context creates an API key for this connection only, named after your assistant and marked **MCP** in the [console](../account/api-keys.md).
 
 To disconnect, remove the connector in your assistant, or revoke its key in the console: the assistant is then asked to sign in again on its next request.
@@ -86,6 +86,6 @@ Use the server URL with the client's "remote MCP server" or "custom connector" o
 
 - Space content is returned as **data, never as instructions**, and the server tells the assistant so. Text in a video that tries to address an AI is withheld before it reaches the assistant.
 - Requests count against the same [limits](../limits.md) as API keys. A tool that hits a limit tells the assistant how long to wait instead of hanging.
-- To create a new scan, use the [CLI](../cli/install.md) or the [API](../api/scans.md); then the assistant sees it.
+- To create a new scan, let the assistant do it (tick **scan spaces** when connecting: it creates the scan, tells you where to upload the video, starts it and follows it), or use the [CLI](../cli/install.md) or the [API](../api/scans.md); then the assistant sees it.
 
 Next: [the tools in detail](tools.md).
