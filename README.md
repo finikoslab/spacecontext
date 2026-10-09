@@ -66,6 +66,8 @@ The answer comes only from the space's records. If they don't contain it, `docum
 
 The **demo space** (`spc_demo`) contains two real scans of an apartment in Brisbane: photos at check-in, then a narrated video at check-out. Test keys (`sc_test_…`) can read it for free, with no limit and no payment.
 
+**0. Claude Code plugin.** Once this repository is public: `/plugin marketplace add finikoslab/spacecontext`, then `/plugin install spacecontext@spacecontext` (the MCP server and a Space Context skill; run `/mcp` to sign in).
+
 **1. Connect your assistant (MCP).** In Claude, open **Settings → Connectors → Add custom connector** and paste:
 
 ```text
@@ -139,7 +141,7 @@ When you're ready to scan your own spaces, add a card in the console (nothing is
 | Failed scans | Refunded automatically |
 | Reading, search, questions and frame checks | Included, within the [limits](https://spacecontext.app/developers/docs/limits/) |
 | Spaces scanned with the iPhone app | Readable at no cost |
-| Live keys that can scan | Need a card on file, added in the console; nothing is charged |
+| Live scans, and live keys that can scan | Need a card on file: saved in the console without a charge, or a top-up already paid |
 
 You top up the balance by card through Stripe ($5 to $500 per payment), with optional automatic top-up and a monthly spending cap per key. Every top-up comes with an invoice. See [Billing](https://spacecontext.app/developers/docs/account/billing/).
 

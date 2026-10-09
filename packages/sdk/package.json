@@ -4,7 +4,7 @@
   "description": "TypeScript client for the Space Context API: spaces, scans, search and questions about physical spaces.",
   "license": "MIT",
   "author": "Finikos S.r.l.",
-  "homepage": "https://spacecontext.app/developers",
+  "homepage": "https://spacecontext.app/developers/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/finikoslab/spacecontext.git",

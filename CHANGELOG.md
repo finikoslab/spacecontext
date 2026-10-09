@@ -2,7 +2,17 @@
 
 All packages of this repository share a version.
 
-## 0.2.0 — 2026-10-09
+## 0.2.0 — 2026-10-10
+
+### Before the first publish
+
+- Claude Code plugin marketplace (`.claude-plugin/marketplace.json`, `plugins/spacecontext`): the MCP server and a Space Context skill in one install.
+- Codex: `codex mcp add spacecontext --url https://mcp.spacecontext.app/mcp` documented.
+- Live scans, and live keys that can scan, need a card on file (saved without a charge, or a paid top-up): `PAYMENT_METHOD_REQUIRED` (402) is documented, the MCP consent page offers to add a card or connect read-only, and a live `login` says so.
+- SDK: a dropped event stream reconnects instead of throwing; `require()` works; sources ship in the source maps; LICENSE in every package.
+- CLI: `login --key -` reads the key without echo; an empty `SPACECONTEXT_API_KEY` counts as unset.
+- MCP: Enter on the consent page approves; `create_scan` refuses videos over 100 MB before creating a space; reconnecting revokes only the keys of the grants it replaces.
+
 
 ### SDK (`@spacecontext/sdk`)
 

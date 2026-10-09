@@ -46,6 +46,8 @@ A live key with `scans:write` (one of the default scopes) can be created only on
 
 Without a card, creating such a key answers `402 PAYMENT_METHOD_REQUIRED`, whether you create it in the console, approve it for `spacecontext login` or allow scanning when you connect an assistant. Test keys and live keys without `scans:write` (read-only) never need a card. Removing the card later does not revoke the keys you already have.
 
+The same rule applies when a **live scan starts**, whoever starts it (a key, the console or an assistant): an account with no card saved and no top-up paid gets `402 PAYMENT_METHOD_REQUIRED` and nothing is charged, its free scan included. Test scans never need a card.
+
 ## Monthly spending cap
 
 A live key can have a **monthly cap** in US dollars. Scans that would take the key's spending for the calendar month over the cap are refused with `402 SPENDING_CAP_REACHED`; other keys are not affected. The cap counts what the key spends on scans, not your whole balance.

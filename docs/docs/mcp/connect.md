@@ -51,6 +51,27 @@ claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp
 
 Then run `/mcp` in Claude Code and choose **Authenticate** for `spacecontext`. To give Claude Code a space without a connection, you can also export it as a [skill](../guides/claude-code-skill.md).
 
+Or install the **Space Context plugin**, which adds the same server and a skill that tells Claude how to use it:
+
+```text
+/plugin marketplace add finikoslab/spacecontext
+/plugin install spacecontext@spacecontext
+```
+
+## Codex
+
+```bash
+codex mcp add spacecontext --url https://mcp.spacecontext.app/mcp
+codex mcp login spacecontext
+```
+
+The login opens the browser to sign in and approve. The same in `~/.codex/config.toml` (or a project's `.codex/config.toml`):
+
+```toml
+[mcp_servers.spacecontext]
+url = "https://mcp.spacecontext.app/mcp"
+```
+
 ## ChatGPT
 
 1. Open **Settings → Apps & Connectors → Advanced** and turn on **Developer mode**.

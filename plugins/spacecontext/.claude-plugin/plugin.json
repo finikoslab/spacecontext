@@ -1,0 +1,13 @@
+{
+  "name": "spacecontext",
+  "version": "0.2.0",
+  "description": "Your filmed spaces in Claude: inventory by room, key locations, how-tos, issues and photo evidence. Ask, search and compare scans through the Space Context MCP server (OAuth sign-in; read-only unless you allow scanning).",
+  "author": {
+    "name": "Space Context (Finikos S.r.l.)",
+    "url": "https://spacecontext.app/developers/"
+  },
+  "homepage": "https://spacecontext.app/developers/docs/mcp/connect/",
+  "repository": "https://github.com/finikoslab/spacecontext",
+  "license": "MIT",
+  "keywords": ["mcp", "spaces", "inventory", "property", "check-in", "check-out", "video", "context"]
+}

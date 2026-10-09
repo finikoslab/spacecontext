@@ -1,0 +1,19 @@
+{
+  "name": "spacecontext",
+  "owner": {
+    "name": "Space Context (Finikos S.r.l.)",
+    "url": "https://spacecontext.app/developers/"
+  },
+  "metadata": {
+    "description": "Space Context for Claude Code: the context layer for the physical world."
+  },
+  "plugins": [
+    {
+      "name": "spacecontext",
+      "source": "./plugins/spacecontext",
+      "description": "Your filmed spaces in Claude: inventory by room, key locations, how-tos, issues and photo evidence; ask, search and compare scans through the Space Context MCP server.",
+      "category": "productivity",
+      "keywords": ["mcp", "spaces", "inventory", "property", "check-in", "check-out", "video", "context"]
+    }
+  ]
+}

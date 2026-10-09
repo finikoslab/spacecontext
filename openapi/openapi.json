@@ -1433,7 +1433,7 @@
       "post": {
         "operationId": "startScan",
         "summary": "Charge the scan and start the analysis",
-        "description": "Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`. Test keys are never charged and get the demo result. Needs `scans:write`.",
+        "description": "Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `PAYMENT_METHOD_REQUIRED` (a live scan needs a card on file: added in the console, nothing charged), `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`. Test keys are never charged and get the demo result. Needs `scans:write`.",
         "security": [
           {
             "apiKey": []

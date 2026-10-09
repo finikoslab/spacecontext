@@ -80,6 +80,6 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 | --- | --- | --- |
 | `INVALID_CREDENTIALS` | 401 | Wrong or expired sign-in code. |
 | `SIGN_IN_UNAVAILABLE` | 503 | That sign-in provider is not configured on this deployment. |
-| `PAYMENT_METHOD_REQUIRED` | 402 | Creating a live key with `scans:write` (`POST /keys`, or approving a terminal sign-in) needs a card on file: add one under **Billing → Add a card** (nothing is charged), or create a test key or a key without `scans:write`. Connecting an assistant with scanning allowed shows the same choice. |
+| `PAYMENT_METHOD_REQUIRED` | 402 | Starting a live scan (`POST /scans/{id}/start`) or creating a live key with `scans:write` (`POST /keys`, or approving a terminal sign-in) needs a card on file (or a top-up already paid): add one under **Billing → Add a card** (nothing is charged), or create a test key or a key without `scans:write`. Connecting an assistant with scanning allowed shows the same choice. |
 | `PAYMENTS_UNAVAILABLE` | 503 | Card payments are temporarily unavailable. |
 | `PAYMENT_FAILED` | 502 | Stripe could not create the payment page; try again. |
