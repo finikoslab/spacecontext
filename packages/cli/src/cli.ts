@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { describeScan, SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { describeScan, deviceSignIn, SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { spawn } from 'node:child_process';
+import { hostname } from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { clearConfig, configDirectory, readConfig, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
@@ -13,9 +15,11 @@ export type Io = {
   stderr: (text: string) => void;
   env: Record<string, string | undefined>;
   cwd: string;
-  /** Reads a line typed by the user (the API key on login). Null when there is no terminal. */
+  /** Reads a line typed by the user. Null when there is no terminal. */
   prompt: ((question: string) => Promise<string>) | null;
   fetch?: typeof fetch;
+  /** Opens a URL in the browser (device sign-in). Null never opens one; undefined uses the system opener. */
+  openBrowser?: ((url: string) => void) | null;
 };
 
 const SPACE_TYPES: SpaceType[] = ['apartment', 'house', 'office', 'warehouse', 'vehicle', 'boat', 'camper', 'shop', 'garage', 'appliance', 'other'];
@@ -25,7 +29,9 @@ const HELP = `spacecontext ${VERSION} — the context layer for the physical wor
 Usage: spacecontext <command> [options]
 
 Account
-  login [--key sc_…]            Save an API key (from the console) for this computer
+  login [--key sc_…] [--test] [--no-browser]
+                                Sign in: approve a code in the console (opens the
+                                browser), or save a key you already have
   logout                        Forget the saved key
   whoami                        Show the account, mode and scopes of the key
   wallet                        Show the prepaid balance and the free scans left
@@ -87,6 +93,8 @@ const OPTIONS = {
   'no-wait': { type: 'boolean' },
   format: { type: 'string' },
   follow: { type: 'boolean' },
+  test: { type: 'boolean' },
+  'no-browser': { type: 'boolean' },
 } satisfies ParseArgsConfig['options'];
 
 type Values = { [K in keyof typeof OPTIONS]?: (typeof OPTIONS)[K]['type'] extends 'boolean' ? boolean : string };
@@ -204,14 +212,43 @@ async function exportMarkdown(context: Context, sc: SpaceContext, id: string, pa
 
 // ------------------------------------------------------------------ commands
 
+/** Opens a URL in the person's browser, best effort: a failure only means they open it themselves. */
+function openBrowser(url: string): void {
+  const [command, args] =
+    process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
+  try {
+    spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => undefined).unref();
+  } catch {
+    // Nothing: the link is printed anyway.
+  }
+}
+
 async function login(context: Context): Promise<void> {
   const { io, values } = context;
+  // Only a base URL given explicitly is saved with the key (see `client`).
+  const baseUrl = values['base-url'];
+  const requestBase = baseUrl ?? io.env.SPACECONTEXT_BASE_URL;
   let key = values.key ?? values['api-key'];
   if (!key) {
-    if (!io.prompt) throw new UsageError('Pass the key with --key (create one in the console)');
-    key = (await io.prompt('API key (sc_live_… or sc_test_…): ')).trim();
+    // Device sign-in: a code to approve in the console; the key comes back here, never through the browser.
+    const signedIn = await deviceSignIn({
+      name: `CLI on ${hostname()}`,
+      mode: values.test ? 'test' : 'live',
+      ...(requestBase ? { baseUrl: requestBase } : {}),
+      ...(io.fetch ? { fetch: io.fetch } : {}),
+      onCode: ({ userCode, verificationUrl, expiresIn }) => {
+        io.stderr(`\nOpen ${verificationUrl}\nand enter this code:  ${userCode}\n\n(valid for ${Math.round(expiresIn / 60)} minutes; approve only a code you see here)\n`);
+        if (!values['no-browser'] && io.openBrowser !== null) (io.openBrowser ?? openBrowser)(verificationUrl);
+        io.stderr('Waiting for your approval…\n');
+      },
+    });
+    key = signedIn.api_key;
+    const file = await writeConfig(configDirectory(io.env), { apiKey: key, ...(baseUrl ? { baseUrl } : {}) });
+    print(io, values, { user: signedIn.user, key: signedIn.key }, () =>
+      `Logged in as ${signedIn.user.email} with a ${signedIn.key.mode} key (${signedIn.key.scopes.join(', ')}).\nSaved in ${file}\n`
+    );
+    return;
   }
-  const baseUrl = values['base-url'];
   const sc = new SpaceContext({ apiKey: key, ...(baseUrl ? { baseUrl } : {}), ...(io.fetch ? { fetch: io.fetch } : {}) });
   const me = await sc.me();
   const file = await writeConfig(configDirectory(io.env), { apiKey: key, ...(baseUrl ? { baseUrl } : {}) });

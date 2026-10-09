@@ -2338,6 +2338,280 @@
         }
       }
     },
+    "/auth/device": {
+      "post": {
+        "operationId": "startDeviceSignIn",
+        "summary": "Start a device sign-in (the CLI)",
+        "description": "A terminal that has no browser session asks for a code. It shows `user_code` and `verification_url` to the person, who opens the console and types the code (never a link with the code in it: a link could be sent by someone else to get their terminal approved), then polls `POST /auth/device/token` with `device_code` every `interval` seconds. The code lives `expires_in` seconds. Public; limited per IP.",
+        "security": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Codes for the terminal and the person",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceStart"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/auth/device/token": {
+      "post": {
+        "operationId": "claimDeviceSignIn",
+        "summary": "Poll a device sign-in",
+        "description": "Answers 400 `AUTHORIZATION_PENDING` until the person decides, 400 `SLOW_DOWN` when polled faster than `interval`, 400 `DEVICE_CODE_EXPIRED` after ten minutes, 403 `ACCESS_DENIED` when denied, and the new API key exactly once when approved. Public.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The key, once",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/auth/device/{user_code}": {
+      "get": {
+        "operationId": "getDeviceSignIn",
+        "summary": "What a device sign-in code asks for",
+        "description": "For the console page that approves a code: the name the terminal gave (a claim, not a fact), the mode it asked for, when it started and when the code expires. The page should tell the person to approve only a code they are looking at in their own terminal right now.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_code",
+            "in": "path",
+            "required": true,
+            "description": "The code shown by the terminal, e.g. `BCDF-2345` (case and hyphen do not matter).",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 9
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/auth/device/{user_code}/approve": {
+      "post": {
+        "operationId": "approveDeviceSignIn",
+        "summary": "Approve a device sign-in",
+        "description": "Creates an API key for the signed-in account (scopes, mode and monthly cap as given, like `POST /keys`) and hands it to the terminal on its next poll. The key is never shown here. 409 `INVALID_STATE` when the code was already decided.",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_code",
+            "in": "path",
+            "required": true,
+            "description": "The code shown by the terminal, e.g. `BCDF-2345` (case and hyphen do not matter).",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 9
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approved",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceApproved"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/auth/device/{user_code}/deny": {
+      "post": {
+        "operationId": "denyDeviceSignIn",
+        "summary": "Deny a device sign-in",
+        "security": [
+          {
+            "consoleSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_code",
+            "in": "path",
+            "required": true,
+            "description": "The code shown by the terminal, e.g. `BCDF-2345` (case and hyphen do not matter).",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 9
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "denied"
+                  ],
+                  "properties": {
+                    "denied": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
     "/webhook-endpoints": {
       "get": {
         "operationId": "listWebhookEndpoints",
@@ -7206,6 +7480,261 @@
             "maxItems": 3,
             "items": {
               "$ref": "#/components/schemas/SpaceEvidenceRef"
+            }
+          }
+        }
+      },
+      "DeviceStartRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "What is asking, shown to the person: \"CLI on MacBook\". Default \"CLI\"."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ],
+            "description": "The mode of the key asked for (the person can change it). Default live."
+          }
+        }
+      },
+      "DeviceStart": {
+        "type": "object",
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_url",
+          "expires_in",
+          "interval"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string",
+            "description": "The terminal's secret: never shown to the person."
+          },
+          "user_code": {
+            "type": "string",
+            "example": "BCDF-2345"
+          },
+          "verification_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The console page where the person types the code."
+          },
+          "expires_in": {
+            "type": "integer"
+          },
+          "interval": {
+            "type": "integer",
+            "description": "Seconds between polls."
+          }
+        }
+      },
+      "DeviceTokenRequest": {
+        "type": "object",
+        "required": [
+          "device_code"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string"
+          }
+        }
+      },
+      "DeviceToken": {
+        "type": "object",
+        "required": [
+          "api_key",
+          "key",
+          "user"
+        ],
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "description": "The new key: shown once, store it."
+          },
+          "key": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "mode",
+              "prefix",
+              "scopes",
+              "monthly_cap_cents",
+              "created_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "live",
+                  "test"
+                ]
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "monthly_cap_cents": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": "string"
+              }
+            }
+          },
+          "user": {
+            "$ref": "#/components/schemas/ConsoleUser"
+          }
+        }
+      },
+      "DeviceRequest": {
+        "type": "object",
+        "required": [
+          "user_code",
+          "name",
+          "mode",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "user_code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "denied",
+              "claimed"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        }
+      },
+      "DeviceApproveRequest": {
+        "type": "object",
+        "properties": {
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "spaces:read",
+                "scans:read",
+                "scans:write",
+                "spaces:sensitive"
+              ]
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ]
+          },
+          "monthly_cap_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "DeviceApproved": {
+        "type": "object",
+        "required": [
+          "approved",
+          "key"
+        ],
+        "properties": {
+          "approved": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "key": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "mode",
+              "prefix",
+              "scopes",
+              "monthly_cap_cents",
+              "created_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "live",
+                  "test"
+                ]
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "monthly_cap_cents": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": "string"
+              }
             }
           }
         }

@@ -709,6 +709,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a device sign-in (the CLI)
+         * @description A terminal that has no browser session asks for a code. It shows `user_code` and `verification_url` to the person, who opens the console and types the code (never a link with the code in it: a link could be sent by someone else to get their terminal approved), then polls `POST /auth/device/token` with `device_code` every `interval` seconds. The code lives `expires_in` seconds. Public; limited per IP.
+         */
+        post: operations["startDeviceSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/device/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Poll a device sign-in
+         * @description Answers 400 `AUTHORIZATION_PENDING` until the person decides, 400 `SLOW_DOWN` when polled faster than `interval`, 400 `DEVICE_CODE_EXPIRED` after ten minutes, 403 `ACCESS_DENIED` when denied, and the new API key exactly once when approved. Public.
+         */
+        post: operations["claimDeviceSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/device/{user_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a device sign-in code asks for
+         * @description For the console page that approves a code: the name the terminal gave (a claim, not a fact), the mode it asked for, when it started and when the code expires. The page should tell the person to approve only a code they are looking at in their own terminal right now.
+         */
+        get: operations["getDeviceSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/device/{user_code}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a device sign-in
+         * @description Creates an API key for the signed-in account (scopes, mode and monthly cap as given, like `POST /keys`) and hands it to the terminal on its next poll. The key is never shown here. 409 `INVALID_STATE` when the code was already decided.
+         */
+        post: operations["approveDeviceSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/device/{user_code}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deny a device sign-in */
+        post: operations["denyDeviceSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhook-endpoints": {
         parameters: {
             query?: never;
@@ -1749,6 +1846,77 @@ export interface components {
             /** @description The highest probability over the frames. */
             probability: number;
             evidence: components["schemas"]["SpaceEvidenceRef"][];
+        };
+        DeviceStartRequest: {
+            /** @description What is asking, shown to the person: "CLI on MacBook". Default "CLI". */
+            name?: string;
+            /**
+             * @description The mode of the key asked for (the person can change it). Default live.
+             * @enum {string}
+             */
+            mode?: "live" | "test";
+        };
+        DeviceStart: {
+            /** @description The terminal's secret: never shown to the person. */
+            device_code: string;
+            /** @example BCDF-2345 */
+            user_code: string;
+            /**
+             * Format: uri
+             * @description The console page where the person types the code.
+             */
+            verification_url: string;
+            expires_in: number;
+            /** @description Seconds between polls. */
+            interval: number;
+        };
+        DeviceTokenRequest: {
+            device_code: string;
+        };
+        DeviceToken: {
+            /** @description The new key: shown once, store it. */
+            api_key: string;
+            key: {
+                id: string;
+                name: string;
+                /** @enum {string} */
+                mode: "live" | "test";
+                prefix: string;
+                scopes: string[];
+                monthly_cap_cents: number | null;
+                created_at: string;
+            };
+            user: components["schemas"]["ConsoleUser"];
+        };
+        DeviceRequest: {
+            user_code: string;
+            name: string;
+            /** @enum {string} */
+            mode: "live" | "test";
+            /** @enum {string} */
+            status: "pending" | "approved" | "denied" | "claimed";
+            created_at: string;
+            expires_at: string;
+        };
+        DeviceApproveRequest: {
+            scopes?: ("spaces:read" | "scans:read" | "scans:write" | "spaces:sensitive")[];
+            /** @enum {string} */
+            mode?: "live" | "test";
+            monthly_cap_cents?: number | null;
+        };
+        DeviceApproved: {
+            /** @enum {boolean} */
+            approved: true;
+            key: {
+                id: string;
+                name: string;
+                /** @enum {string} */
+                mode: "live" | "test";
+                prefix: string;
+                scopes: string[];
+                monthly_cap_cents: number | null;
+                created_at: string;
+            };
         };
         WebhookEndpointCreateRequest: {
             /** Format: uri */
@@ -3058,6 +3226,151 @@ export interface operations {
             415: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
             503: components["responses"]["ErrorResponse"];
+        };
+    };
+    startDeviceSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeviceStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Codes for the terminal and the person */
+            201: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceStart"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    claimDeviceSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description The key, once */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceToken"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getDeviceSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The code shown by the terminal, e.g. `BCDF-2345` (case and hyphen do not matter). */
+                user_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceRequest"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    approveDeviceSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The code shown by the terminal, e.g. `BCDF-2345` (case and hyphen do not matter). */
+                user_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeviceApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceApproved"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    denyDeviceSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The code shown by the terminal, e.g. `BCDF-2345` (case and hyphen do not matter). */
+                user_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Denied */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        denied: true;
+                    };
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listWebhookEndpoints: {

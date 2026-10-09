@@ -125,6 +125,46 @@ describe('spacecontext CLI', () => {
     expect(await main(['whoami'], h.io)).toBe(2);
   });
 
+  it('signs in with a code approved in the console, opening the browser once', async () => {
+    let polls = 0;
+    const h = harness([
+      (call) => (call.method === 'POST' && call.path === '/auth/device' ? json({ device_code: `scd_${'a'.repeat(43)}`, user_code: 'BCDF-2345', verification_url: 'https://spacecontext.example/developers/console/authorize/', expires_in: 600, interval: 0 }, 201) : undefined),
+      (call) =>
+        call.method === 'POST' && call.path === '/auth/device/token'
+          ? polls++ < 1
+            ? json({ error: { code: 'AUTHORIZATION_PENDING', message: 'Waiting', request_id: 'r', interval: 0 } }, 400)
+            : json({ api_key: KEY, key: { id: 'key_1', name: 'CLI · CLI on mac', mode: 'test', prefix: KEY.slice(0, 12), scopes: ['spaces:read', 'scans:read'], monthly_cap_cents: null, created_at: '2026-10-09T10:00:00.000Z' }, user: { id: 'u1', email: 'dev@example.com', name: null, is_pro: false } })
+          : undefined,
+      me,
+    ]);
+    const opened: string[] = [];
+    h.io.openBrowser = (url) => opened.push(url);
+
+    expect(await main(['login', '--test'], h.io)).toBe(0);
+    expect(JSON.parse(String(h.calls[0]!.body))).toMatchObject({ mode: 'test', name: expect.stringMatching(/^CLI on /) });
+    expect(h.stderr()).toContain('enter this code:  BCDF-2345');
+    expect(h.stderr()).toContain('https://spacecontext.example/developers/console/authorize/');
+    expect(h.stderr()).not.toContain('code=BCDF');
+    expect(opened).toEqual(['https://spacecontext.example/developers/console/authorize/']);
+    expect(h.stdout()).toContain('Logged in as dev@example.com with a test key (spaces:read, scans:read)');
+    // The base URL came from the environment, not from --base-url: it is not saved with the key.
+    expect(JSON.parse(await readFile(path.join(directory, 'config', 'config.json'), 'utf8'))).toEqual({ apiKey: KEY });
+    expect(await main(['whoami'], h.io)).toBe(0);
+    expect(await main(['logout'], h.io)).toBe(0);
+
+    // Denied in the console: nothing saved, nothing opened with --no-browser.
+    const denied = harness([
+      (call) => (call.method === 'POST' && call.path === '/auth/device' ? json({ device_code: `scd_${'b'.repeat(43)}`, user_code: 'GHJK-6789', verification_url: 'https://spacecontext.example/developers/console/authorize/', expires_in: 600, interval: 0 }, 201) : undefined),
+      (call) => (call.method === 'POST' && call.path === '/auth/device/token' ? json({ error: { code: 'ACCESS_DENIED', message: 'Denied', request_id: 'r' } }, 403) : undefined),
+    ]);
+    const openedDenied: string[] = [];
+    denied.io.openBrowser = (url) => openedDenied.push(url);
+    expect(await main(['login', '--no-browser'], denied.io)).toBe(1);
+    expect(denied.stderr()).toContain('Error [ACCESS_DENIED]');
+    expect(openedDenied).toEqual([]);
+    await expect(readFile(path.join(directory, 'config', 'config.json'))).rejects.toThrow();
+  });
+
   it('does not save a key the API refuses', async () => {
     const h = harness([() => json({ error: { code: 'INVALID_TOKEN', message: 'Invalid token', request_id: 'req_9' } }, 401)]);
     expect(await main(['login', '--key', KEY], h.io)).toBe(1);
