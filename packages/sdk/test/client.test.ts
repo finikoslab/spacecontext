@@ -296,7 +296,11 @@ describe('SpaceContext client', () => {
   it('waits for a scan to finish, and gives up at the deadline', async () => {
     vi.useFakeTimers();
     const statuses: Scan['status'][] = ['queued', 'processing', 'complete'];
-    const { fetch } = fakeFetch((_call, index) => json(scan({ status: statuses[Math.min(index, 2)]!, upload: null })));
+    // The API cannot stream here (a proxy answers JSON to the event request): the client polls.
+    let polls = 0;
+    const { fetch } = fakeFetch((call) =>
+      call.url.endsWith('/events') ? json(scan({ status: 'queued', upload: null })) : json(scan({ status: statuses[Math.min(polls++, 2)]!, upload: null }))
+    );
     const seen: string[] = [];
     const done = client(fetch).scans.wait('scn_1', { intervalMs: 1000, onProgress: (current) => seen.push(current.status) });
     await vi.runAllTimersAsync();

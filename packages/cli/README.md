@@ -19,12 +19,13 @@ npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 | `search <question…> [--space id] [--limit n]` | Search every space |
 | `ask <space-id> <question…>` | A short answer with its sources |
 | `skill <space-id> [--out dir] [--transcript]` | Write the space as an Agent Skill folder |
+| `markdown <space-id> [--out file] [--transcript]` | The space as one Markdown page |
 | `scans <space-id>` | The scan history of a space |
 | `diff <space-id> --from <scan> [--to <scan>]` | What changed between two scans |
 | `delete-space <space-id>` | Delete a space created through the API, with its scans |
-| `scan <video\|frames-dir> (--space id \| --name …)` | Upload (`.mp4 .mov .m4v` up to 500 MB, or a folder of up to 120 `.jpg .png .webp` of 2 MB each), analyse, wait |
+| `scan <video\|frames-dir> (--space id \| --name …) [--format text\|json\|markdown\|skill] [--out path]` | Upload (`.mp4 .mov .m4v` up to 500 MB, or a folder of up to 120 `.jpg .png .webp` of 2 MB each), follow the analysis live, print the result in the format you want |
 | `check <image\|frames-dir>` | Before a scan: which frames are usable, and which key locations (fuse box, stopcock, boiler…) they show |
-| `scan-status <scan-id>` | Where a scan is |
+| `scan-status <scan-id> [--follow]` | Where a scan is; `--follow` prints every change until it ends |
 | `cancel <scan-id>` | Cancel a scan that has not started; nothing is charged |
 
 Every command accepts `--json`, `--api-key` and `--base-url`. The key is read from `--api-key`, then `SPACECONTEXT_API_KEY`, then the file written by `login` (`~/.config/spacecontext/config.json`, readable by you only); a base URL saved by `login` is used only with the key saved with it. `login` does not echo the key you paste. Exit codes: `0` success, `1` failure, `2` wrong usage.

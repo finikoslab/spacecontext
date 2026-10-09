@@ -30,6 +30,10 @@ description: 'Export a space as an Agent Skill, and compare two scans of a space
 
 Write the files to a folder and point your agent at it; the CLI does it for you: `spacecontext skill <id> --out <dir>`. See [Use a space in Claude Code](../guides/claude-code-skill.md).
 
+## One Markdown page
+
+`GET /spaces/{id}/markdown` returns the whole space as a single readable page (`text/markdown`): the summary, every area with its items, issues, key locations and how-to steps, then facts, Q&A, coverage and the recording. Paste it in a ticket, hand it to a model as context, or save it (`spacecontext markdown <id> --out flat.md`). It follows the same rules as the Skill: built from exactly the document the key may read, never with image links, `include=transcript` with `spaces:sensitive` only, and 409 `ENRICHMENT_PENDING` for a restricted key until the space is screened.
+
 ## Compare two scans
 
 ```bash

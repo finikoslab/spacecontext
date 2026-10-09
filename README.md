@@ -21,7 +21,8 @@ A **Space Document** (JSON, versioned schema): areas with type, level and condit
 - **Search** across all your spaces, in any language (`GET /v1/search`).
 - **Answers with citations** (`POST /v1/spaces/{id}/ask`), saying "not documented" instead of guessing.
 - **Comparisons** between two scans: items added, removed, moved, issues new or resolved.
-- **Agent Skills**: a folder with `SKILL.md`, `space.json` and reference files, for any agent that reads skills.
+- **Agent Skills**: a folder with `SKILL.md`, `space.json` and reference files, for any agent that reads skills; or the whole space as **one Markdown page** (`GET /v1/spaces/{id}/markdown`).
+- **Real-time progress**: every scan is followed as an event stream (`GET /v1/scans/{id}/events`), by the SDK, the CLI and the MCP server.
 - **Guided capture** (`POST /v1/frames/check`): one frame checked in about half a second while filming: usable or not, and which key locations (fuse box, stopcock, boiler, smoke detector…) it shows. Every scan runs the same check: unusable frames are left out, footage with nothing usable is refused before it is charged, and `coverage.checklist` says which key locations the recording did not film.
 
 Text captured in a space is always treated as data: sentences addressed to an AI ("ignore your instructions…") are withheld before any model or agent reads them.
@@ -41,8 +42,9 @@ npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 import { SpaceContext } from '@spacecontext/sdk';
 
 const sc = new SpaceContext(); // reads SPACECONTEXT_API_KEY
-const { data } = await sc.search('spare light bulbs');
-const answer = await sc.spaces.ask(data[0].space_id, 'Where are the spare bulbs?');
+const { spaceId, document } = await sc.scan('./tour.mp4', { name: 'Seaside flat', onProgress: (p) => console.log(p.type) });
+const answer = await sc.spaces.ask(spaceId, 'Where are the spare bulbs?');
+const page = await sc.spaces.markdown(spaceId); // the whole space as one page
 ```
 
 **MCP:** add `https://mcp.spacecontext.finikos.it/mcp` as a custom connector in Claude (or any MCP client that supports OAuth). You sign in with your Space Context email and choose whether the assistant may see sensitive values.

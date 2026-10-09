@@ -53,23 +53,25 @@ Sources:
 
 ```bash
 spacecontext skill <space-id> [--out <dir>] [--transcript]
+spacecontext markdown <space-id> [--out <file>] [--transcript]
 spacecontext scans <space-id>
 spacecontext diff <space-id> --from <scan-id> [--to <scan-id>]
 ```
 
-`skill` writes the space as an Agent Skill folder (default: a folder named after the skill in the current directory). `scans` lists the scan history; `diff` compares two of them (`--to` defaults to the current scan) and prints what changed, keeping what is confirmed gone apart from what the later scan did not show ([why](../api/skills-and-diff.md#gone-or-just-not-filmed)).
+`skill` writes the space as an Agent Skill folder (default: a folder named after the skill in the current directory). `markdown` prints the space as one readable page (or writes it with `--out`), to paste into a ticket or hand to a model as context. `scans` lists the scan history; `diff` compares two of them (`--to` defaults to the current scan) and prints what changed, keeping what is confirmed gone apart from what the later scan did not show ([why](../api/skills-and-diff.md#gone-or-just-not-filmed)).
 
 ## Scans
 
 `spacecontext check <image|frames-dir>` checks images before a scan: which are usable, and which key locations (fuse box, stopcock, boiler, smoke detector…) they show, so what is missing can be filmed before paying for a scan. Free; needs `scans:write`. With `--json`, every frame's answer and a summary.
 
 ```bash
-spacecontext scan <video-file | frames-dir> (--space <space-id> | --name <name>) [--type <type>] [--language en|it] [--no-wait]
-spacecontext scan-status <scan-id>
+spacecontext scan <video-file | frames-dir> (--space <space-id> | --name <name>) [--type <type>] [--language en|it]
+                  [--format text|json|markdown|skill] [--out <path>] [--no-wait]
+spacecontext scan-status <scan-id> [--follow]
 spacecontext cancel <scan-id>
 ```
 
-`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 500 MB) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order), starts the analysis and waits for it, printing each stage. With `--name` it first creates a space (`--type` is one of `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance`, `other`). With `--no-wait` it returns once the scan has started.
+`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 500 MB) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order), starts the analysis and follows it live, printing each stage in words (`Reading the video`, `Looking at the frames`, `Extracting the context`…). With `--name` it first creates a space (`--type` is one of `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance`, `other`); with `--space` it scans an existing space again, and the new scan is checked against the previous one. `--format` chooses what to print when it is done: a summary (`text`), the whole document (`json`), one Markdown page (`markdown`, to stdout or `--out <file>`) or an Agent Skill folder (`skill`, written to `--out <dir>`). With `--no-wait` it returns once the scan has started; `scan-status --follow` picks it up again and prints every change until the end.
 
 Sizes are checked before anything is created. If an upload fails, the scan is cancelled (nothing is charged); a space created with `--name` stays, and the CLI tells you its id.
 

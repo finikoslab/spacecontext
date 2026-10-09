@@ -19,6 +19,24 @@ const sc = new SpaceContext({ apiKey: process.env.SPACECONTEXT_API_KEY });
 
 `apiKey` defaults to `SPACECONTEXT_API_KEY`, `baseUrl` to `SPACECONTEXT_BASE_URL` then the production API. `sc.mode` tells whether the key is `test` or `live`.
 
+## One call
+
+From a video to the space's document, following the analysis as it runs:
+
+```ts
+const { document, markdown } = await sc.scan('./flat.mp4', {
+  name: 'Seaside flat',
+  type: 'apartment',
+  format: 'markdown',                       // also 'skill'; the document is always returned
+  onProgress: (p) => console.log(p.type === 'scan' ? p.label : p.type),
+});
+
+console.log(document.items.length, 'items');
+console.log(markdown);                      // one readable page of the whole space
+```
+
+`scan()` takes a path (a video, an image, or a folder of photos; Node only), a `Blob`/`File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts, streams the scan's events (`space_created`, `uploading`, `started`, one `scan` per stage with a label, `complete`) and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` when asked. A scan that fails throws a `SpaceContextError` whose `code` is the scan's error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`; nothing is charged.
+
 ## Reading
 
 ```ts
@@ -48,9 +66,23 @@ const scan = await sc.scans.fromVideo(space.id, { data: await openAsBlob('flat.m
 
 const done = await sc.scans.wait(scan.id, { onProgress: (s) => console.log(s.status, s.stage) });
 if (done.status !== 'complete') throw new Error(done.error?.message);
+
+// Or every change as it happens, as an async iterator:
+for await (const current of sc.scans.events(scan.id)) console.log(describeScan(current).label);
 ```
 
+`wait` and `events` follow the API's event stream (`GET /scans/{id}/events`), reconnecting if it ends early, and poll every `intervalMs` only where streaming is not possible. `describeScan(scan)` turns a status and stage into a label (`Looking at the frames`, `Extracting the context`…).
+
 If an upload fails, `fromVideo` and `fromFrames` cancel the scan (nothing is charged) and throw. The lower-level calls are there too: `scans.create`, `scans.uploadFrame`, `scans.uploadVideo`, `scans.start`, `scans.get`, `scans.cancel`.
+
+## Exports
+
+```ts
+const page = await sc.spaces.markdown('spc_…');                 // one Markdown page, text
+const skill = await sc.spaces.skill('spc_…');                   // { name, files: [{ path, content }] }
+```
+
+Both are built from exactly the document the key may read: a key without `spaces:sensitive` gets them redacted, and 409 `ENRICHMENT_PENDING` until the space is screened.
 
 ## Errors
 
@@ -86,4 +118,4 @@ See [all error codes](../api/errors.md).
 
 ## Types
 
-Every schema of the contract is exported: `SpaceDocument`, `SpaceSummary`, `Scan`, `SearchResults`, `SpaceAnswer`, `SkillBundle`, `SpaceDiff`, `Wallet`, and the raw `components`, `paths` and `operations` from the OpenAPI document.
+Every schema of the contract is exported: `SpaceDocument`, `SpaceSummary`, `Scan`, `SearchResults`, `SpaceAnswer`, `SkillBundle`, `SpaceDiff`, `Wallet`, `FrameCheck`, and the raw `components`, `paths` and `operations` from the OpenAPI document; `ScanSource`, `ScanOptions`, `ScanProgress` and `ScanResult` describe `scan()`.

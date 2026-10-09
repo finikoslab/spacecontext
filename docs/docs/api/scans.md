@@ -5,7 +5,7 @@ description: 'Create a space, declare a scan, upload a video or photos, start it
 
 # Scans
 
-A scan goes through four calls: **create**, **upload**, **start**, then **follow** it (polling or [webhooks](webhooks.md)).
+A scan goes through four calls: **create**, **upload**, **start**, then **follow** it (an event stream, polling, or [webhooks](webhooks.md)). The [SDK](../sdk/typescript.md) does all of it in one call, `sc.scan()`.
 
 ```bash
 API=https://api.spacecontext.finikos.it/v1
@@ -93,10 +93,25 @@ curl -X POST $API/scans/scn_8a…/start -H "$AUTH" -H "Content-Type: application
 ## 5. Follow
 
 ```bash
-curl $API/scans/scn_8a… -H "$AUTH"
+curl -N $API/scans/scn_8a…/events -H "$AUTH"      # live, as Server-Sent Events
+curl $API/scans/scn_8a… -H "$AUTH"                 # or one look
 ```
 
-`status` moves through `queued`, `processing` (with `stage`: `ingesting`, `screening`, `observing`, `fusing`, `enriching`, `saving`) to `complete`, or `failed` with `error` and `charge.refunded: true`. Poll every few seconds, or subscribe to `scan.completed` and `scan.failed`.
+`status` moves through `queued`, `processing` (with `stage`: `ingesting`, `screening`, `observing`, `fusing`, `enriching`, `saving`) to `complete`, or `failed` with `error` and `charge.refunded: true`.
+
+`GET /scans/{id}/events` is a `text/event-stream`: it sends the scan at once as an event named `scan` (the same JSON as `GET /scans/{id}`, without `upload`), then again at every change of status, stage or error, and closes after the final state. A `ping` event every 15 seconds keeps the connection alive; one stream lasts at most 30 minutes, after which you reconnect. Nothing to poll, nothing to miss:
+
+```text
+event: scan
+id: 1
+data: {"object":"scan","id":"scn_8a…","status":"queued",…}
+
+event: scan
+id: 2
+data: {"object":"scan","id":"scn_8a…","status":"processing","stage":"observing",…}
+```
+
+Polling `GET /scans/{id}` every few seconds works too, and so do the `scan.completed` and `scan.failed` [webhooks](webhooks.md) for servers that must not hold a connection.
 
 **Screening.** Before the analysis, every frame is checked once: is it usable, does it show a place, and which key locations does it show. Blurred, dark or covered frames are left out, and the sharpest frame of each part of the video is the one analysed. Footage with no usable frame at all fails with `FOOTAGE_UNUSABLE` and is refunded. What the frames showed becomes `coverage.checklist` in the document. To check frames while filming, before a scan, see [Guided capture](../guides/guided-capture.md).
 
@@ -110,10 +125,13 @@ Then read the space: `GET /spaces/spc_3f…` returns its [Space Document](space-
 
 ```ts
 import { SpaceContext } from '@spacecontext/sdk';
-import { openAsBlob } from 'node:fs';
 
 const sc = new SpaceContext();
-const space = await sc.spaces.create({ name: 'Seaside flat', space_type: 'apartment' });
-const scan = await sc.scans.fromVideo(space.id, { data: await openAsBlob('flat.mp4'), contentType: 'video/mp4' });
-const done = await sc.scans.wait(scan.id);
+const { spaceId, document } = await sc.scan('./flat.mp4', {
+  name: 'Seaside flat',
+  type: 'apartment',
+  onProgress: (p) => console.log(p.type === 'scan' ? p.label : p.type),
+});
 ```
+
+One call creates the space, uploads, starts, follows the event stream and returns the document (`format: 'markdown'` or `'skill'` adds the export). The steps are also available one by one: `spaces.create`, `scans.fromVideo` / `scans.fromFrames`, `scans.events` / `scans.wait`.

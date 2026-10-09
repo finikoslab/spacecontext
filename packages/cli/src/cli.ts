@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { describeScan, SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { writeFile } from 'node:fs/promises';
 import { clearConfig, configDirectory, readConfig, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
 import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
@@ -37,6 +38,8 @@ Spaces
   ask <space-id> <question…>    Ask a space a question, answered with citations
   skill <space-id> [--out dir] [--transcript]
                                 Export a space as an Agent Skill folder
+  markdown <space-id> [--out file] [--transcript]
+                                Export a space as one Markdown page
   scans <space-id>              The scan history of a space
   diff <space-id> --from <scan-id> [--to <scan-id>]
                                 What changed between two scans
@@ -44,12 +47,14 @@ Spaces
 
 Scans
   scan <video|frames-dir> (--space <id> | --name <name> [--type <type>])
-       [--language en|it] [--no-wait]
-                                Upload a video (.mp4 .mov .m4v) or a folder of
-                                frames, analyse it, and wait for the result
+       [--language en|it] [--format text|json|markdown|skill] [--out <path>]
+       [--no-wait]              Upload a video (.mp4 .mov .m4v) or a folder of
+                                frames, follow the analysis live, and print the
+                                result in the format you want
   check <image|frames-dir>      Before scanning: which frames are usable, and which
                                 key locations (fuse box, stopcock, boiler…) they show
-  scan-status <scan-id>         Show where a scan is
+  scan-status <scan-id> [--follow]
+                                Show where a scan is (--follow: until it ends)
   cancel <scan-id>              Cancel a scan that has not started (nothing is charged)
 
 Options
@@ -80,6 +85,8 @@ const OPTIONS = {
   type: { type: 'string' },
   language: { type: 'string' },
   'no-wait': { type: 'boolean' },
+  format: { type: 'string' },
+  follow: { type: 'boolean' },
 } satisfies ParseArgsConfig['options'];
 
 type Values = { [K in keyof typeof OPTIONS]?: (typeof OPTIONS)[K]['type'] extends 'boolean' ? boolean : string };
@@ -153,9 +160,46 @@ function kindLabel(kind: string): string {
 }
 
 function scanLine(scan: Scan): string {
-  const stage = scan.stage ? ` (${scan.stage})` : '';
+  const { stage, label } = describeScan(scan);
+  const detail = stage !== scan.status ? ` (${stage}: ${label})` : '';
   const error = scan.error ? ` — ${scan.error.code}: ${scan.error.message}` : '';
-  return `${scan.id} ${scan.status}${stage}${error}`;
+  return `${scan.id} ${scan.status}${detail}${error}`;
+}
+
+const FORMATS = ['text', 'json', 'markdown', 'skill'] as const;
+type Format = (typeof FORMATS)[number];
+
+function format(values: Values): Format {
+  const value = values.format ?? (values.json ? 'json' : 'text');
+  if (!FORMATS.includes(value as Format)) throw new UsageError(`--format must be one of ${FORMATS.join(', ')}`);
+  return value as Format;
+}
+
+/** Writes the Skill of a space to `--out`, or to a folder named by the API. */
+async function exportSkill(context: Context, sc: SpaceContext, id: string, params: { include?: 'transcript'; enrich?: 'auto' | 'none' }): Promise<void> {
+  const bundle = await sc.spaces.skill(id, params);
+  // The default folder is named by the API: a name that is not a plain slug
+  // ("../../x", "/etc") would place the skill outside the current directory.
+  if (!context.values.out && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(bundle.name)) {
+    throw new Error(`Refusing to use "${bundle.name}" as a folder name: pass --out <dir>`);
+  }
+  const directory = path.resolve(context.io.cwd, context.values.out ?? bundle.name);
+  const written = await writeSkill(directory, bundle);
+  print(context.io, context.values, { directory, files: written }, () =>
+    `Skill "${bundle.name}" written to ${directory} (${written.length} files).\nAdd the folder to your agent's skills, e.g. ~/.claude/skills/${bundle.name}\n`
+  );
+}
+
+/** Prints the Markdown page of a space, or writes it to `--out`. */
+async function exportMarkdown(context: Context, sc: SpaceContext, id: string, params: { include?: 'transcript'; enrich?: 'auto' | 'none' }): Promise<void> {
+  const page = await sc.spaces.markdown(id, params);
+  if (context.values.out) {
+    const file = path.resolve(context.io.cwd, context.values.out);
+    await writeFile(file, page);
+    context.io.stderr(`Written to ${file}\n`);
+  } else {
+    context.io.stdout(page);
+  }
 }
 
 // ------------------------------------------------------------------ commands
@@ -252,17 +296,12 @@ async function ask(context: Context): Promise<void> {
 
 async function skill(context: Context): Promise<void> {
   const id = one(context.args, 'space id');
-  const bundle = await (await client(context)).spaces.skill(id, context.values.transcript ? { include: 'transcript' } : {});
-  // The default folder is named by the API: a name that is not a plain slug
-  // ("../../x", "/etc") would place the skill outside the current directory.
-  if (!context.values.out && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(bundle.name)) {
-    throw new Error(`Refusing to use "${bundle.name}" as a folder name: pass --out <dir>`);
-  }
-  const directory = path.resolve(context.io.cwd, context.values.out ?? bundle.name);
-  const written = await writeSkill(directory, bundle);
-  print(context.io, context.values, { directory, files: written }, () =>
-    `Skill "${bundle.name}" written to ${directory} (${written.length} files).\nAdd the folder to your agent's skills, e.g. ~/.claude/skills/${bundle.name}\n`
-  );
+  await exportSkill(context, await client(context), id, context.values.transcript ? { include: 'transcript' } : {});
+}
+
+async function markdown(context: Context): Promise<void> {
+  const id = one(context.args, 'space id');
+  await exportMarkdown(context, await client(context), id, context.values.transcript ? { include: 'transcript' } : {});
 }
 
 async function diff(context: Context): Promise<void> {
@@ -320,8 +359,24 @@ async function deleteSpace(context: Context): Promise<void> {
 }
 
 async function scanStatus(context: Context): Promise<void> {
-  const scan = await (await client(context)).scans.get(one(context.args, 'scan id'));
-  print(context.io, context.values, scan, () => `${scanLine(scan)}\n`);
+  const { io, values } = context;
+  const id = one(context.args, 'scan id');
+  const sc = await client(context);
+  if (!values.follow) {
+    const scan = await sc.scans.get(id);
+    print(io, values, scan, () => `${scanLine(scan)}\n`);
+    return;
+  }
+  // Every change as it happens, then the final state.
+  let last: Scan | null = null;
+  for await (const scan of sc.scans.events(id)) {
+    last = scan;
+    if (values.json) io.stdout(`${JSON.stringify(scan)}\n`);
+    else io.stdout(`${scanLine(scan)}\n`);
+  }
+  if (last && last.status !== 'complete') {
+    throw new SpaceContextError(`Scan ${last.status}: ${last.error?.message ?? 'no detail'}`, 0, last.error?.code ?? 'SCAN_FAILED', null);
+  }
 }
 
 /**
@@ -378,6 +433,7 @@ async function scan(context: Context): Promise<void> {
   if (spaceType !== undefined && !SPACE_TYPES.includes(spaceType as SpaceType)) {
     throw new UsageError(`--type must be one of ${SPACE_TYPES.join(', ')}`);
   }
+  const output = format(values);
   const source = await scanSource(input);
   // Checked before anything is created: the API limits, from the same source as the SDK.
   if (source.kind === 'video' && source.size > MAX_VIDEO_BYTES) {
@@ -425,8 +481,8 @@ async function scan(context: Context): Promise<void> {
   let lastStage: string | null = null;
   const finished = await sc.scans.wait(started.id, {
     onProgress: (current) => {
-      const stage = current.stage ?? current.status;
-      if (stage !== lastStage) progress(`  ${stage}…\n`);
+      const { stage, label } = describeScan(current);
+      if (stage !== lastStage && stage !== 'complete') progress(`  ${label}…\n`);
       lastStage = stage;
     },
   });
@@ -438,7 +494,10 @@ async function scan(context: Context): Promise<void> {
       null
     );
   }
+  if (output === 'markdown') return exportMarkdown(context, sc, spaceId, { enrich: 'none' });
+  if (output === 'skill') return exportSkill(context, sc, spaceId, { enrich: 'none' });
   const document = await sc.spaces.get(spaceId, { enrich: 'none' });
+  if (output === 'json') return io.stdout(`${JSON.stringify(document, null, 2)}\n`);
   print(io, values, document, () => `${documentSummary(document)}\nNext: spacecontext ask ${spaceId} "where is the fuse box?"\n`);
 }
 
@@ -452,6 +511,7 @@ const COMMANDS: Record<string, (context: Context) => Promise<void>> = {
   search,
   ask,
   skill,
+  markdown,
   diff,
   scans,
   scan,

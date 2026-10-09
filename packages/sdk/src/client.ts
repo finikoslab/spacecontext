@@ -1,5 +1,7 @@
 import type { components } from './schema.js';
 import { errorFromResponse, SpaceContextError } from './errors.js';
+import { parseServerSentEvents } from './sse.js';
+import { runScan, type ScanFormat, type ScanOptions, type ScanResult, type ScanSource } from './scan.js';
 
 type Schemas = components['schemas'];
 export type SpaceDocument = Schemas['SpaceDocument'];
@@ -218,6 +220,17 @@ export class SpaceContext {
         signal: options.signal,
       }),
 
+    /** The space as one readable Markdown page, built from exactly what this key may read. */
+    markdown: (id: string, params: { include?: 'transcript'; enrich?: 'auto' | 'none' } = {}, options: RequestOptions = {}) =>
+      this.text({
+        method: 'GET',
+        path: `/spaces/${encodeURIComponent(id)}/markdown`,
+        query: { include: params.include, enrich: params.enrich },
+        headers: { Accept: 'text/markdown' },
+        idempotent: true,
+        signal: options.signal,
+      }),
+
     /** A short answer from the space's records, with citations and evidence frames. */
     ask: (id: string, question: string, options: RequestOptions = {}) =>
       this.json<SpaceAnswer>({
@@ -325,7 +338,19 @@ export class SpaceContext {
         signal: options.signal,
       }),
 
-    /** Polls a scan until it is complete, failed or cancelled. */
+    /**
+     * The scan as it changes, as it changes: `for await (const scan of sc.scans.events(id)) …`.
+     * Follows the API's event stream (reconnecting when it ends early) and ends
+     * after the final state; falls back to polling where streaming is not possible.
+     */
+    events: (id: string, params: { intervalMs?: number; timeoutMs?: number } = {}, options: RequestOptions = {}) =>
+      this.scanEvents(id, params, options),
+
+    /**
+     * Waits until a scan is complete, failed or cancelled, calling `onProgress`
+     * at every change. Streams the API's events; polls every `intervalMs` only
+     * where streaming is not possible.
+     */
     wait: (id: string, params: { intervalMs?: number; timeoutMs?: number; onProgress?: (scan: Scan) => void } = {}, options: RequestOptions = {}) =>
       this.waitForScan(id, params, options),
 
@@ -340,10 +365,25 @@ export class SpaceContext {
     fromFrames: (
       spaceId: string,
       frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
-      params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript'] } = {},
+      params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void } = {},
       options: RequestOptions = {}
     ) => this.scanFromFrames(spaceId, frames, params, options),
   };
+
+  // ---------------------------------------------------------------- one call
+
+  /**
+   * From a video (or photos) to the space's document in one call: creates the
+   * space (or scans into one), uploads, starts, follows the scan as it runs and
+   * returns the document, with the Markdown page or the Agent Skill when asked.
+   *
+   * ```ts
+   * const { document } = await sc.scan('./flat.mp4', { name: 'Seaside flat', onProgress: (p) => console.log(p.type) });
+   * ```
+   */
+  scan<Format extends ScanFormat = 'document'>(source: ScanSource, options: ScanOptions<Format> = {}): Promise<ScanResult<Format>> {
+    return runScan(this, source, options);
+  }
 
   // ---------------------------------------------------------------- account
 
@@ -428,15 +468,89 @@ export class SpaceContext {
     params: { intervalMs?: number; timeoutMs?: number; onProgress?: (scan: Scan) => void },
     options: RequestOptions
   ): Promise<Scan> {
-    const interval = Math.max(1000, params.intervalMs ?? 3000);
+    let last: Scan | null = null;
+    for await (const scan of this.scanEvents(id, params, options)) {
+      last = scan;
+      params.onProgress?.(scan);
+    }
+    // The generator ends only after a final state.
+    return last!;
+  }
+
+  /**
+   * One event stream of the scan. Null when the API cannot stream to this
+   * client (a proxy that answers without an event stream); throws what the API
+   * refused (404, 403…).
+   */
+  private async openEventStream(id: string, options: RequestOptions): Promise<ReadableStream<Uint8Array> | null> {
+    const response = await this.send(this.url(`/scans/${encodeURIComponent(id)}/events`), {
+      method: 'GET',
+      path: '',
+      headers: { Accept: 'text/event-stream' },
+      idempotent: true,
+      noTimeout: true,
+      signal: options.signal,
+    });
+    if (!response.body || !(response.headers.get('Content-Type') ?? '').includes('text/event-stream')) {
+      await response.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    return response.body;
+  }
+
+  private async *scanEvents(
+    id: string,
+    params: { intervalMs?: number; timeoutMs?: number },
+    options: RequestOptions
+  ): AsyncGenerator<Scan> {
     const deadline = Date.now() + (params.timeoutMs ?? 20 * 60_000);
+    const interval = Math.max(1000, params.intervalMs ?? 3000);
+    let last: Scan | null = null;
+    let fingerprint: string | null = null;
+    const fresh = (scan: Scan): boolean => {
+      const current = [scan.status, scan.stage ?? '', scan.error?.code ?? '', scan.completed_at ?? ''].join('|');
+      if (current === fingerprint) return false;
+      fingerprint = current;
+      last = scan;
+      return true;
+    };
+    const timeout = () => new SpaceContextError(`Scan ${id} is still ${last?.status ?? 'running'}`, 0, 'TIMEOUT', null, last ? { scan: last } : {});
+
+    let streaming = true;
+    // A stream that ends before the final state (its 30-minute cap, a dropped
+    // connection) is opened again; the API sends the scan as it is now first.
+    while (streaming) {
+      if (Date.now() >= deadline) throw timeout();
+      let body: ReadableStream<Uint8Array> | null;
+      try {
+        body = await this.openEventStream(id, options);
+      } catch (error) {
+        if (error instanceof SpaceContextError && error.status === 0 && last === null) {
+          // Could not be reached once: poll instead of giving up at once.
+          streaming = false;
+          break;
+        }
+        throw error;
+      }
+      if (body === null) {
+        streaming = false;
+        break;
+      }
+      for await (const event of parseServerSentEvents(body)) {
+        if (event.event !== 'scan' || !event.data) continue;
+        const scan = JSON.parse(event.data) as Scan;
+        if (fresh(scan)) yield scan;
+        if (FINAL_SCAN_STATUSES.has(scan.status)) return;
+        if (Date.now() >= deadline) throw timeout();
+      }
+      await sleep(1000, options.signal);
+    }
+
     for (;;) {
       const scan = await this.scans.get(id, options);
-      params.onProgress?.(scan);
-      if (FINAL_SCAN_STATUSES.has(scan.status)) return scan;
-      if (Date.now() + interval > deadline) {
-        throw new SpaceContextError(`Scan ${id} is still ${scan.status}`, 0, 'TIMEOUT', null, { scan });
-      }
+      if (fresh(scan)) yield scan;
+      if (FINAL_SCAN_STATUSES.has(scan.status)) return;
+      if (Date.now() + interval > deadline) throw timeout();
       await sleep(interval, options.signal);
     }
   }
@@ -489,7 +603,7 @@ export class SpaceContext {
   private async scanFromFrames(
     spaceId: string,
     frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
-    params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript'] },
+    params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void },
     options: RequestOptions
   ): Promise<Scan> {
     if (frames.length === 0) throw new SpaceContextError('At least one frame is required', 0, 'VALIDATION_ERROR', null);
@@ -510,6 +624,7 @@ export class SpaceContext {
         throw new SpaceContextError(`Frame ${oversized} is larger than ${maxBytes} bytes`, 413, 'PAYLOAD_TOO_LARGE', null, { index: oversized });
       }
       for (const [index, frame] of frames.entries()) {
+        params.onUpload?.(index);
         await this.scans.uploadFrame(scan.id, index, frame.data, frame.contentType, options);
       }
     });
@@ -529,6 +644,11 @@ export class SpaceContext {
   private async json<T>(spec: RequestSpec): Promise<T> {
     const response = await this.send(this.url(spec.path, spec.query), spec);
     return (await response.json()) as T;
+  }
+
+  private async text(spec: RequestSpec): Promise<string> {
+    const response = await this.send(this.url(spec.path, spec.query), spec);
+    return response.text();
   }
 
   private async empty(spec: RequestSpec): Promise<void> {

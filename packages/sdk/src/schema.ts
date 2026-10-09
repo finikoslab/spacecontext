@@ -317,6 +317,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/spaces/{id}/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export a space as one Markdown page
+         * @description The current document as a single readable page (`text/markdown`): summary, every area with its items, issues, key locations and how-to steps, then facts, Q&A, coverage and the recording. Built from exactly the document this key may read, so a redacted document gives a redacted page; image links are never included. The same 409 `ENRICHMENT_PENDING` rule as the Skill export applies to keys without `spaces:sensitive`.
+         */
+        get: operations["getSpaceMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/spaces/{id}/ask": {
         parameters: {
             query?: never;
@@ -584,6 +604,26 @@ export interface paths {
          * @description Nothing was charged; its uploads are deleted. Needs `scans:write`.
          */
         delete: operations["cancelScan"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scans/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Follow a scan in real time
+         * @description A `text/event-stream` (Server-Sent Events) that sends the scan (the same object as `GET /scans/{id}`, without `upload`) as an event named `scan` at once, then every time its status, stage or error changes, and closes after the final one (`complete`, `failed` or `cancelled`). A `ping` event every 15 seconds keeps the connection alive. One stream lasts at most 30 minutes; reconnect to keep following. Needs `scans:read`.
+         */
+        get: operations["streamScanEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2407,6 +2447,39 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    getSpaceMarkdown: {
+        parameters: {
+            query?: {
+                /** @description Adds the transcript. Requires the `spaces:sensitive` scope; without it the request is refused with 403 `INSUFFICIENT_SCOPE`. */
+                include?: "transcript";
+                enrich?: "auto" | "none";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Markdown page */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     askSpace: {
         parameters: {
             query?: never;
@@ -2810,6 +2883,34 @@ export interface operations {
             403: components["responses"]["ErrorResponse"];
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    streamScanEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event stream: `event: scan` with the scan as JSON data; `event: ping` with no data. */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Content-Type"?: "text/event-stream";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
         };
     };

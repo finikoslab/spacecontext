@@ -1068,6 +1068,91 @@
         }
       }
     },
+    "/spaces/{id}/markdown": {
+      "get": {
+        "operationId": "getSpaceMarkdown",
+        "summary": "Export a space as one Markdown page",
+        "description": "The current document as a single readable page (`text/markdown`): summary, every area with its items, issues, key locations and how-to steps, then facts, Q&A, coverage and the recording. Built from exactly the document this key may read, so a redacted document gives a redacted page; image links are never included. The same 409 `ENRICHMENT_PENDING` rule as the Skill export applies to keys without `spaces:sensitive`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(app|spc)_"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "description": "Adds the transcript. Requires the `spaces:sensitive` scope; without it the request is refused with 403 `INSUFFICIENT_SCOPE`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transcript"
+              ]
+            }
+          },
+          {
+            "name": "enrich",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "none"
+              ],
+              "default": "auto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Markdown page",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
     "/spaces/{id}/ask": {
       "post": {
         "operationId": "askSpace",
@@ -1857,6 +1942,68 @@
             "$ref": "#/components/responses/ErrorResponse"
           },
           "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/scans/{id}/events": {
+      "get": {
+        "operationId": "streamScanEvents",
+        "summary": "Follow a scan in real time",
+        "description": "A `text/event-stream` (Server-Sent Events) that sends the scan (the same object as `GET /scans/{id}`, without `upload`) as an event named `scan` at once, then every time its status, stage or error changes, and closes after the final one (`complete`, `failed` or `cancelled`). A `ping` event every 15 seconds keeps the connection alive. One stream lasts at most 30 minutes; reconnect to keep following. Needs `scans:read`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^scn_[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event stream: `event: scan` with the scan as JSON data; `event: ping` with no data.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "text/event-stream"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
             "$ref": "#/components/responses/ErrorResponse"
           },
           "429": {

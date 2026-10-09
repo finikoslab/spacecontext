@@ -14,6 +14,12 @@ type Call = { method: string; path: string; search: URLSearchParams; headers: He
 type Route = (call: Call) => Response | undefined;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const markdownPage = (text: string) => new Response(text, { headers: { 'Content-Type': 'text/markdown; charset=utf-8' } });
+/** The API's event stream of a scan: each state, then the end. */
+const stream = (states: unknown[]) =>
+  new Response(states.map((state, index) => `event: scan\nid: ${index + 1}\ndata: ${JSON.stringify(state)}\n\n`).join(''), {
+    headers: { 'Content-Type': 'text/event-stream' },
+  });
 
 let directory: string;
 
@@ -49,7 +55,7 @@ function harness(routes: Route[], env: Record<string, string> = {}) {
     prompt: null,
     fetch,
   };
-  return { io, calls, urls, stdout: () => out.join(''), stderr: () => err.join('') };
+  return { io, calls, urls, routes, stdout: () => out.join(''), stderr: () => err.join('') };
 }
 
 const me: Route = (call) =>
@@ -205,11 +211,16 @@ describe('spacecontext CLI', () => {
       (call) => (call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans` ? json(scan('awaiting_upload'), 201) : undefined),
       (call) => (call.method === 'PUT' && call.path.startsWith(`/scans/${SCAN_ID}/frames/`) ? json({ object: 'scan_frame', scan_id: SCAN_ID, bytes: 3 }) : undefined),
       (call) => (call.method === 'POST' && call.path === `/scans/${SCAN_ID}/start` ? json(scan('queued'), 202) : undefined),
-      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}` ? json(scan('complete')) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}/events` ? stream([scan('queued'), scan('processing', { stage: 'observing' }), scan('complete')]) : undefined),
       (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(document) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}/markdown` ? markdownPage('# Flat\n\nTwo rooms.\n') : undefined),
+      (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}/skill` ? json({ name: 'space-flat', files: [{ path: 'SKILL.md', media_type: 'text/markdown', content: '# Flat' }] }) : undefined),
     ], { SPACECONTEXT_API_KEY: KEY });
 
     expect(await main(['scan', 'frames', '--name', 'Flat', '--type', 'apartment'], h.io)).toBe(0);
+    // The analysis is followed live, stage by stage, in words.
+    expect(h.stderr()).toContain('  Queued…\n  Looking at the frames…\n');
+    expect(h.stderr()).not.toContain('Complete…');
     expect(JSON.parse(String(h.calls[0]!.body))).toEqual({ name: 'Flat', space_type: 'apartment' });
     // Natural order: frame-2 before frame-10, with each file's own type.
     const uploads = h.calls.filter((call) => call.method === 'PUT');
@@ -222,6 +233,31 @@ describe('spacecontext CLI', () => {
     expect(h.stdout()).toContain('Flat  (');
     expect(h.stdout()).toContain('## Kitchen\nOven');
     expect(h.stdout()).toContain(`spacecontext ask ${SPACE_ID}`);
+
+    // The same scan, printed as a Markdown page, or written as a Skill folder.
+    const asMarkdown = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scan', 'frames', '--space', SPACE_ID, '--format', 'markdown'], asMarkdown.io)).toBe(0);
+    expect(asMarkdown.stdout()).toBe('# Flat\n\nTwo rooms.\n');
+    const asSkill = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scan', 'frames', '--space', SPACE_ID, '--format', 'skill', '--out', 'exported'], asSkill.io)).toBe(0);
+    expect(await readFile(path.join(directory, 'exported', 'SKILL.md'), 'utf8')).toBe('# Flat');
+    expect(await main(['scan', 'frames', '--space', SPACE_ID, '--format', 'pdf'], asSkill.io)).toBe(2);
+  });
+
+  it('exports a space as one Markdown page, to stdout or to a file, and follows a scan', async () => {
+    const h = harness([
+      (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}/markdown` ? markdownPage(`# Flat ${call.search.get('include') ?? ''}\n`) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}/events` ? stream([scan('processing', { stage: 'enriching' }), scan('complete')]) : undefined),
+    ], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['markdown', SPACE_ID], h.io)).toBe(0);
+    expect(h.stdout()).toBe('# Flat \n');
+    expect(await main(['markdown', SPACE_ID, '--transcript', '--out', 'flat.md'], h.io)).toBe(0);
+    expect(await readFile(path.join(directory, 'flat.md'), 'utf8')).toBe('# Flat transcript\n');
+    expect(h.stderr()).toContain('Written to ');
+
+    const following = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scan-status', SCAN_ID, '--follow'], following.io)).toBe(0);
+    expect(following.stdout()).toBe(`${SCAN_ID} processing (enriching: Extracting the context)\n${SCAN_ID} complete\n`);
   });
 
   it('checks frames before a scan: which are usable, what they show, what is still missing', async () => {
@@ -296,7 +332,7 @@ describe('spacecontext CLI', () => {
       (call) => (call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans` ? json(scan('awaiting_upload', { input: { kind: 'video', language: 'en', frame_count: null, video: { content_type: 'video/quicktime', content_length: 4 }, has_transcript: false }, upload: { kind: 'video', method: 'PUT', url: `${BASE}/scans/${SCAN_ID}/video`, headers: { 'Content-Type': 'video/quicktime' } } }), 201) : undefined),
       (call) => (call.method === 'PUT' && call.path === `/scans/${SCAN_ID}/video` ? json({ object: 'scan_video', scan_id: SCAN_ID, bytes: 4 }) : undefined),
       (call) => (call.method === 'POST' && call.path === `/scans/${SCAN_ID}/start` ? json(testStart, 202) : undefined),
-      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}` ? json(failed) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}/events` ? stream([failed]) : undefined),
     ], { SPACECONTEXT_API_KEY: KEY });
 
     expect(await main(['scan', 'tour.mov', '--space', SPACE_ID], h.io)).toBe(1);
