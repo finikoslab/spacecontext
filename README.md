@@ -31,7 +31,7 @@ Text captured in a space is always treated as data: sentences addressed to an AI
 
 ```bash
 # 1. Create an API key in the console: https://spacecontext.finikos.it/developers/console
-npx spacecontext login                       # paste the key; sc_test_ keys return a free demo space
+npx spacecontext login --test                # approve a code in the console: a free test key, the demo space
 npx spacecontext check ./photos                 # usable frames, and the key locations still missing
 npx spacecontext search "where is the stopcock?"
 npx spacecontext scan tour.mp4 --name "Seaside flat"   # a live key analyses your video

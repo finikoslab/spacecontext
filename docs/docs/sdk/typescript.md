@@ -84,6 +84,21 @@ const skill = await sc.spaces.skill('spc_…');                   // { name, fil
 
 Both are built from exactly the document the key may read: a key without `spaces:sensitive` gets them redacted, and 409 `ENRICHMENT_PENDING` until the space is screened.
 
+## Sign in from a tool
+
+The CLI's `login` is in the SDK too, for any tool without a browser session:
+
+```ts
+import { deviceSignIn } from '@spacecontext/sdk';
+
+const { api_key, user } = await deviceSignIn({
+  name: 'My tool on this laptop',
+  onCode: ({ userCode, verificationUrl }) => console.log(`Open ${verificationUrl} and enter ${userCode}`),
+});
+```
+
+It asks the API for a code, shows it, and polls until the person approves it in the console; the key arrives here, never through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves.
+
 ## Errors
 
 Every failure is a `SpaceContextError`:

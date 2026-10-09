@@ -13,17 +13,19 @@ The rest of this page does the same from the terminal. It takes about five minut
 
 The demo is real output, not a mock-up: a one-bedroom apartment in Brisbane scanned twice through the API, with five photos at check-in and a narrated video at check-out, checked against the check-in. The narration (Wi-Fi, fuse box, bins, a loose heater cable) is invented for the example; the photos are by Chris Olszewski on Wikimedia Commons (CC BY-SA 4.0).
 
-## 1. Create a test key
-
-1. Open the [console](https://spacecontext.finikos.it/developers/console) and sign in with Apple, Google or your email: it is the same account as the iPhone app. → [Console and sign-in](account/console-and-login.md)
-2. In **API keys**, create a key with mode **Test**. Copy it: it is shown only once.
-
-## 2. Use it from the terminal
+## 1. Sign in from the terminal
 
 You need Node.js 22 or later.
 
 ```bash
-npx spacecontext login          # paste the sc_test_… key when asked
+npx spacecontext login --test
+```
+
+The terminal shows a code and opens the [console](https://spacecontext.finikos.it/developers/console): sign in with Apple, Google or your email (the same account as the iPhone app), type the code, approve. The terminal receives a **test** key: free, unlimited, the demo space. → [Console and sign-in](account/console-and-login.md)
+
+## 2. Use it
+
+```bash
 npx spacecontext spaces         # the demo space: spc_demo
 npx spacecontext search "where is the fuse box?"
 npx spacecontext ask spc_demo "where is the fuse box?"
@@ -53,11 +55,11 @@ npx spacecontext scan ./tour.mp4 --name "Test flat"
 
 When you are ready for your own spaces:
 
-1. Create a **Live** key in the console.
+1. Sign in again for a **live** key (or create one in the console).
 2. Scan a real video: your first live scan is free.
 
 ```bash
-npx spacecontext login                      # paste the sc_live_… key
+npx spacecontext login                      # approve a live key in the console
 npx spacecontext scan ./flat.mp4 --name "Seaside flat" --type apartment
 ```
 

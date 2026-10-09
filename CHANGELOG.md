@@ -10,10 +10,12 @@ All packages of this repository share a version.
 - `sc.scans.events(id)`: the scan as it changes, as an async iterator over the API's event stream (`GET /scans/{id}/events`), reconnecting when the stream ends early and polling only where streaming is not possible. `sc.scans.wait()` now uses it.
 - `sc.spaces.markdown(id)`: the whole space as one Markdown page.
 - `sc.frames.check(bytes, type)`: guided capture — is this frame usable, which key locations does it show.
+- `deviceSignIn()`, `startDeviceSignIn()`, `waitForDeviceSignIn()`: the terminal sign-in flow for any tool.
 - `describeScan(scan)`: a label for every stage (`Reading the video`, `Looking at the frames`, `Extracting the context`…); `parseServerSentEvents()` exported.
 
 ### CLI (`spacecontext`)
 
+- `spacecontext login` with nothing to paste: the terminal shows a code and opens the console, where you approve it with the scopes you choose; the key arrives in the terminal and never through the browser (`--test` for a test key, `--no-browser` to only print the link). `--key` still works.
 - `scan` follows the analysis live, in words, and prints the result as `--format text|json|markdown|skill` (`--out` for a file or the skill folder).
 - `markdown <space-id> [--out file]` exports one page; `scan-status --follow` streams a scan until it ends.
 - `check <image|frames-dir>`: which frames are usable and which key locations they show, before paying for a scan.
@@ -27,6 +29,7 @@ All packages of this repository share a version.
 
 ### API (contract `openapi/openapi.json`)
 
+- Device sign-in: `POST /v1/auth/device`, `POST /v1/auth/device/token`, and the console's `GET|POST /v1/auth/device/{user_code}[/approve|/deny]`.
 - `GET /v1/scans/{id}/events` (Server-Sent Events), `GET /v1/spaces/{id}/markdown`, `POST /v1/frames/check`, `coverage.checklist` in the Space Document, `FOOTAGE_UNUSABLE` for recordings with no usable frame (refunded).
 
 ## 0.1.0 — 2026-10-05

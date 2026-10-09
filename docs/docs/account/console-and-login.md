@@ -9,6 +9,10 @@ The [console](https://spacecontext.finikos.it/developers/console) is where you s
 
 ![The console overview: spaces, documented items, scans and questions this month, the balance, and 30-day charts of scans, API requests, questions and spend](/docs/console/overview.jpg)
 
+## Approve a sign-in from the terminal
+
+`spacecontext login` shows a code and sends you to **Approve a sign-in** in the console. Type the code, read what is asking (the name a terminal gives is what it said about itself), choose what the key may do and its mode, and approve: the terminal receives a key of its own, listed under **API keys** as `CLI · …`, revocable at any time. Approve only a code you are looking at in your own terminal; a code never travels in a link.
+
 ## Sign in
 
 Choose **Continue with Apple**, **Continue with Google**, or enter your email and the one-time code we send you (valid for 10 minutes).
