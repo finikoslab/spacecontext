@@ -38,14 +38,14 @@
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "spacecontext-mcp-dev-oauth" }],
       "services": []
     },
-    // Staging: the public API's staging Worker, on workers.dev only.
+    // Staging: the dev branch deploys here (Workers Builds), against the dev API.
     "staging": {
       "name": "spacecontext-mcp-staging",
       "workers_dev": true,
-      "routes": [],
+      "routes": [{ "pattern": "mcp-dev.spacecontext.app", "custom_domain": true }],
       "vars": {
-        "API_BASE_URL": "https://spacecontext-backend-staging.finikos.workers.dev/v1",
-        "PUBLIC_URL": "https://spacecontext-mcp-staging.finikos.workers.dev",
+        "API_BASE_URL": "https://api-dev.spacecontext.app/v1",
+        "PUBLIC_URL": "https://mcp-dev.spacecontext.app",
         "APPLE_SERVICES_ID": "it.spacecontext.ai.web"
       },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "21f82a0549ce432fa7aadf47c5a2d415" }],
