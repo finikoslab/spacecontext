@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/finikoslab/spacecontext/blob/dev/SECURITY.md
+    about: Please report vulnerabilities by email, not as an issue.
+  - name: Documentation
+    url: https://spacecontext.finikos.it/developers/docs/
+    about: Quickstart, API reference, SDK, CLI and MCP.
