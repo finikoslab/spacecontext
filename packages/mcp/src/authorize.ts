@@ -73,15 +73,40 @@ function validEmail(value: string | undefined): string | null {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
-/** The API keys of this user's grants to one client. */
-async function keysOfGrants(env: Env, userId: string, clientId: string): Promise<string[]> {
+/**
+ * A client id that is an https URL with a path names a client metadata document
+ * (CIMD): every installation of that client shares it. Tested as the library does.
+ */
+function isMetadataDocumentClient(clientId: string): boolean {
+  try {
+    return new URL(clientId).protocol === 'https:' && /^https:\/\/[^/?#]*\//i.test(clientId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The API keys of the grants that completing this request replaces. The OAuth
+ * library (`completeAuthorization`) revokes the user's grants to the same client
+ * for the same resource and, for a CIMD client, with the same redirect URI (one
+ * installation); this follows the same rule, so connecting a second installation
+ * of a client never revokes the key of the first. Resources are compared as the
+ * library stores them; a grant without one predates resources and belongs to the
+ * only resource this server has.
+ */
+export async function keysOfReplacedGrants(env: Env, userId: string, request: Pick<AuthRequest, 'clientId' | 'redirectUri' | 'resource'>): Promise<string[]> {
+  const resource = request.resource ?? new URL('/mcp', env.PUBLIC_URL).toString();
+  const perInstallation = isMetadataDocumentClient(request.clientId);
   const keys: string[] = [];
   let cursor: string | undefined;
   do {
     const page = await env.OAUTH_PROVIDER.listUserGrants(userId, cursor ? { cursor } : {});
     for (const grant of page.items) {
       const keyId = (grant.metadata as { keyId?: unknown } | null)?.keyId;
-      if (grant.clientId === clientId && typeof keyId === 'string') keys.push(keyId);
+      if (typeof keyId !== 'string' || grant.clientId !== request.clientId) continue;
+      if (perInstallation && grant.redirectUri !== request.redirectUri) continue;
+      if (grant.resource !== undefined && ![grant.resource].flat().includes(resource)) continue;
+      keys.push(keyId);
     }
     cursor = page.cursor;
   } while (cursor);
@@ -384,7 +409,7 @@ async function approve(request: Request, env: Env): Promise<Response> {
     // Connecting again replaces this client's earlier grants (the library revokes
     // them): their keys are revoked too, so the console does not fill up with keys
     // nobody holds.
-    const replaced = await keysOfGrants(env, session.user.id, approved.request.clientId);
+    const replaced = await keysOfReplacedGrants(env, session.user.id, approved.request);
     const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
       request: approved.request,
       userId: session.user.id,

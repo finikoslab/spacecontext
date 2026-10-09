@@ -5,6 +5,7 @@ import worker from '../src/index';
 import type { Env } from '../src/env';
 import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/html';
 import { CARD_TOOLS } from '../src/card';
+import { keysOfReplacedGrants } from '../src/authorize';
 
 const ORIGIN = 'https://mcp.example.test';
 const REDIRECT = 'https://claude.example/api/mcp/auth_callback';
@@ -412,6 +413,25 @@ describe('authorization', () => {
     // The first grant is gone with it.
     const old = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${first.accessToken}`, 'Content-Type': 'application/json', Host: new URL(ORIGIN).host }, body: '{}' }));
     expect(old.status).toBe(401);
+  });
+
+  it('revokes only the keys of the grants the library replaces: same client, same resource, same installation', async () => {
+    const RESOURCE = `${ORIGIN}/mcp`;
+    const CIMD = 'https://assistant.example/oauth/client.json';
+    const grant = (keyId: string, fields: Record<string, unknown>) => ({ id: `grant_${keyId}`, userId: 'user_1', scope: ['spaces:read'], createdAt: 1, metadata: { keyId }, clientId: CIMD, redirectUri: 'http://127.0.0.1:3000/callback', resource: RESOURCE, ...fields });
+    const pages = [
+      [grant('key_this_install', {}), grant('key_other_install', { redirectUri: 'http://127.0.0.1:4000/callback' }), grant('key_other_client', { clientId: 'https://other.example/client.json' })],
+      [grant('key_other_resource', { resource: 'https://elsewhere.example/mcp' }), grant('key_before_resources', { resource: undefined }), grant('key_registered', { clientId: 'dcr_client', redirectUri: 'https://a.example/callback' })],
+    ];
+    const fakeEnv = {
+      PUBLIC_URL: ORIGIN,
+      OAUTH_PROVIDER: { listUserGrants: async (_userId: string, options: { cursor?: string }) => (options.cursor ? { items: pages[1] } : { items: pages[0], cursor: 'next' }) },
+    } as unknown as Env;
+
+    // A client known by its metadata URL is shared by its installations: only this one's grants are replaced.
+    expect(await keysOfReplacedGrants(fakeEnv, 'user_1', { clientId: CIMD, redirectUri: 'http://127.0.0.1:3000/callback', resource: RESOURCE })).toEqual(['key_this_install', 'key_before_resources']);
+    // A registered client is one installation: its grants are replaced whatever their redirect URI.
+    expect(await keysOfReplacedGrants(fakeEnv, 'user_1', { clientId: 'dcr_client', redirectUri: 'https://b.example/callback', resource: RESOURCE })).toEqual(['key_registered']);
   });
 
   it('says so when the code email could not be sent, and offers a new code', async () => {
