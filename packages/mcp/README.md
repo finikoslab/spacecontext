@@ -2,21 +2,36 @@
 
 A remote MCP server on Cloudflare Workers that lets Claude and other MCP clients read your spaces. Stateless (`createMcpHandler`, MCP SDK v2) behind `@cloudflare/workers-oauth-provider`.
 
-**Connect:** add `https://mcp.spacecontext.finikos.it/mcp` as a custom connector. You sign in with the email of your Space Context account (one-time code) and decide whether the assistant may see sensitive values (Wi-Fi passwords, door codes, narration). The server then creates an API key for that grant only, labelled `MCP · <client>` in the console. Revoking it there ends the connection: the assistant asks you to sign in again. Connecting the same assistant again replaces the previous key.
+**Connect:** add `https://mcp.spacecontext.finikos.it/mcp` as a custom connector. You sign in with the email of your Space Context account (one-time code) and decide whether the assistant may see sensitive values (Wi-Fi passwords, door codes, narration) and whether it may scan spaces for you (paid from your balance). The server then creates an API key for that grant only, labelled `MCP · <client>` in the console. Revoking it there ends the connection: the assistant asks you to sign in again. Connecting the same assistant again replaces the previous key.
 
-## Tools (all read-only)
+## Tools
+
+Read-only, always:
 
 | Tool | |
 | --- | --- |
 | `list_spaces` | Spaces with their latest scan, 50 per page (`next_cursor`) |
 | `search_spaces` | Records matching a question across all spaces, any language |
 | `get_space` | A space by section: areas, items, issues, key locations, instructions, facts, Q&A, coverage; optional photo evidence |
+| `get_space_markdown` | The whole space as one Markdown page, to load it as context in one call |
 | `ask_space` | A short answer with citations, or "not documented" |
 | `list_scans` / `compare_scans` | Scan history and what changed between two scans |
 | `get_evidence_photo` | The original video frame behind a record |
-| `get_scan_status` | Progress of a scan made with the API or the CLI |
+| `get_scan_status` / `follow_scan` | Where a scan is; `follow_scan` waits on the API's event stream and reports progress |
+| `wallet` | Balance, free scans left, price per scan |
 
-Scanning a new space is done with the CLI or the API: an MCP tool would have to hand the agent an upload credential.
+Only when the user ticks **"let it scan spaces"** on the consent page (which adds `scans:write` to the grant and to its key):
+
+| Tool | |
+| --- | --- |
+| `check_frame` | Is this photo usable, and which key locations does it show (nothing is stored) |
+| `create_scan` | Declare a scan of an existing or a new space; returns the upload instructions |
+| `upload_frame` | Send one image of a frames scan through the server, which holds the key |
+| `start_scan` / `cancel_scan` | Start (and charge: the free scan first, then the balance) or cancel before it starts |
+
+A video upload URL that points at the API needs the user's own key, which the server never hands to the agent: `create_scan` then tells the agent to ask the user to upload with the CLI or the console. Frames go through `upload_frame`.
+
+Resources: `spacecontext://spaces` (the list) and `spacecontext://spaces/{space_id}` (the Markdown page). Prompts: `check_out_report`, `where_is`.
 
 ## Deploy
 
