@@ -528,6 +528,14 @@ describe('spacecontext CLI, housekeeping', () => {
   });
 });
 
+describe('the published package', () => {
+  it('ships its licence, which npm does not take from the repository', async () => {
+    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { files: string[] };
+    expect(manifest.files).toContain('LICENSE');
+    expect(await readFile(new URL('../LICENSE', import.meta.url), 'utf8')).toBe(await readFile(new URL('../../../LICENSE', import.meta.url), 'utf8'));
+  });
+});
+
 describe('skill file paths', () => {
   it('accepts plain relative paths only', () => {
     const root = path.join(directory, 'skill');

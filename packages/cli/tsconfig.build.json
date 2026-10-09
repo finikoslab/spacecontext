@@ -3,7 +3,9 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"]
+    "types": ["node"],
+    // The maps carry the sources: src/ is not published.
+    "inlineSources": true
   },
   "include": ["src"]
 }

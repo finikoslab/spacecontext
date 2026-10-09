@@ -6,6 +6,7 @@
 - `packages/sdk/src/schema.ts` is generated from it. The hand-written client is `packages/sdk/src/client.ts`; every public method maps to one documented operation.
 - The SDK has no runtime dependencies and runs in Node 22+, browsers, Deno and Workers. Do not add any.
 - The CLI depends only on the SDK and Node built-ins.
+- `packages/sdk/LICENSE` and `packages/cli/LICENSE` are copies of the root `LICENSE` (npm publishes only the package folder); their tests check that they match. `npm pack --dry-run -w <package>` shows what would be published.
 - The MCP server is read-only by default: a grant's key has `spaces:read` and `scans:read` (plus `spaces:sensitive` when the user ticks it). The scanning tools (`create_scan`, `upload_frame`, `start_scan`, `cancel_scan`, `check_frame`) work only when the user ticks "let it scan spaces" on the consent page, which adds `scans:write`; they are annotated as writing (and `cancel_scan` as destructive). Any new tool that writes or spends must sit behind that scope and be annotated honestly.
 
 ## Security invariants (tested)
