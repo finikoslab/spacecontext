@@ -1,7 +1,7 @@
 import { AuthorizationError, CimdFetchError, type AuthRequest, type ConsentDescription } from '@cloudflare/workers-oauth-provider';
 import { BackendError, backendJson } from './backend.js';
 import type { Env, GrantProps } from './env.js';
-import { consentPage, emailPage, errorPage, page, type SignInProviders } from './html.js';
+import { cardRequiredPage, consentPage, emailPage, errorPage, page, type SignInProviders } from './html.js';
 
 /** Scopes this server can grant, as advertised in its OAuth metadata. */
 export const SCOPES_SUPPORTED = ['spaces:read', 'spaces:sensitive', 'scans:write', 'offline_access'];
@@ -117,8 +117,12 @@ export async function keysOfReplacedGrants(env: Env, userId: string, request: Pi
 
 /** A sign-in started with a provider: what to come back to, for ten minutes, once. */
 type PendingLogin = { provider: 'google' | 'apple'; handle: string; oauth: string; nonce: string };
-/** An identity verified by a provider, waiting for the user's consent on this server's page. */
-type Ticket = { sessionToken: string; userId: string; email: string; provider: 'google' | 'apple' };
+/**
+ * An identity verified by a provider, waiting for the user's consent on this
+ * server's page; or one verified by an emailed code, kept when the consent has
+ * to be given again (scanning asked for without a card on file).
+ */
+type Ticket = { sessionToken: string; userId: string; email: string; provider: 'google' | 'apple' | 'email' };
 
 const LOGIN_TTL_SECONDS = 600;
 const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -380,6 +384,8 @@ async function approve(request: Request, env: Env): Promise<Response> {
   }
 
   let key: CreatedKey | null = null;
+  // Kept only when the consent is asked again (see below): a one-time ticket then holds it.
+  let keepSession = false;
   try {
     // 2. Consent: the handle works once and only in the browser that opened the page.
     const sensitive = form.sensitive === '1';
@@ -395,12 +401,29 @@ async function approve(request: Request, env: Env): Promise<Response> {
     const scopes = [...KEY_SCOPES, ...(sensitive ? ['spaces:sensitive'] : []), ...(scanning ? ['scans:write'] : [])];
 
     // 3. A key for this grant only, labelled as such in the console.
-    key = await backendJson<CreatedKey>(env, '/keys', {
-      method: 'POST',
-      sessionToken: session.session_token,
-      clientIp: clientIp(request),
-      body: { name: `MCP · ${described.consent.clientName}`.slice(0, 60), mode: 'live', scopes, source: 'oauth' },
-    });
+    try {
+      key = await backendJson<CreatedKey>(env, '/keys', {
+        method: 'POST',
+        sessionToken: session.session_token,
+        clientIp: clientIp(request),
+        body: { name: `MCP · ${described.consent.clientName}`.slice(0, 60), mode: 'live', scopes, source: 'oauth' },
+      });
+    } catch (error) {
+      if (!(scanning && error instanceof BackendError && error.code === 'PAYMENT_METHOD_REQUIRED')) throw error;
+      // A live key that can scan needs a card on file. The handle was used, so the
+      // same consent starts again for the request just approved, bound to this
+      // browser like the first, with the signed-in user under a one-time ticket:
+      // read-only now, or with scanning once a card is added.
+      const transaction = await env.OAUTH_PROVIDER.beginConsent(approved.request);
+      const ticketId = randomToken();
+      const value: Ticket = { sessionToken: session.session_token, userId: session.user.id, email: session.user.email, provider: ticket?.provider ?? 'email' };
+      await env.OAUTH_KV.put(`sc-ticket:${ticketId}`, JSON.stringify(value), { expirationTtl: LOGIN_TTL_SECONDS });
+      keepSession = true;
+      const headers = new Headers(transaction.headers);
+      // The used handle's cookie is cleared, the new one set.
+      for (const cookie of approved.headers.getSetCookie()) headers.append('Set-Cookie', cookie);
+      return cardRequiredPage({ consent: described.consent, handle: transaction.handle, oauth: form.oauth ?? '', email: session.user.email, ticket: ticketId, sensitive }, headers);
+    }
 
     if (typeof key?.key !== 'string' || !/^sc_live_[A-Za-z0-9_-]+$/.test(key.key) || !Array.isArray(key.scopes)) {
       throw new Error('The API did not return a usable key');
@@ -431,7 +454,9 @@ async function approve(request: Request, env: Env): Promise<Response> {
     return errorPage('Something went wrong', 'The connection could not be completed. Start again from your assistant.', 502);
   } finally {
     // The console session was only needed to create the key.
-    await backendJson(env, '/auth/session', { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
+    if (!keepSession) {
+      await backendJson(env, '/auth/session', { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
+    }
   }
 }
 

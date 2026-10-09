@@ -148,7 +148,7 @@ ${
 ${input.error ? `<p class="error">${escapeHtml(input.error)}</p>` : ''}
 <p><strong>It will be able to:</strong> read your spaces (areas, items, issues, key locations, instructions, facts and photos), search them and ask them questions. It cannot change or delete anything, and cannot spend money, unless you allow it below.</p>
 <label class="check"><input type="checkbox" name="sensitive" value="1"><span>Also show <strong>sensitive values</strong> such as Wi-Fi passwords, door and alarm codes, and the narration of your videos.</span></label>
-<label class="check"><input type="checkbox" name="scans" value="1"><span>Also let it <strong>scan spaces</strong> for you and check photos: each scan uses your free scan or is paid from your Space Context balance.</span></label>
+<label class="check"><input type="checkbox" name="scans" value="1"><span>Also let it <strong>scan spaces</strong> for you and check photos: each scan uses your free scan or is paid from your Space Context balance. Needs a card on file in your account (nothing is charged to add one).</span></label>
 <p class="muted">You can revoke this access at any time from the console (API keys).</p>
 <div class="actions decide"><button class="primary" type="submit" name="action" value="approve">Approve</button><button type="submit" name="action" value="deny">Deny</button></div>
 </form>
@@ -163,6 +163,38 @@ ${hidden({ handle: input.handle, oauth: input.oauth, email: input.email })}
     input.error ? 400 : 200,
     undefined,
     // Approve and Deny both end with a redirect to the client.
+    [redirectSource(input.consent.redirectUri)].filter((source): source is string => source !== null)
+  );
+}
+
+/** Where a card is added: the console's Billing page, on the production site whatever this server's own URL. */
+export const CONSOLE_BILLING_URL = 'https://spacecontext.app/developers/console/billing/';
+
+/**
+ * Scanning was allowed but the account has no card on file, so the API refused
+ * a key that can scan. The same consent can be given again from here, on a new
+ * handle and ticket: read-only at once, or with scanning once a card is added.
+ */
+export function cardRequiredPage(
+  input: { consent: ConsentDescription; handle: string; oauth: string; email: string; ticket: string; sensitive: boolean },
+  headers?: Headers
+): Response {
+  return page(
+    'Scanning needs a card',
+    `<h1>Scanning needs a card</h1>
+<p>Signed in as <strong>${escapeHtml(input.email)}</strong>.</p>
+${requester(input.consent)}
+<p>To let an assistant <strong>scan spaces</strong>, your Space Context account needs a card on file. Adding one charges nothing (your bank may ask you to confirm it), and the first scan of an account stays free.</p>
+<p><a href="${CONSOLE_BILLING_URL}" target="_blank" rel="noopener noreferrer">Add a card in the console</a> (Billing → Add a card), then come back to this page within ten minutes and try again.</p>
+<form method="post" action="/authorize/approve">
+${hidden({ handle: input.handle, oauth: input.oauth, ticket: input.ticket, ...(input.sensitive ? { sensitive: '1' } : {}) })}
+<p>Or connect it <strong>read-only</strong>: it will read your spaces${input.sensitive ? ' (sensitive values included)' : ''}, search them and ask them questions, but cannot scan, change anything or spend money. You can allow scanning later by connecting again.</p>
+<div class="actions"><button class="primary" type="submit" name="scans" value="0">Connect read-only</button><button type="submit" name="scans" value="1">Try again with scanning</button></div>
+<p class="muted resend"><button type="submit" class="link" name="action" value="deny">Deny access</button></p>
+</form>`,
+    200,
+    headers,
+    // Connecting and denying both end with a redirect to the client.
     [redirectSource(input.consent.redirectUri)].filter((source): source is string => source !== null)
   );
 }

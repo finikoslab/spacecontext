@@ -298,10 +298,160 @@ describe('authorization', () => {
     const consent = await (await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie)).text();
     expect(consent).toContain('name="scans"');
     expect(consent).toContain('paid from your Space Context balance');
+    expect(consent).toContain('Needs a card on file');
 
     const { scope } = await connect({ scans: true });
     expect(scope.split(' ').sort()).toEqual(['scans:write', 'spaces:read']);
     expect((backend.calls.find((entry) => entry.path === '/keys')!.body as { scopes: string[] }).scopes).toEqual(['spaces:read', 'scans:read', 'scans:write']);
+  });
+
+  describe('scanning without a card on file', () => {
+    /** The API's rule: a live key with scans:write needs a card on file. */
+    function backendWithoutCard() {
+      const state = { card: false };
+      let keyCount = 0;
+      backend = fakeBackend({
+        'POST /keys': (call) => {
+          const scopes = (call.body as { scopes: string[] }).scopes;
+          if (scopes.includes('scans:write') && !state.card) {
+            return new Response(JSON.stringify({ error: { code: 'PAYMENT_METHOD_REQUIRED', message: 'Add a card in the console', request_id: 'r' } }), { status: 402, headers: { 'Content-Type': 'application/json' } });
+          }
+          keyCount += 1;
+          return new Response(JSON.stringify({ id: `key_${keyCount}`, key: API_KEY, scopes, source: 'oauth' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+        },
+      });
+      return state;
+    }
+
+    /** The cookies a browser keeps after a response: set ones replace, cleared ones go. */
+    function browserCookies(before: string, response: Response): string {
+      const jar = new Map(before.split('; ').filter(Boolean).map((pair) => [pair.split('=')[0]!, pair] as const));
+      for (const header of response.headers.getSetCookie()) {
+        const pair = header.split(';')[0]!;
+        const name = pair.split('=')[0]!;
+        if (/Max-Age=0/i.test(header)) jar.delete(name);
+        else jar.set(name, pair);
+      }
+      return [...jar.values()].join('; ');
+    }
+
+    async function askToScan(options: { sensitive?: boolean } = {}) {
+      const clientId = await registerClient();
+      const page = await openAuthorize(clientId);
+      await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+      const response = await post(
+        '/authorize/approve',
+        { handle: page.handle, oauth: page.oauth, email: 'owner@example.com', code: CODE, action: 'approve', scans: '1', ...(options.sensitive ? { sensitive: '1' } : {}) },
+        page.cookie
+      );
+      const html = await response.text();
+      const handle = /name="handle" value="([^"]+)"/.exec(html)?.[1];
+      const ticket = /name="ticket" value="([^"]+)"/.exec(html)?.[1];
+      return { clientId, page, response, html, handle: handle!, ticket: ticket!, cookie: browserCookies(page.cookie, response) };
+    }
+
+    async function token(clientId: string, location: URL, verifier: string) {
+      const response = await call(
+        new Request(`${ORIGIN}/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ grant_type: 'authorization_code', code: location.searchParams.get('code')!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier, resource: `${ORIGIN}/mcp` }).toString(),
+        })
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as { scope: string };
+    }
+
+    it('says scanning needs a card, links to the console, and keeps the sign-in for one more decision', async () => {
+      backendWithoutCard();
+      const asked = await askToScan({ sensitive: true });
+
+      expect(asked.response.status).toBe(200);
+      expect(asked.html).toContain('Scanning needs a card');
+      expect(asked.html).toContain('href="https://spacecontext.app/developers/console/billing/"');
+      expect(asked.html).toContain('charges nothing');
+      expect(asked.html).toContain('first scan of an account stays free');
+      expect(asked.html).toContain('<strong>owner@example.com</strong>');
+      // The same consent, on a new handle bound to this browser, with the sign-in under a one-time ticket.
+      expect(asked.handle).toBeTruthy();
+      expect(asked.handle).not.toBe(asked.page.handle);
+      expect(asked.ticket).toBeTruthy();
+      expect(asked.html).toContain('name="sensitive" value="1"');
+      expect(asked.html).not.toContain('name="code"');
+      expect(asked.response.headers.getSetCookie().some((cookie) => /Max-Age=0/.test(cookie))).toBe(true);
+      expect(asked.response.headers.getSetCookie().some((cookie) => /Max-Age=600/.test(cookie))).toBe(true);
+      expect(asked.response.headers.get('Content-Security-Policy')).toContain(`form-action 'self' ${new URL(REDIRECT).origin};`);
+      // No key, and the session is kept for the ticket.
+      expect(backend.calls.filter((entry) => entry.path === '/keys')).toHaveLength(1);
+      expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session')).toBe(false);
+      // The first handle was used.
+      const reused = await post('/authorize/approve', { handle: asked.page.handle, oauth: asked.page.oauth, email: 'owner@example.com', code: CODE, action: 'approve' }, asked.page.cookie);
+      expect(reused.status).toBe(400);
+    });
+
+    it('connects read-only from that page, with the sensitive values chosen before', async () => {
+      backendWithoutCard();
+      const asked = await askToScan({ sensitive: true });
+
+      const connected = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, sensitive: '1', scans: '0' }, asked.cookie);
+      expect(connected.status).toBe(302);
+      const location = new URL(connected.headers.get('Location')!);
+      expect(location.origin + location.pathname).toBe(REDIRECT);
+      expect(location.searchParams.get('state')).toBe('state-123');
+      const created = backend.calls.filter((entry) => entry.method === 'POST' && entry.path === '/keys').at(-1)!;
+      expect((created.body as { scopes: string[] }).scopes).toEqual(['spaces:read', 'scans:read', 'spaces:sensitive']);
+      expect(created.headers.get('Authorization')).toBe('Bearer scs_session');
+      expect((await token(asked.clientId, location, asked.page.verifier)).scope.split(' ').sort()).toEqual(['spaces:read', 'spaces:sensitive']);
+      // Now the session is ended.
+      expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session')).toBe(true);
+
+      // Handle and ticket work once.
+      const again = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, scans: '0' }, asked.cookie);
+      expect(again.status).toBe(400);
+    });
+
+    it('allows scanning from that page once a card is on file', async () => {
+      const account = backendWithoutCard();
+      const asked = await askToScan();
+
+      // Tried again before adding the card: the same page, a new handle and ticket.
+      const stillNoCard = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, scans: '1' }, asked.cookie);
+      const html = await stillNoCard.text();
+      expect(html).toContain('Scanning needs a card');
+      const handle = /name="handle" value="([^"]+)"/.exec(html)![1]!;
+      const ticket = /name="ticket" value="([^"]+)"/.exec(html)![1]!;
+      expect(ticket).not.toBe(asked.ticket);
+
+      account.card = true;
+      const connected = await post('/authorize/approve', { handle, oauth: asked.page.oauth, ticket, scans: '1' }, browserCookies(asked.cookie, stillNoCard));
+      expect(connected.status).toBe(302);
+      const location = new URL(connected.headers.get('Location')!);
+      expect((backend.calls.filter((entry) => entry.method === 'POST' && entry.path === '/keys').at(-1)!.body as { scopes: string[] }).scopes).toEqual(['spaces:read', 'scans:read', 'scans:write']);
+      expect((await token(asked.clientId, location, asked.page.verifier)).scope.split(' ').sort()).toEqual(['scans:write', 'spaces:read']);
+    });
+
+    it('denies from that page, ending the session', async () => {
+      backendWithoutCard();
+      const asked = await askToScan();
+      expect(asked.html).toMatch(/<button[^>]*name="action" value="deny"[^>]*>Deny access<\/button>/);
+
+      const denied = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, action: 'deny' }, asked.cookie);
+      expect(denied.status).toBe(302);
+      expect(new URL(denied.headers.get('Location')!).searchParams.get('error')).toBe('access_denied');
+      expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session')).toBe(true);
+      expect(backend.calls.filter((entry) => entry.path === '/keys')).toHaveLength(1);
+    });
+
+    it('refuses that page from another browser or another site', async () => {
+      backendWithoutCard();
+      const asked = await askToScan();
+      const forged = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, scans: '0' }, asked.cookie, { Origin: 'https://evil.example' });
+      expect(forged.status).toBe(403);
+      // Without the binding cookie of the new handle: nothing is created.
+      const elsewhere = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, scans: '0' }, '');
+      expect(elsewhere.status).toBe(400);
+      expect(backend.calls.filter((entry) => entry.path === '/keys')).toHaveLength(1);
+    });
   });
 
   it('lets the user retry a wrong code, and deny', async () => {
@@ -764,6 +914,7 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     expect(refused.isError).toBe(true);
     expect(refused.content[0]!.text).toContain('INSUFFICIENT_SCOPE');
     expect(refused.content[0]!.text).toContain('reconnect');
+    expect(refused.content[0]!.text).toContain('needs a card on file');
   });
 });
 

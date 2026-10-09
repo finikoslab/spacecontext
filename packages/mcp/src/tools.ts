@@ -46,7 +46,7 @@ function advice(error: SpaceContextError): string {
     case 'PRO_REQUIRED':
       return 'Spaces scanned with the iPhone app need Space Context Pro on this deployment.';
     case 'INSUFFICIENT_SCOPE':
-      return 'The user did not grant this access when connecting; they can reconnect Space Context and tick the access they want to grant (sensitive values, or scanning).';
+      return 'The user did not grant this access when connecting; they can reconnect Space Context and tick the access they want to grant (sensitive values, or scanning: allowing scans needs a card on file, added in the console under Billing, nothing charged).';
     case 'INSUFFICIENT_FUNDS':
       return 'The balance does not cover a scan; the user can top up in the Space Context console (Billing).';
     case 'FRAME_CHECK_UNAVAILABLE':
