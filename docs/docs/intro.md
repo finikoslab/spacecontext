@@ -23,7 +23,7 @@ All three use the same account as the Space Context iPhone app, and the same [AP
 
 ## What you can do
 
-- **Scan** a video (MP4, MOV, M4V up to 500 MB and 20 minutes) or up to 120 photos. The analysis runs on our side; no ffmpeg needed. → [Scans](api/scans.md)
+- **Scan** a video (MP4, MOV, M4V up to 100 MB and 10 minutes) or up to 120 photos. The analysis runs on our side; no ffmpeg needed. → [Scans](api/scans.md)
 - **Read** a space as JSON, by section. → [The Space Document](api/space-document.md)
 - **Search** across all your spaces, in any language: "where did I see a ladder?" → [Search and ask](api/search-and-ask.md)
 - **Ask** one space a question and get a short answer with its sources and photos, or "not documented". → [Search and ask](api/search-and-ask.md)

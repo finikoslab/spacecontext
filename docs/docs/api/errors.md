@@ -49,7 +49,7 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 | `scan.error.code` | Meaning |
 | --- | --- |
 | `VIDEO_UNREADABLE` | The video could not be decoded. |
-| `VIDEO_TOO_LONG` | Over 20 minutes. |
+| `VIDEO_TOO_LONG` | Over 10 minutes. |
 | `FOOTAGE_UNUSABLE` | Every frame was too dark, blurred or covered, or showed no place (a drawing, a screen). Refused before the analysis; film again in good light. |
 | `ANALYSIS_EMPTY` | No space was recognised in the frames. |
 | `AI_ANALYSIS_FAILED`, `AI_OVERLOADED` | The analysis failed; scan again later. |

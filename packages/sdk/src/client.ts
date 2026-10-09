@@ -34,7 +34,7 @@ export type FrameContentType = 'image/jpeg' | 'image/png' | 'image/webp';
 export type VideoContentType = 'video/mp4' | 'video/quicktime' | 'video/x-m4v';
 /**
  * Bytes to upload. A `Blob` is read lazily: in Node, `fs.openAsBlob(path)`
- * uploads a 500 MB video without loading it in memory.
+ * uploads a 100 MB video without loading it in memory.
  */
 export type UploadBody = Blob | ArrayBuffer | Uint8Array;
 

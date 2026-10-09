@@ -9,7 +9,7 @@ description: 'Sizes, rates and quotas of the Space Context API.'
 
 | | Limit |
 | --- | --- |
-| Video | MP4, MOV, M4V; up to 500 MB and 20 minutes |
+| Video | MP4, MOV, M4V; up to 100 MB and 10 minutes |
 | Video through the API (when no direct upload link is offered) | 95 MB |
 | Photos per scan | 120, JPEG, PNG or WebP, 2 MB each |
 | Transcript | 600 segments of up to 2 000 characters |

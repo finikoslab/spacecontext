@@ -9,7 +9,7 @@ description: 'How to record a space so that the analysis finds everything, and w
 
 | Input | Limits |
 | --- | --- |
-| Video | MP4, MOV (including iPhone HEVC) or M4V; up to 500 MB and 20 minutes |
+| Video | MP4, MOV (including iPhone HEVC) or M4V; up to 100 MB and 10 minutes |
 | Photos | Up to 120 JPEG, PNG or WebP, 2 MB each, in the order they were taken |
 | Transcript (API only, optional) | Up to 600 segments of 2 000 characters, with their times |
 
