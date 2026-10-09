@@ -1,6 +1,6 @@
 import type { components } from './schema.js';
 import { errorFromResponse, SpaceContextError } from './errors.js';
-import { parseServerSentEvents } from './sse.js';
+import { parseServerSentEvents, type ServerSentEvent } from './sse.js';
 import { runScan, type ScanFormat, type ScanOptions, type ScanResult, type ScanSource } from './scan.js';
 
 type Schemas = components['schemas'];
@@ -105,6 +105,19 @@ function idempotencyKey(): string {
 
 function byteLength(body: UploadBody): number {
   return body instanceof Blob ? body.size : body.byteLength;
+}
+
+/**
+ * The events of one stream, ending quietly when the connection drops mid-stream
+ * (the read rejects): the caller opens the stream again. The caller's own abort
+ * is not a drop and is thrown.
+ */
+async function* untilDropped(events: AsyncGenerator<ServerSentEvent>, signal: AbortSignal | undefined): AsyncGenerator<ServerSentEvent> {
+  try {
+    yield* events;
+  } catch {
+    if (signal?.aborted) throw signal.reason;
+  }
 }
 
 /**
@@ -340,8 +353,9 @@ export class SpaceContext {
 
     /**
      * The scan as it changes, as it changes: `for await (const scan of sc.scans.events(id)) …`.
-     * Follows the API's event stream (reconnecting when it ends early) and ends
-     * after the final state; falls back to polling where streaming is not possible.
+     * Follows the API's event stream (reconnecting until the deadline when it ends
+     * early or the connection drops) and ends after the final state; falls back to
+     * polling where streaming is not possible.
      */
     events: (id: string, params: { intervalMs?: number; timeoutMs?: number } = {}, options: RequestOptions = {}) =>
       this.scanEvents(id, params, options),
@@ -518,17 +532,23 @@ export class SpaceContext {
 
     let streaming = true;
     // A stream that ends before the final state (its 30-minute cap, a dropped
-    // connection) is opened again; the API sends the scan as it is now first.
+    // connection) is opened again until the deadline; the API sends the scan as
+    // it is now first.
     while (streaming) {
       if (Date.now() >= deadline) throw timeout();
       let body: ReadableStream<Uint8Array> | null;
       try {
         body = await this.openEventStream(id, options);
       } catch (error) {
-        if (error instanceof SpaceContextError && error.status === 0 && last === null) {
+        if (error instanceof SpaceContextError && error.status === 0) {
           // Could not be reached once: poll instead of giving up at once.
-          streaming = false;
-          break;
+          if (last === null) {
+            streaming = false;
+            break;
+          }
+          // Streamed before, the network is down for now: try again shortly.
+          await sleep(1000, options.signal);
+          continue;
         }
         throw error;
       }
@@ -536,7 +556,7 @@ export class SpaceContext {
         streaming = false;
         break;
       }
-      for await (const event of parseServerSentEvents(body)) {
+      for await (const event of untilDropped(parseServerSentEvents(body), options.signal)) {
         if (event.event !== 'scan' || !event.data) continue;
         const scan = JSON.parse(event.data) as Scan;
         if (fresh(scan)) yield scan;

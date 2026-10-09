@@ -121,6 +121,59 @@ describe('scans.events and scans.wait', () => {
     expect(stages).toEqual(['queued', 'complete']);
   });
 
+  it('opens the stream again when the connection drops mid-stream, and while the network is down', async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    // The first event arrives, then the read fails as a dropped connection does.
+    const dropped = () => {
+      let sent = false;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent) return controller.error(new TypeError('terminated'));
+          sent = true;
+          controller.enqueue(encoder.encode(`event: scan\nid: 1\ndata: ${JSON.stringify(scan({ status: 'queued' }))}\n\n`));
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    };
+    const { fetch, calls } = fakeFetch((_call, index) => {
+      if (index === 0) return dropped();
+      if (index === 1) throw new TypeError('fetch failed');
+      return sse([scan({ status: 'processing', stage: 'observing' }), scan({ status: 'complete' })]);
+    });
+    const seen: string[] = [];
+    const done = client(fetch).scans.wait(SCAN_ID, { onProgress: (current) => seen.push(current.stage ?? current.status) });
+    await vi.advanceTimersByTimeAsync(2500);
+    expect((await done).status).toBe('complete');
+    expect(calls.map((call) => call.url)).toEqual(Array(3).fill(`${BASE}/scans/${SCAN_ID}/events`));
+    expect(seen).toEqual(['queued', 'observing', 'complete']);
+  });
+
+  it("throws the caller's abort instead of opening the stream again", async () => {
+    const controller = new AbortController();
+    let opened = 0;
+    const fetch = (async (_input: RequestInfo | URL, init: RequestInit = {}) => {
+      opened += 1;
+      const signal = init.signal!;
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode(`event: scan\ndata: ${JSON.stringify(scan({ status: 'queued' }))}\n\n`));
+        },
+        // Then nothing until the request is aborted, which errors the body as fetch does.
+        pull(stream) {
+          return new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(stream.error(signal.reason)), { once: true }));
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    }) as typeof globalThis.fetch;
+    const stop = new Error('stopped by the caller');
+    const outcome = client(fetch)
+      .scans.wait(SCAN_ID, { onProgress: () => controller.abort(stop) }, { signal: controller.signal })
+      .catch((error: unknown) => error);
+    expect(await outcome).toBe(stop);
+    expect(opened).toBe(1);
+  });
+
   it('polls where the API cannot stream to this client, and reports the error of a refused scan', async () => {
     vi.useFakeTimers();
     const { fetch, calls } = fakeFetch((call, index) => {
