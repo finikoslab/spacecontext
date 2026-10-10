@@ -28,7 +28,7 @@ It is the **same account as the Space Context iPhone app**, whichever way you si
 | **New scan** | Drop a walkthrough video or photos, see the price (the account's free scan, if it has one, or $1.00), follow the analysis step by step, and land on the result. |
 | **Connect AI** | The MCP server URL and the steps for Claude, Claude Code, ChatGPT and Cursor, with the assistants already connected. |
 | **API keys** | Create test and live keys with scopes and a monthly spending cap (a live key that can scan needs a card on file); revoke them. Keys created by the MCP connector carry an **MCP** badge; keys approved for a terminal are named `CLI · …`. |
-| **Billing** | Balance, the card on file (added without a charge), top-ups by card through Stripe, automatic top-up, spend chart, every movement, and invoices. |
+| **Billing** | Balance, the card on file (added without a charge), top-ups by card through Stripe, invoice details (individual or company, VAT number), automatic top-up, spend chart, every movement, and invoices. |
 | **Webhooks** | HTTPS endpoints, events, test deliveries, delivery history. |
 | **Security** | The audit log: sign-ins, keys, webhooks, payments and deletions, with who did them, kept 400 days. |
 

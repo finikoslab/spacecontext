@@ -1,6 +1,6 @@
 ---
 title: 'Billing'
-description: 'Free scan, prepaid balance, the card on file for live keys that can scan, card top-ups through Stripe, automatic top-up, refunds and the ledger.'
+description: 'Free scan, prepaid balance, the card on file for live keys that can scan, card top-ups through Stripe, automatic top-up, invoices and company details, refunds and the ledger.'
 ---
 
 # Billing
@@ -30,17 +30,20 @@ In the console, open **Billing → Add a card** (a new account also finds it in 
 
 ## Add funds
 
-In the console, tick the billing terms (below), then **Billing → Add $10 / $25 / $50**. You are taken to a **Stripe Checkout** page. Pay by card, and you come back to the console. The balance updates within a few seconds, when Stripe confirms the payment.
+In the console, tick the billing terms (below), then **Billing → Add $10 / $25 / $50**, or type another amount under **Other amount** and press **Add**. You are taken to a **Stripe Checkout** page. Pay by card, and you come back to the console. The balance updates within a few seconds, when Stripe confirms the payment.
 
 ![Billing in the console: the balance with Add $10, $25 and $50 buttons, the automatic top-up settings and the spend of the last 30 days](/docs/console/billing.jpg)
 
-- Amounts from $10 to $500 per top-up (the API accepts any amount in that range).
+- Amounts from $10 to $500 per top-up, in dollars and cents, in the console as in the API.
+- Buying as a company? Add your [invoice details](#invoices-and-company-details) first, so the invoice has your company name and VAT number.
 - The balance never expires and is used only for API scans.
 - Tick **Save the card for automatic top-ups** to allow automatic top-up later; that card is also the card on file that live keys that can scan need. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.
 
 ## What you accept when you add funds
 
 Before the payment page opens, the console asks you to accept these terms; Stripe's page repeats them next to the pay button. Adding a card asks for the same acceptance, and nothing is charged on that page.
+
+You do not have to tick the box every time: once you have accepted the current version, the console remembers it, and the box starts ticked with the date you accepted written under it (you can untick it). When the terms change, the box starts empty again until you accept the new version. The payment is opened only with the box ticked.
 
 - **The credit is supplied at once.** It is added to your balance as soon as the payment succeeds, and the scans you start use it: you ask for it to be supplied now.
 - **Credit already used cannot be refunded.** A scan that fails is refunded to your balance automatically (see below). Money goes back to a card only if you ask: write to support about unused credit. Statutory rights, where they apply, are not affected.
@@ -71,6 +74,20 @@ If the bank declines the card, automatic top-up turns itself off, the console sh
 
 If you ask your bank or Stripe for a refund of a top-up, the refunded amount is taken from the balance; if a payment is disputed, it is taken while the dispute is open. The balance can then go below zero until you add funds.
 
-## Taxes and invoices
+## Invoices and company details
 
-Payments are processed by Stripe on behalf of Finikos S.r.l. (Italy). Every top-up comes with an **invoice**: at checkout you give your billing address and, for a business, your tax ID (VAT number). The console lists your invoices under **Billing → Invoices**, each with its page and PDF; the API returns them at `GET /v1/billing/invoices`.
+Payments are processed by Stripe on behalf of Finikos S.r.l. (Italy). **Every top-up has an invoice**, automatic top-ups included, made out to the details on file when it is issued.
+
+### Set your details
+
+In the console, open **Billing → Invoice details**, choose **Individual** or **Company**, and save:
+
+- **Name**, or the **company name**; the **billing email** that receives the invoices (your account's email to start with); the **billing address** and its country.
+- **VAT number**, for a company. It is required for a company in the EU, the United Kingdom, Switzerland or Norway. Type it with its country prefix, as in `IT12345678901` (in the EU and the UK the console adds the prefix if you leave it out). After you save, Stripe checks it with the tax authority, and the card shows **Verified**, **Pending check** or **Not verified**.
+- **Italian customers.** A company gives its **Codice destinatario SDI** (7 characters) or its **PEC** address for the electronic invoice: either is enough, and without either the invoice goes to its tax drawer (*cassetto fiscale*). An individual can add their **codice fiscale**.
+
+Set them **before you pay**: invoices already issued do not change. If you have not set them in the console, Stripe's payment page lets you give them while paying: tick the box for purchasing as a business and enter the company name and VAT number there. The details are kept by Stripe with your customer record; the [privacy policy](https://spacecontext.app/privacy/) says how they are used.
+
+### Download your invoices
+
+**Billing → Invoices** lists every invoice with its date, number, amount and status, its page and its PDF. The API returns them at `GET /v1/billing/invoices`.
