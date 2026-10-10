@@ -235,7 +235,7 @@
       "post": {
         "operationId": "createSpace",
         "summary": "Create a space to scan through the API",
-        "description": "Creates a space in the key's mode (test or live). With an `external_id` already used in that mode, returns the existing space with 200 instead of creating another. Needs `spaces:read` and `scans:write`.",
+        "description": "Creates a space in the key's mode (test or live). With an `external_id` already used in that mode, returns the existing space with 200 instead of creating another. An account creates at most 200 spaces a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). Needs `spaces:read` and `scans:write`.",
         "security": [
           {
             "apiKey": []
@@ -479,7 +479,7 @@
       "post": {
         "operationId": "createScan",
         "summary": "Create a scan of a space created through the API",
-        "description": "Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. Needs `scans:write`.",
+        "description": "Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). Needs `scans:write`.",
         "security": [
           {
             "apiKey": []
@@ -1062,7 +1062,7 @@
       "get": {
         "operationId": "getWallet",
         "summary": "What this key has to spend",
-        "description": "For agents: the balance, the free scans left and the price of a scan. Needs the `scans:read` scope.",
+        "description": "For agents: the balance, the free scans left, the price of a scan and whether a card is on file (`card_on_file`: live scans need one). Needs the `scans:read` scope.",
         "security": [
           {
             "apiKey": []
@@ -1197,7 +1197,7 @@
       "get": {
         "operationId": "streamScanEvents",
         "summary": "Follow a scan in real time",
-        "description": "A `text/event-stream` (Server-Sent Events) that sends the scan (the same object as `GET /scans/{id}`, without `upload`) as an event named `scan` at once, then every time its status, stage or error changes, and closes after the final one (`complete`, `failed` or `cancelled`). A `ping` event every 15 seconds keeps the connection alive. One stream lasts at most 30 minutes; reconnect to keep following. Needs `scans:read`.",
+        "description": "A `text/event-stream` (Server-Sent Events) that sends the scan (the same object as `GET /scans/{id}`, without `upload`) as an event named `scan` at once, then every time its status, stage or error changes, and closes after the final one (`complete`, `failed` or `cancelled`). A `ping` event every 15 seconds keeps the connection alive. One stream lasts at most 30 minutes; reconnect to keep following. An account holds at most 10 streams open at once (by default): one more answers 429 with `Retry-After`; close one, or poll `GET /scans/{id}`. Needs `scans:read`.",
         "security": [
           {
             "apiKey": []
@@ -1433,7 +1433,7 @@
       "post": {
         "operationId": "startScan",
         "summary": "Charge the scan and start the analysis",
-        "description": "Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `PAYMENT_METHOD_REQUIRED` (a live scan needs a card on file: added in the console, nothing charged), `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`. Test keys are never charged and get the demo result. Needs `scans:write`.",
+        "description": "Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `PAYMENT_METHOD_REQUIRED` (a live scan needs a card on file: added in the console, nothing charged), `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`, 503 `PAYMENTS_UNAVAILABLE` (a live scan where payments are not configured). Test keys are never charged and get the demo result. Needs `scans:write`.",
         "security": [
           {
             "apiKey": []
@@ -1502,6 +1502,9 @@
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
           }
         }
       }
@@ -1669,6 +1672,139 @@
           }
         }
       }
+    },
+    "/agent/credits": {
+      "post": {
+        "operationId": "buyAgentCredits",
+        "summary": "Pay with x402 and get an API key (agents)",
+        "description": "For an agent with a wallet and no account: pay in USDC with [x402](https://x402.org) v2 and receive an API key. No key, no sign-in: the payment is the credential, and the paying address is the account.\n\n1. Call without `PAYMENT-SIGNATURE`: 402 `PAYMENT_REQUIRED` with the `PAYMENT-REQUIRED` header (base64 JSON, also in the body as `payment_required`): scheme `exact`, the network, the amount in atomic USDC units (6 decimals: US$1.00 = `1000000`), the USDC contract and the address to pay.\n2. Sign it (EIP-3009 `transferWithAuthorization`) and send **the same request, with the same body**, adding `PAYMENT-SIGNATURE` (base64 JSON PaymentPayload). The payment is verified and settled by the facilitator; the answer carries `PAYMENT-RESPONSE` with the transaction.\n\nOn Base mainnet (`eip155:8453`) the payment is credited to the account's wallet (`amount_cents`, then US$1.00 per scan; agents have no free scan) and the key is **live**. On Base Sepolia (`eip155:84532`) testnet USDC is free, so the payment credits nothing: the key is a **test** key (demo space, no charges, no model). The same paying address always gets the same account.\n\n**Store `api_key` from your first purchase: it is shown once.** A signed authorization can be submitted by whoever holds it, so a payment alone returns a key only when it opens the account. Later payments from the same wallet top up the same account and return only `api_key_prefix`. An existing key is replaced only with that key: `rotate_key: true` plus `Authorization: Bearer <the current key>` (the previous key is revoked). The first key of the other mode (e.g. a live key for an account that so far paid on testnet) needs `Authorization: Bearer <one of the account's current keys>`. Both are checked before any payment is taken (403 `AGENT_KEY_REQUIRED`, nothing charged). A payment replayed with the same transaction is recognised: nothing is credited or minted twice.\n\n400 `PAYMENT_INVALID` when the signature header is malformed or does not match the requirements (amount, network, asset, address), before anything is sent to the facilitator. 402 `PAYMENT_FAILED` when the facilitator rejects or cannot settle the payment (`reason`; nothing was charged). 404 when agent payments are off on this deployment. Limited per IP.",
+        "security": [
+          {},
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "PAYMENT-SIGNATURE",
+            "in": "header",
+            "required": false,
+            "description": "base64 of the JSON x402 v2 PaymentPayload: `x402Version: 2`, `accepted` (the requirements received, unchanged), `payload: { signature, authorization: { from, to, value, validAfter, validBefore, nonce } }`.",
+            "schema": {
+              "type": "string",
+              "maxLength": 16384
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCreditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Paid: the account, its credit (mainnet) and its key",
+            "headers": {
+              "PAYMENT-RESPONSE": {
+                "description": "base64 of the JSON settlement: `{ success, transaction, network, payer }`",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentCredit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body, or `PAYMENT_INVALID`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPaymentError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`PAYMENT_REQUIRED` (pay first) or `PAYMENT_FAILED` (rejected or not settled; nothing was charged)",
+            "headers": {
+              "PAYMENT-REQUIRED": {
+                "description": "base64 of the JSON PaymentRequired",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "PAYMENT-RESPONSE": {
+                "description": "On `PAYMENT_FAILED`: base64 of `{ success: false, errorReason, payer, transaction, network }`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPaymentError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`AGENT_KEY_REQUIRED`: changing the keys of an existing account needs one of its current keys (nothing was charged)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPaymentError"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "description": "Settled but not recorded: reconciled by hand (`transaction`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPaymentError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The settlement could not be confirmed (`nonce`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPaymentError"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1715,7 +1851,8 @@
           "id",
           "email",
           "name",
-          "is_pro"
+          "is_pro",
+          "is_admin"
         ],
         "properties": {
           "id": {
@@ -1733,6 +1870,10 @@
           },
           "is_pro": {
             "type": "boolean"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "description": "True only for Space Context staff accounts, which the console shows extra internal pages; false for everyone else."
           }
         }
       },
@@ -4637,6 +4778,7 @@
           "balance_cents",
           "free_scans_remaining",
           "scan_price_cents",
+          "card_on_file",
           "auto_recharge"
         ],
         "properties": {
@@ -4658,6 +4800,10 @@
           "scan_price_cents": {
             "type": "integer",
             "minimum": 1
+          },
+          "card_on_file": {
+            "type": "boolean",
+            "description": "A real card stands behind the account: a card saved in the console, a paid top-up, or a settled x402 payment on mainnet. Starting a live scan, and creating a live key that can scan, need it: without it they answer 402 `PAYMENT_METHOD_REQUIRED`. Adding a card charges nothing."
           },
           "auto_recharge": {
             "type": "object",
@@ -5416,6 +5562,244 @@
           }
         }
       },
+      "AgentCreditRequest": {
+        "type": "object",
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 50000,
+            "default": 500,
+            "description": "US cents to pay (and, on mainnet, to credit)"
+          },
+          "rotate_key": {
+            "type": "boolean",
+            "default": false,
+            "description": "Make a new key and revoke the current one. Needs `Authorization: Bearer <the current key>`"
+          }
+        }
+      },
+      "AgentCredit": {
+        "type": "object",
+        "required": [
+          "object",
+          "network",
+          "payer",
+          "transaction",
+          "livemode",
+          "amount_cents",
+          "balance_cents",
+          "api_key_prefix",
+          "notice",
+          "docs"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "agent_credit"
+            ]
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "eip155:84532",
+              "eip155:8453"
+            ]
+          },
+          "payer": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{40}$"
+          },
+          "transaction": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "true on mainnet: live credit and a live key"
+          },
+          "amount_cents": {
+            "type": "integer"
+          },
+          "balance_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The wallet after this payment; null on testnet (nothing is credited)"
+          },
+          "api_key": {
+            "type": "string",
+            "pattern": "^sc_(live|test)_",
+            "description": "Only when the key was created by this call: store it, it is not shown again"
+          },
+          "api_key_prefix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account's key of this mode; null when it has none"
+          },
+          "notice": {
+            "type": "string",
+            "description": "What to do with the key (store it now, or use the one stored)"
+          },
+          "docs": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "X402PaymentRequirements": {
+        "type": "object",
+        "required": [
+          "scheme",
+          "network",
+          "amount",
+          "asset",
+          "payTo",
+          "maxTimeoutSeconds",
+          "extra"
+        ],
+        "properties": {
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "exact"
+            ]
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "eip155:84532",
+              "eip155:8453"
+            ]
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+$",
+            "description": "Atomic units of the asset (USDC: 6 decimals)"
+          },
+          "asset": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$"
+          },
+          "payTo": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$"
+          },
+          "maxTimeoutSeconds": {
+            "type": "integer"
+          },
+          "extra": {
+            "type": "object",
+            "required": [
+              "name",
+              "version"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "description": "EIP-712 domain of the asset"
+          }
+        }
+      },
+      "X402PaymentRequired": {
+        "type": "object",
+        "required": [
+          "x402Version",
+          "resource",
+          "accepts"
+        ],
+        "properties": {
+          "x402Version": {
+            "type": "integer",
+            "enum": [
+              2
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "object",
+            "required": [
+              "url",
+              "description",
+              "mimeType"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "description": {
+                "type": "string"
+              },
+              "mimeType": {
+                "type": "string"
+              }
+            }
+          },
+          "accepts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/X402PaymentRequirements"
+            }
+          }
+        }
+      },
+      "AgentPaymentError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "request_id"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Why the payment was refused (x402 reason)"
+              },
+              "payment_required": {
+                "$ref": "#/components/schemas/X402PaymentRequired"
+              },
+              "transaction": {
+                "type": "string",
+                "description": "On 500: the settled transaction, for reconciliation"
+              },
+              "network": {
+                "type": "string"
+              },
+              "nonce": {
+                "type": "string",
+                "description": "On 502: the authorization nonce, for reconciliation"
+              }
+            }
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "required": [
@@ -5438,6 +5822,18 @@
               },
               "request_id": {
                 "type": "string"
+              },
+              "retry_after": {
+                "type": "integer",
+                "description": "On a 429: seconds to wait, as in `Retry-After`."
+              },
+              "daily_limit": {
+                "type": "integer",
+                "description": "On a 429 for a daily allowance: the allowance (it resets at midnight UTC)."
+              },
+              "max_streams": {
+                "type": "integer",
+                "description": "On a 429 from `GET /scans/{id}/events`: the streams an account may hold open at once."
               }
             },
             "additionalProperties": true

@@ -85,7 +85,7 @@ export interface paths {
         put?: never;
         /**
          * Create a space to scan through the API
-         * @description Creates a space in the key's mode (test or live). With an `external_id` already used in that mode, returns the existing space with 200 instead of creating another. Needs `spaces:read` and `scans:write`.
+         * @description Creates a space in the key's mode (test or live). With an `external_id` already used in that mode, returns the existing space with 200 instead of creating another. An account creates at most 200 spaces a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). Needs `spaces:read` and `scans:write`.
          */
         post: operations["createSpace"];
         delete?: never;
@@ -130,7 +130,7 @@ export interface paths {
         put?: never;
         /**
          * Create a scan of a space created through the API
-         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. Needs `scans:write`.
+         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). Needs `scans:write`.
          */
         post: operations["createScan"];
         delete?: never;
@@ -268,7 +268,7 @@ export interface paths {
         };
         /**
          * What this key has to spend
-         * @description For agents: the balance, the free scans left and the price of a scan. Needs the `scans:read` scope.
+         * @description For agents: the balance, the free scans left, the price of a scan and whether a card is on file (`card_on_file`: live scans need one). Needs the `scans:read` scope.
          */
         get: operations["getWallet"];
         put?: never;
@@ -312,7 +312,7 @@ export interface paths {
         };
         /**
          * Follow a scan in real time
-         * @description A `text/event-stream` (Server-Sent Events) that sends the scan (the same object as `GET /scans/{id}`, without `upload`) as an event named `scan` at once, then every time its status, stage or error changes, and closes after the final one (`complete`, `failed` or `cancelled`). A `ping` event every 15 seconds keeps the connection alive. One stream lasts at most 30 minutes; reconnect to keep following. Needs `scans:read`.
+         * @description A `text/event-stream` (Server-Sent Events) that sends the scan (the same object as `GET /scans/{id}`, without `upload`) as an event named `scan` at once, then every time its status, stage or error changes, and closes after the final one (`complete`, `failed` or `cancelled`). A `ping` event every 15 seconds keeps the connection alive. One stream lasts at most 30 minutes; reconnect to keep following. An account holds at most 10 streams open at once (by default): one more answers 429 with `Retry-After`; close one, or poll `GET /scans/{id}`. Needs `scans:read`.
          */
         get: operations["streamScanEvents"];
         put?: never;
@@ -374,7 +374,7 @@ export interface paths {
         put?: never;
         /**
          * Charge the scan and start the analysis
-         * @description Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `PAYMENT_METHOD_REQUIRED` (a live scan needs a card on file: added in the console, nothing charged), `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`. Test keys are never charged and get the demo result. Needs `scans:write`.
+         * @description Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `PAYMENT_METHOD_REQUIRED` (a live scan needs a card on file: added in the console, nothing charged), `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`, 503 `PAYMENTS_UNAVAILABLE` (a live scan where payments are not configured). Test keys are never charged and get the demo result. Needs `scans:write`.
          */
         post: operations["startScan"];
         delete?: never;
@@ -443,6 +443,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agent/credits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pay with x402 and get an API key (agents)
+         * @description For an agent with a wallet and no account: pay in USDC with [x402](https://x402.org) v2 and receive an API key. No key, no sign-in: the payment is the credential, and the paying address is the account.
+         *
+         *     1. Call without `PAYMENT-SIGNATURE`: 402 `PAYMENT_REQUIRED` with the `PAYMENT-REQUIRED` header (base64 JSON, also in the body as `payment_required`): scheme `exact`, the network, the amount in atomic USDC units (6 decimals: US$1.00 = `1000000`), the USDC contract and the address to pay.
+         *     2. Sign it (EIP-3009 `transferWithAuthorization`) and send **the same request, with the same body**, adding `PAYMENT-SIGNATURE` (base64 JSON PaymentPayload). The payment is verified and settled by the facilitator; the answer carries `PAYMENT-RESPONSE` with the transaction.
+         *
+         *     On Base mainnet (`eip155:8453`) the payment is credited to the account's wallet (`amount_cents`, then US$1.00 per scan; agents have no free scan) and the key is **live**. On Base Sepolia (`eip155:84532`) testnet USDC is free, so the payment credits nothing: the key is a **test** key (demo space, no charges, no model). The same paying address always gets the same account.
+         *
+         *     **Store `api_key` from your first purchase: it is shown once.** A signed authorization can be submitted by whoever holds it, so a payment alone returns a key only when it opens the account. Later payments from the same wallet top up the same account and return only `api_key_prefix`. An existing key is replaced only with that key: `rotate_key: true` plus `Authorization: Bearer <the current key>` (the previous key is revoked). The first key of the other mode (e.g. a live key for an account that so far paid on testnet) needs `Authorization: Bearer <one of the account's current keys>`. Both are checked before any payment is taken (403 `AGENT_KEY_REQUIRED`, nothing charged). A payment replayed with the same transaction is recognised: nothing is credited or minted twice.
+         *
+         *     400 `PAYMENT_INVALID` when the signature header is malformed or does not match the requirements (amount, network, asset, address), before anything is sent to the facilitator. 402 `PAYMENT_FAILED` when the facilitator rejects or cannot settle the payment (`reason`; nothing was charged). 404 when agent payments are off on this deployment. Limited per IP.
+         */
+        post: operations["buyAgentCredits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -453,6 +482,8 @@ export interface components {
             email: string;
             name: string | null;
             is_pro: boolean;
+            /** @description True only for Space Context staff accounts, which the console shows extra internal pages; false for everyone else. */
+            is_admin: boolean;
         };
         /** @enum {string} */
         ApiKeyScope: "spaces:read" | "scans:read" | "scans:write" | "spaces:sensitive";
@@ -1038,6 +1069,8 @@ export interface components {
             balance_cents: number;
             free_scans_remaining: number;
             scan_price_cents: number;
+            /** @description A real card stands behind the account: a card saved in the console, a paid top-up, or a settled x402 payment on mainnet. Starting a live scan, and creating a live key that can scan, need it: without it they answer 402 `PAYMENT_METHOD_REQUIRED`. Adding a card charges nothing. */
+            card_on_file: boolean;
             auto_recharge: {
                 enabled: boolean;
                 threshold_cents?: number | null;
@@ -1234,11 +1267,93 @@ export interface components {
             };
             user: components["schemas"]["ConsoleUser"];
         };
+        AgentCreditRequest: {
+            /**
+             * @description US cents to pay (and, on mainnet, to credit)
+             * @default 500
+             */
+            amount_cents?: number;
+            /**
+             * @description Make a new key and revoke the current one. Needs `Authorization: Bearer <the current key>`
+             * @default false
+             */
+            rotate_key?: boolean;
+        };
+        AgentCredit: {
+            /** @enum {string} */
+            object: "agent_credit";
+            /** @enum {string} */
+            network: "eip155:84532" | "eip155:8453";
+            payer: string;
+            transaction: string;
+            /** @description true on mainnet: live credit and a live key */
+            livemode: boolean;
+            amount_cents: number;
+            /** @description The wallet after this payment; null on testnet (nothing is credited) */
+            balance_cents: number | null;
+            /** @description Only when the key was created by this call: store it, it is not shown again */
+            api_key?: string;
+            /** @description The account's key of this mode; null when it has none */
+            api_key_prefix: string | null;
+            /** @description What to do with the key (store it now, or use the one stored) */
+            notice: string;
+            /** Format: uri */
+            docs: string;
+        };
+        X402PaymentRequirements: {
+            /** @enum {string} */
+            scheme: "exact";
+            /** @enum {string} */
+            network: "eip155:84532" | "eip155:8453";
+            /** @description Atomic units of the asset (USDC: 6 decimals) */
+            amount: string;
+            asset: string;
+            payTo: string;
+            maxTimeoutSeconds: number;
+            /** @description EIP-712 domain of the asset */
+            extra: {
+                name: string;
+                version: string;
+            };
+        };
+        X402PaymentRequired: {
+            /** @enum {integer} */
+            x402Version: 2;
+            error?: string;
+            resource: {
+                /** Format: uri */
+                url: string;
+                description: string;
+                mimeType: string;
+            };
+            accepts: components["schemas"]["X402PaymentRequirements"][];
+        };
+        AgentPaymentError: {
+            error: {
+                code: string;
+                message: string;
+                request_id: string;
+                /** @description Why the payment was refused (x402 reason) */
+                reason?: string;
+                payment_required?: components["schemas"]["X402PaymentRequired"];
+                /** @description On 500: the settled transaction, for reconciliation */
+                transaction?: string;
+                network?: string;
+                /** @description On 502: the authorization nonce, for reconciliation */
+                nonce?: string;
+            };
+        };
         Error: {
             error: {
                 code: string;
                 message: string;
                 request_id: string;
+                /** @description On a 429: seconds to wait, as in `Retry-After`. */
+                retry_after?: number;
+                /** @description On a 429 for a daily allowance: the allowance (it resets at midnight UTC). */
+                daily_limit?: number;
+                /** @description On a 429 from `GET /scans/{id}/events`: the streams an account may hold open at once. */
+                max_streams?: number;
             } & {
                 [key: string]: unknown;
             };
@@ -1975,6 +2090,7 @@ export interface operations {
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["ErrorResponse"];
         };
     };
     checkFrame: {
@@ -2064,6 +2180,88 @@ export interface operations {
             400: components["responses"]["ErrorResponse"];
             403: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    buyAgentCredits: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description base64 of the JSON x402 v2 PaymentPayload: `x402Version: 2`, `accepted` (the requirements received, unchanged), `payload: { signature, authorization: { from, to, value, validAfter, validBefore, nonce } }`. */
+                "PAYMENT-SIGNATURE"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AgentCreditRequest"];
+            };
+        };
+        responses: {
+            /** @description Paid: the account, its credit (mainnet) and its key */
+            200: {
+                headers: {
+                    /** @description base64 of the JSON settlement: `{ success, transaction, network, payer }` */
+                    "PAYMENT-RESPONSE"?: string;
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCredit"];
+                };
+            };
+            /** @description Invalid body, or `PAYMENT_INVALID` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPaymentError"];
+                };
+            };
+            /** @description `PAYMENT_REQUIRED` (pay first) or `PAYMENT_FAILED` (rejected or not settled; nothing was charged) */
+            402: {
+                headers: {
+                    /** @description base64 of the JSON PaymentRequired */
+                    "PAYMENT-REQUIRED"?: string;
+                    /** @description On `PAYMENT_FAILED`: base64 of `{ success: false, errorReason, payer, transaction, network }` */
+                    "PAYMENT-RESPONSE"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPaymentError"];
+                };
+            };
+            /** @description `AGENT_KEY_REQUIRED`: changing the keys of an existing account needs one of its current keys (nothing was charged) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPaymentError"];
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RateLimited"];
+            /** @description Settled but not recorded: reconciled by hand (`transaction`) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPaymentError"];
+                };
+            };
+            /** @description The settlement could not be confirmed (`nonce`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPaymentError"];
+                };
+            };
+            503: components["responses"]["ErrorResponse"];
         };
     };
 }
