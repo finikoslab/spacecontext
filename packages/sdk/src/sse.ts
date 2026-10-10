@@ -5,9 +5,17 @@ export type ServerSentEvent = { event: string; id: string | null; data: string }
  * Reads a `text/event-stream` body event by event, as it arrives. Follows the
  * SSE format: fields separated by newlines, events by a blank line, comment
  * lines (`:`) ignored, several `data:` lines joined with newlines.
+ *
+ * `signal` ends the reading at once, even when nothing arrives (a stream that
+ * only sends pings, a body that ignores the request's abort): the events read so
+ * far are kept, an unfinished one is dropped.
  */
-export async function* parseServerSentEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<ServerSentEvent> {
+export async function* parseServerSentEvents(body: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<ServerSentEvent> {
   const reader = body.getReader();
+  // Cancelling the reader settles a pending read as done.
+  const stop = () => void reader.cancel(signal?.reason).catch(() => undefined);
+  if (signal?.aborted) stop();
+  else signal?.addEventListener('abort', stop, { once: true });
   const decoder = new TextDecoder();
   let buffer = '';
   try {
@@ -24,9 +32,11 @@ export async function* parseServerSentEvents(body: ReadableStream<Uint8Array>): 
         boundary = findBoundary(buffer);
       }
     }
+    if (signal?.aborted) return;
     const last = parseBlock(buffer);
     if (last) yield last;
   } finally {
+    signal?.removeEventListener('abort', stop);
     await reader.cancel().catch(() => undefined);
   }
 }

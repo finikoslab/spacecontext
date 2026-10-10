@@ -73,6 +73,8 @@ type RequestSpec = {
   idempotent: boolean;
   /** Uploads can take minutes: no client timeout. */
   noTimeout?: boolean;
+  /** False: a 429 is thrown at once, never waited out (the caller has another way). */
+  retryRateLimit?: boolean;
   signal?: AbortSignal | undefined;
 };
 
@@ -98,6 +100,19 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 
 /** Gateway failures: retried for idempotent requests. A 429 has its own rule. */
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+
+/** Longest pause between two polls of a scan that is not changing. */
+const MAX_POLL_INTERVAL_MS = 15_000;
+
+/** Worth asking again later: refused for load (429), a gateway failure, or no answer at all. */
+function transient(error: unknown): error is SpaceContextError {
+  return error instanceof SpaceContextError && (error.status === 0 || error.status === 429 || RETRYABLE_STATUSES.has(error.status));
+}
+
+/** Seconds the API asked to wait, from `Retry-After` or `retry_after`. */
+function askedWait(error: SpaceContextError): number | null {
+  return error.retryAfter ?? (typeof error.details.retry_after === 'number' ? error.details.retry_after : null);
+}
 
 function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
@@ -353,17 +368,21 @@ export class SpaceContext {
 
     /**
      * The scan as it changes, as it changes: `for await (const scan of sc.scans.events(id)) …`.
-     * Follows the API's event stream (reconnecting until the deadline when it ends
-     * early or the connection drops) and ends after the final state; falls back to
-     * polling where streaming is not possible.
+     * Follows the API's event stream (reconnecting when it ends early or the
+     * connection drops) and ends after the final state. Where the stream cannot be
+     * had (a proxy that does not stream, the account's open streams all in use,
+     * the stream failing) it polls `GET /scans/{id}` instead, from every `intervalMs`
+     * up to every 15 s while nothing changes. Throws `TIMEOUT` (with the last state
+     * in `details.scan`) at `timeoutMs`, default 20 minutes, even while the stream
+     * only sends pings.
      */
     events: (id: string, params: { intervalMs?: number; timeoutMs?: number } = {}, options: RequestOptions = {}) =>
       this.scanEvents(id, params, options),
 
     /**
      * Waits until a scan is complete, failed or cancelled, calling `onProgress`
-     * at every change. Streams the API's events; polls every `intervalMs` only
-     * where streaming is not possible.
+     * at every change. Follows the scan as `events` does, polling only where
+     * streaming is not possible, and throws `TIMEOUT` at `timeoutMs`.
      */
     wait: (id: string, params: { intervalMs?: number; timeoutMs?: number; onProgress?: (scan: Scan) => void } = {}, options: RequestOptions = {}) =>
       this.waitForScan(id, params, options),
@@ -496,16 +515,19 @@ export class SpaceContext {
   /**
    * One event stream of the scan. Null when the API cannot stream to this
    * client (a proxy that answers without an event stream); throws what the API
-   * refused (404, 403…).
+   * refused (404, 403, 429…).
    */
-  private async openEventStream(id: string, options: RequestOptions): Promise<ReadableStream<Uint8Array> | null> {
+  private async openEventStream(id: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array> | null> {
     const response = await this.send(this.url(`/scans/${encodeURIComponent(id)}/events`), {
       method: 'GET',
       path: '',
       headers: { Accept: 'text/event-stream' },
       idempotent: true,
       noTimeout: true,
-      signal: options.signal,
+      // Refused for load (the account's open streams, the per-minute limit):
+      // polling answers now, waiting for a stream would not.
+      retryRateLimit: false,
+      signal,
     });
     if (!response.body || !(response.headers.get('Content-Type') ?? '').includes('text/event-stream')) {
       await response.body?.cancel().catch(() => undefined);
@@ -532,48 +554,74 @@ export class SpaceContext {
     };
     const timeout = () => new SpaceContextError(`Scan ${id} is still ${last?.status ?? 'running'}`, 0, 'TIMEOUT', null, last ? { scan: last } : {});
 
-    let streaming = true;
-    // A stream that ends before the final state (its 30-minute cap, a dropped
-    // connection) is opened again until the deadline; the API sends the scan as
-    // it is now first.
-    while (streaming) {
-      if (Date.now() >= deadline) throw timeout();
-      let body: ReadableStream<Uint8Array> | null;
-      try {
-        body = await this.openEventStream(id, options);
-      } catch (error) {
-        if (error instanceof SpaceContextError && error.status === 0) {
-          // Could not be reached once: poll instead of giving up at once.
-          if (last === null) {
-            streaming = false;
-            break;
-          }
-          // Streamed before, the network is down for now: try again shortly.
-          await sleep(1000, options.signal);
-          continue;
-        }
-        throw error;
-      }
-      if (body === null) {
-        streaming = false;
-        break;
-      }
-      for await (const event of untilDropped(parseServerSentEvents(body), options.signal)) {
-        if (event.event !== 'scan' || !event.data) continue;
-        const scan = JSON.parse(event.data) as Scan;
-        if (fresh(scan)) yield scan;
-        if (FINAL_SCAN_STATUSES.has(scan.status)) return;
-        if (Date.now() >= deadline) throw timeout();
-      }
-      await sleep(1000, options.signal);
-    }
+    // Everything below (opening the stream, reading it, polling, pausing) stops at
+    // the deadline, also while the stream only sends pings.
+    const expiry = new AbortController();
+    const timer = setTimeout(() => expiry.abort(), Math.max(0, deadline - Date.now()));
+    // In Node, the deadline alone does not keep the process running.
+    (timer as unknown as { unref?: () => void }).unref?.();
+    const signal = options.signal ? AbortSignal.any([options.signal, expiry.signal]) : expiry.signal;
 
-    for (;;) {
-      const scan = await this.scans.get(id, options);
-      if (fresh(scan)) yield scan;
-      if (FINAL_SCAN_STATUSES.has(scan.status)) return;
-      if (Date.now() + interval > deadline) throw timeout();
-      await sleep(interval, options.signal);
+    try {
+      // A stream that ends before the final state (its 30-minute cap, a dropped
+      // connection) is opened again; the API sends the scan as it is now first.
+      for (;;) {
+        let body: ReadableStream<Uint8Array> | null;
+        try {
+          body = await this.openEventStream(id, signal);
+        } catch (error) {
+          if (signal.aborted || !(error instanceof SpaceContextError)) throw error;
+          if (error.status === 0 && last !== null) {
+            // Streamed before, the network is down for now: try again shortly.
+            await sleep(1000, signal);
+            continue;
+          }
+          // A refusal of the scan or the key (404, 403…) would be the same for a poll.
+          if (error.status !== 0 && error.status !== 429 && error.status < 500) throw error;
+          // Refused for load (429: the account's open streams are all in use, or
+          // too many opened this minute), failing or not reached: poll instead.
+          break;
+        }
+        // The API cannot stream to this client (a proxy): poll instead.
+        if (body === null) break;
+        for await (const event of untilDropped(parseServerSentEvents(body, signal), signal)) {
+          if (event.event !== 'scan' || !event.data) continue;
+          const scan = JSON.parse(event.data) as Scan;
+          if (fresh(scan)) yield scan;
+          if (FINAL_SCAN_STATUSES.has(scan.status)) return;
+        }
+        if (signal.aborted) throw signal.reason;
+        await sleep(1000, signal);
+      }
+
+      // Polling: every `interval` after a change, then less and less often while
+      // nothing changes; a poll refused for load or not answered is asked again
+      // later (no sooner than the API says), until the deadline.
+      const longest = Math.max(interval, MAX_POLL_INTERVAL_MS);
+      let pause = interval;
+      for (;;) {
+        try {
+          const scan = await this.scans.get(id, { signal });
+          if (fresh(scan)) {
+            yield scan;
+            pause = interval;
+          } else {
+            pause = Math.min(Math.round(pause * 1.5), longest);
+          }
+          if (FINAL_SCAN_STATUSES.has(scan.status)) return;
+        } catch (error) {
+          if (signal.aborted || !transient(error)) throw error;
+          pause = Math.max(Math.min(Math.round(pause * 1.5), longest), (askedWait(error) ?? 0) * 1000);
+        }
+        if (Date.now() + pause > deadline) throw timeout();
+        await sleep(pause, signal);
+      }
+    } catch (error) {
+      // The deadline, not the caller's abort: a TIMEOUT with the last state known.
+      if (expiry.signal.aborted && !options.signal?.aborted) throw timeout();
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -730,9 +778,9 @@ export class SpaceContext {
       const error = await errorFromResponse(response);
       // A 429 was refused before any work: always safe to retry, unless the wait is
       // long (a daily limit). A 5xx only when the request is idempotent.
-      const wait = error.retryAfter ?? (typeof error.details.retry_after === 'number' ? error.details.retry_after : null);
+      const wait = askedWait(error);
       const retryable =
-        (response.status === 429 && (wait === null || wait * 1000 <= this.maxRetryDelayMs)) ||
+        (response.status === 429 && spec.retryRateLimit !== false && (wait === null || wait * 1000 <= this.maxRetryDelayMs)) ||
         (spec.idempotent && RETRYABLE_STATUSES.has(response.status));
       if (retryable && attempt < this.maxRetries) {
         await sleep(this.backoff(attempt, wait), spec.signal);

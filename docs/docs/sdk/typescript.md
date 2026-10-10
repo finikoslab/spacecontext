@@ -75,7 +75,7 @@ if (done.status !== 'complete') throw new Error(done.error?.message);
 for await (const current of sc.scans.events(scan.id)) console.log(describeScan(current).label);
 ```
 
-`wait` and `events` follow the API's event stream (`GET /scans/{id}/events`), reconnecting until the deadline if it ends early or the connection drops, and poll every `intervalMs` only where streaming is not possible. `describeScan(scan)` turns a status and stage into a label (`Looking at the frames`, `Extracting the context`…).
+`wait` and `events` follow the API's event stream (`GET /scans/{id}/events`), reconnecting if it ends early or the connection drops. When no stream can be had (a proxy that does not stream, all 10 of the account's open streams in use, the stream failing), they poll `GET /scans/{id}` instead, every `intervalMs` (default 3 s) and less often, up to every 15 s, while nothing changes. At `timeoutMs` (default 20 minutes) they throw `TIMEOUT` with the last state in `details.scan`, even while the stream only sends pings, and close the stream. `describeScan(scan)` turns a status and stage into a label (`Looking at the frames`, `Extracting the context`…).
 
 If an upload fails, `fromVideo` and `fromFrames` cancel the scan (nothing is charged) and throw. The lower-level calls are there too: `scans.create`, `scans.uploadFrame`, `scans.uploadVideo`, `scans.start`, `scans.get`, `scans.cancel`.
 

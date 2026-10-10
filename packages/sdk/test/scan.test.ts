@@ -65,6 +65,47 @@ function sse(events: Array<Scan | null>, options: { chunked?: boolean } = {}): R
   return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' } });
 }
 
+/**
+ * A stream that sends the scan once, then only a ping every second and never
+ * ends by itself, as the API does while a stage lasts. It ignores the request's
+ * abort: only cancelling it stops it.
+ */
+function pinging(first: Scan, cancelled: { count: number }): Response {
+  const encoder = new TextEncoder();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`event: scan\nid: 1\ndata: ${JSON.stringify(first)}\n\n`));
+      const ping = () => {
+        controller.enqueue(encoder.encode('event: ping\ndata: \n\n'));
+        timer = setTimeout(ping, 1000);
+      };
+      timer = setTimeout(ping, 1000);
+    },
+    cancel() {
+      clearTimeout(timer);
+      cancelled.count += 1;
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+}
+
+/** The API's answer when the account already holds its 10 open event streams. */
+function streamsBusy(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'At most 10 event streams of an account can be open at once: close one, or poll GET /v1/scans/{id}',
+        request_id: 'req_1',
+        retry_after: 30,
+        max_streams: 10,
+      },
+    }),
+    { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '30' } }
+  );
+}
+
 function client(fetch: typeof globalThis.fetch) {
   return new SpaceContext({ apiKey: LIVE, baseUrl: BASE, fetch, maxRetries: 0 });
 }
@@ -198,10 +239,77 @@ describe('scans.events and scans.wait', () => {
     await vi.advanceTimersByTimeAsync(4000);
     expect(await outcome).toMatchObject({ code: 'TIMEOUT' });
   });
+
+  it('gives up at the deadline while the stream only sends pings, and lets the stream go', async () => {
+    vi.useFakeTimers();
+    const cancelled = { count: 0 };
+    const { fetch, calls } = fakeFetch(() => pinging(scan({ status: 'processing', stage: 'observing' }), cancelled));
+    const outcome = client(fetch).scans.wait(SCAN_ID, { timeoutMs: 2000 }).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1900);
+    expect(cancelled.count).toBe(0);
+    await vi.advanceTimersByTimeAsync(200);
+    const error = await outcome;
+    expect(error).toMatchObject({ code: 'TIMEOUT', status: 0 });
+    // The last state known comes with the timeout.
+    expect((error as SpaceContextError).details.scan).toMatchObject({ status: 'processing', stage: 'observing' });
+    // One stream, closed at the deadline: it no longer holds one of the account's slots.
+    expect(calls).toHaveLength(1);
+    expect(cancelled.count).toBe(1);
+
+    // The same for the iterator, and for a stream that does not even open.
+    const hanging = ((_input: RequestInfo | URL, init: RequestInit = {}) =>
+      new Promise<Response>((_resolve, reject) => init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true }))) as typeof globalThis.fetch;
+    const iterated = (async () => {
+      for await (const current of client(hanging).scans.events(SCAN_ID, { timeoutMs: 1500 })) void current;
+    })().catch((caught: unknown) => caught);
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(await iterated).toMatchObject({ code: 'TIMEOUT' });
+  });
+
+  it('polls when the account has all its event streams open (429), at once and less often while nothing changes', async () => {
+    vi.useFakeTimers();
+    const states = [scan({ status: 'processing', stage: 'observing' }), scan({ status: 'processing', stage: 'observing' }), scan({ status: 'complete' })];
+    let polls = 0;
+    const { fetch, calls } = fakeFetch((call) => (call.url.endsWith('/events') ? streamsBusy() : json(states[Math.min(polls++, states.length - 1)])));
+    // Default retries: the stream's 429 is still not waited out.
+    const sc = new SpaceContext({ apiKey: LIVE, baseUrl: BASE, fetch });
+    const seen: string[] = [];
+    const done = sc.scans.wait(SCAN_ID, { intervalMs: 1000, onProgress: (current) => seen.push(current.stage ?? current.status) });
+    const routes = () => calls.map((call) => call.url.split('/v1')[1]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(routes()).toEqual([`/scans/${SCAN_ID}/events`, `/scans/${SCAN_ID}`]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(calls).toHaveLength(3);
+    // Unchanged: the next poll waits longer (1.5 s, not 1 s).
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(calls).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(500);
+    expect((await done).status).toBe('complete');
+    expect(routes()).toEqual([`/scans/${SCAN_ID}/events`, `/scans/${SCAN_ID}`, `/scans/${SCAN_ID}`, `/scans/${SCAN_ID}`]);
+    expect(seen).toEqual(['observing', 'complete']);
+  });
+
+  it('polls when the stream fails, and asks again no sooner than the API says when a poll is refused for load', async () => {
+    vi.useFakeTimers();
+    let polls = 0;
+    const { fetch, calls } = fakeFetch((call) => {
+      if (call.url.endsWith('/events')) return apiError(500, 'INTERNAL_ERROR');
+      polls += 1;
+      if (polls === 1) return new Response(JSON.stringify({ error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests', request_id: 'req_1', retry_after: 5 } }), { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '5' } });
+      return json(scan({ status: 'complete' }));
+    });
+    const done = client(fetch).scans.wait(SCAN_ID, { intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(4900);
+    expect(calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(200);
+    expect((await done).status).toBe('complete');
+    expect(calls).toHaveLength(3);
+  });
 });
 
 describe('scan() in one call', () => {
-  function flow(options: { fail?: boolean; markdown?: string } = {}) {
+  function flow(options: { fail?: boolean; markdown?: string; streamsBusy?: boolean } = {}) {
+    let polls = 0;
     return fakeFetch((call) => {
       const route = `${call.method} ${call.url.split('/v1')[1]!.split('?')[0]}`;
       switch (route) {
@@ -216,7 +324,10 @@ describe('scan() in one call', () => {
           return json({ object: 'scan_frame' });
         case `POST /scans/${SCAN_ID}/start`:
           return json(scan({ status: 'queued', charge: { kind: 'free_scan', price_cents: 0, refunded: false } }));
+        case `GET /scans/${SCAN_ID}`:
+          return json(polls++ === 0 ? scan({ status: 'processing', stage: 'observing' }) : scan({ status: 'complete' }));
         case `GET /scans/${SCAN_ID}/events`:
+          if (options.streamsBusy) return streamsBusy();
           return sse([
             scan({ status: 'queued' }),
             scan({ status: 'processing', stage: 'observing' }),
@@ -295,6 +406,23 @@ describe('scan() in one call', () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it('follows the scan by polling when the account has all its event streams open, instead of failing a scan already charged', async () => {
+    vi.useFakeTimers();
+    const { fetch, calls } = flow({ streamsBusy: true });
+    const stages: string[] = [];
+    const result = client(fetch).scan(
+      { video: new Uint8Array([1, 2, 3, 4]), contentType: 'video/mp4' },
+      { space: SPACE_ID, onProgress: (event) => (event.type === 'scan' ? stages.push(event.stage) : undefined) }
+    );
+    await vi.advanceTimersByTimeAsync(3500);
+    const finished = await result;
+    expect(finished.scan.status).toBe('complete');
+    expect(finished.document).toEqual(document);
+    expect(stages).toEqual(['observing', 'complete']);
+    expect(calls.filter((call) => call.url.endsWith('/events'))).toHaveLength(1);
+    expect(calls.filter((call) => call.url.endsWith(`/scans/${SCAN_ID}`) && call.method === 'GET')).toHaveLength(2);
   });
 
   it('throws the scan error when the scan fails, with the scan attached', async () => {

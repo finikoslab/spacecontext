@@ -906,6 +906,58 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     expect(JSON.parse(result.content[0]!.text!)).toMatchObject({ status: 'processing', stage: 'observing', label: 'Looking at the frames', final: false, next: expect.stringContaining('again') });
   });
 
+  it('answers follow_scan within max_wait_seconds while the stream only sends pings, and closes the stream', async () => {
+    let cancelled = false;
+    backend = fakeBackend({
+      // The scan once, then a ping every 200 ms, never closed by the API: a long stage.
+      'GET /scans/scn_2/events': () => {
+        const encoder = new TextEncoder();
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(`event: scan\nid: 1\ndata: ${JSON.stringify(scanJson({ status: 'processing', stage: 'enriching', upload: null }))}\n\n`));
+            const ping = () => {
+              controller.enqueue(encoder.encode('event: ping\ndata: \n\n'));
+              timer = setTimeout(ping, 200);
+            };
+            timer = setTimeout(ping, 200);
+          },
+          cancel() {
+            clearTimeout(timer);
+            cancelled = true;
+          },
+        });
+        return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+      },
+    });
+    const { accessToken } = await connect();
+    await initialize(accessToken);
+    const started = Date.now();
+    const result = await tool(accessToken, 'follow_scan', { scan_id: 'scn_2', max_wait_seconds: 1 });
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0]!.text!)).toMatchObject({ status: 'processing', stage: 'enriching', final: false });
+    expect(cancelled).toBe(true);
+  });
+
+  it('follows the scan by polling when the account has all its event streams open', async () => {
+    backend = fakeBackend({
+      'GET /scans/scn_2/events': () =>
+        new Response(JSON.stringify({ error: { code: 'RATE_LIMIT_EXCEEDED', message: 'At most 10 event streams of an account can be open at once', request_id: 'r', retry_after: 30, max_streams: 10 } }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+        }),
+      'GET /scans/scn_2': () => new Response(JSON.stringify(scanJson({ status: 'complete', stage: null, completed_at: '2026-10-09T10:00:00.000Z', upload: null })), { headers: { 'Content-Type': 'application/json' } }),
+    });
+    const { accessToken } = await connect();
+    await initialize(accessToken);
+    const result = await tool(accessToken, 'follow_scan', { scan_id: 'scn_2' });
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0]!.text!)).toMatchObject({ id: 'scn_2', status: 'complete', final: true });
+    expect(backend.calls.filter((entry) => entry.path === '/scans/scn_2/events')).toHaveLength(1);
+    expect(backend.calls.some((entry) => entry.method === 'GET' && entry.path === '/scans/scn_2')).toBe(true);
+  });
+
   it('explains what to do when the connection was not allowed to scan', async () => {
     backend = fakeBackend({ 'POST /spaces/app_p1/scans': () => new Response(JSON.stringify({ error: { code: 'INSUFFICIENT_SCOPE', message: 'Missing scope: scans:write', request_id: 'r' } }), { status: 403, headers: { 'Content-Type': 'application/json' } }) });
     const { accessToken } = await connect();

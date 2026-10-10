@@ -126,6 +126,7 @@ new SpaceContext({ apiKey, baseUrl, maxRetries, maxRetryDelayMs, timeoutMs, fetc
 ## Behaviour and safety
 
 - **Retries**: a `429` is retried after `Retry-After`. `502`–`504` and network errors are retried only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry, and `cancel` and `delete` are never repeated.
+- **Following a scan**: `scans.events`, `scans.wait` and `scan()` follow the event stream and reconnect when it ends early. When no stream can be had (a proxy that does not stream, all 10 of the account's open streams in use, the stream failing), they poll `GET /scans/{id}` instead, every `intervalMs` (default 3 s) and less often, up to every 15 s, while nothing changes. At `timeoutMs` (default 20 minutes) they throw `TIMEOUT` with the last state in `details.scan`, even while the stream only sends pings, and close the stream.
 - **The key stays with the API**: it is sent only to the API's own origin and path, never to a storage upload URL, an evidence URL or another host. Redirects are never followed.
 - **Uploads**: pass a `Blob` (in Node, `fs.openAsBlob` streams a file from disk), an `ArrayBuffer` or a `Uint8Array`. Videos go straight to storage when the API offers a signed URL.
 - **Browsers**: the API is meant for servers, scripts and agents, and accepts browser calls only from Space Context's own sites. Keep keys out of web pages.

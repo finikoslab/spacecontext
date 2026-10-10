@@ -325,6 +325,30 @@ describe('spacecontext CLI', () => {
     expect(await main(['scan', 'frames', '--space', SPACE_ID, '--format', 'pdf'], asSkill.io)).toBe(2);
   });
 
+  it('follows a scan already started by polling when the account has all its event streams open', async () => {
+    const frames = path.join(directory, 'frames');
+    await mkdir(frames);
+    await writeFile(path.join(frames, 'frame-1.jpg'), new Uint8Array([0xff, 0xd8, 1]));
+    const busy = new Response(
+      JSON.stringify({ error: { code: 'RATE_LIMIT_EXCEEDED', message: 'At most 10 event streams of an account can be open at once', request_id: 'req_busy', retry_after: 30, max_streams: 10 } }),
+      { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '30' } }
+    );
+    const h = harness([
+      (call) => (call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans` ? json(scan('awaiting_upload'), 201) : undefined),
+      (call) => (call.method === 'PUT' && call.path.startsWith(`/scans/${SCAN_ID}/frames/`) ? json({ object: 'scan_frame', scan_id: SCAN_ID, bytes: 3 }) : undefined),
+      (call) => (call.method === 'POST' && call.path === `/scans/${SCAN_ID}/start` ? json(scan('queued'), 202) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}/events` ? busy : undefined),
+      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}` ? json(scan('complete')) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(document) : undefined),
+    ], { SPACECONTEXT_API_KEY: KEY });
+
+    expect(await main(['scan', 'frames', '--space', SPACE_ID], h.io)).toBe(0);
+    expect(h.stderr()).not.toContain('RATE_LIMIT_EXCEEDED');
+    expect(h.stdout()).toContain('## Kitchen\nOven');
+    expect(h.calls.filter((call) => call.path === `/scans/${SCAN_ID}/events`)).toHaveLength(1);
+    expect(h.calls.some((call) => call.method === 'GET' && call.path === `/scans/${SCAN_ID}`)).toBe(true);
+  });
+
   it('exports a space as one Markdown page, to stdout or to a file, and follows a scan', async () => {
     const h = harness([
       (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}/markdown` ? markdownPage(`# Flat ${call.search.get('include') ?? ''}\n`) : undefined),
