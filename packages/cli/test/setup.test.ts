@@ -160,6 +160,10 @@ function summary(h: Harness): { steps: Array<{ id: string; status: string; detai
   return JSON.parse(h.stdout());
 }
 
+/** What `claude mcp get spacecontext` prints for an HTTP server. */
+const claudeGet = (url: string, scope = 'User config (available in all your projects)') =>
+  `spacecontext:\n  Scope: ${scope}\n  Status: ! Needs authentication\n  Type: http\n  URL: ${url}\n\nTo remove this server, run: claude mcp remove "spacecontext" -s user\n`;
+
 const cursorFile = () => path.join(home, '.cursor', 'mcp.json');
 const skillFile = () => path.join(home, '.claude', 'skills', 'spacecontext', 'SKILL.md');
 
@@ -212,7 +216,7 @@ describe('spacecontext setup', () => {
     expect(await readFile(skillFile(), 'utf8')).toBe(REMOTE_SKILL);
 
     // 4. No card on file: the link, never a card prompt, and no browser with --yes.
-    expect(result.next).toContain(`Live scans need a card on file — add it (nothing is charged, first live scan free): ${BILLING_URL}`);
+    expect(result.next).toContain(`Live scans need a card on file (a saved card, or a top-up already paid) — add a card or funds in Billing: ${BILLING_URL}`);
 
     // 5. What is left for the person, then the SDK and the docs.
     expect(result.next).toEqual(
@@ -247,6 +251,7 @@ describe('spacecontext setup', () => {
       routes: api({ wallet: { balance_cents: 1250, auto_recharge: { enabled: false, payment_method_saved: true } } }),
       respond: clients({
         'claude mcp add': { code: 1, output: 'MCP server spacecontext already exists in user config\n' },
+        'claude mcp get': { output: claudeGet(MCP_URL) },
         'codex mcp list': { output: JSON.stringify([{ name: 'spacecontext', enabled: true, transport: { type: 'streamable_http', url: MCP_URL }, auth_status: 'o_auth' }]) },
       }),
     });
@@ -270,6 +275,51 @@ describe('spacecontext setup', () => {
     await expect(stat(`${cursorFile()}.bak`)).rejects.toThrow();
     // Nothing is opened when nothing is missing.
     expect(h.opened).toEqual([]);
+  });
+
+  it('keeps a Claude Code "spacecontext" server that points elsewhere, and replaces it in the user scope only with --yes', async () => {
+    const DEV_URL = 'https://mcp-dev.spacecontext.app/mcp';
+    const claude = { claude: '/usr/bin/claude' };
+    const exists = { code: 1, output: 'MCP server spacecontext already exists in user config\n' };
+    const step = (h: Harness) => summary(h).steps.find((entry) => entry.id === 'mcp:claude-code');
+    const commands = (h: Harness) => h.ran.map((ran) => ran.args.slice(0, 2).join(' '));
+
+    // Without --yes: kept, said so, and not counted as connected.
+    let h = harness({ programs: claude, respond: clients({ 'claude mcp add': exists, 'claude mcp get': { output: claudeGet(DEV_URL) } }) });
+    expect(await main(['setup', '--client', 'claude-code', '--skip-login', '--skip-skill', '--json'], h.io)).toBe(1);
+    expect(step(h)).toEqual({ id: 'mcp:claude-code', status: 'skipped', detail: `Claude Code already has a "spacecontext" server for ${DEV_URL}: kept it (--yes replaces it)` });
+    expect(commands(h)).toEqual(['mcp add', 'mcp get']);
+
+    // With --yes: removed from the user scope and added again, pointing here.
+    let adds = 0;
+    h = harness({
+      programs: claude,
+      respond: (ran) => {
+        const command = ran.args.slice(0, 2).join(' ');
+        if (command === 'mcp add') return adds++ === 0 ? exists : { output: `Added HTTP MCP server spacecontext with URL: ${MCP_URL} to user config\n` };
+        if (command === 'mcp get') return { output: claudeGet(DEV_URL) };
+        return { output: 'Removed MCP server "spacecontext" from user config\n' };
+      },
+    });
+    expect(await main(['setup', '--client', 'claude-code', '--skip-login', '--skip-skill', '--yes', '--json'], h.io)).toBe(0);
+    expect(step(h)).toEqual({ id: 'mcp:claude-code', status: 'done', detail: `MCP server added (user scope), replacing the one for ${DEV_URL}` });
+    expect(h.ran.map((ran) => ran.args)).toEqual([
+      ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'spacecontext', MCP_URL],
+      ['mcp', 'get', 'spacecontext'],
+      ['mcp', 'remove', '--scope', 'user', 'spacecontext'],
+      ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'spacecontext', MCP_URL],
+    ]);
+
+    // A server run as a command is replaced the same way; a local one, which Claude Code uses first, is never touched.
+    h = harness({ programs: claude, respond: clients({ 'claude mcp add': exists, 'claude mcp get': { output: 'spacecontext:\n  Scope: Local config (private to you in this project)\n  Status: ✔ Connected\n  Type: stdio\n  Command: node\n  Args: server.js\n' } }) });
+    expect(await main(['setup', '--client', 'claude-code', '--skip-login', '--skip-skill', '--yes', '--json'], h.io)).toBe(1);
+    expect(step(h)).toMatchObject({ status: 'skipped', detail: expect.stringContaining('server for a command from its Local config') });
+    expect(commands(h)).toEqual(['mcp add', 'mcp get']);
+
+    // When the entry cannot be read, nothing is claimed.
+    h = harness({ programs: claude, respond: clients({ 'claude mcp add': exists, 'claude mcp get': { code: null, timedOut: true } }) });
+    expect(await main(['setup', '--client', 'claude-code', '--skip-login', '--skip-skill', '--yes', '--json'], h.io)).toBe(1);
+    expect(step(h)).toMatchObject({ status: 'skipped', detail: expect.stringContaining('claude mcp get spacecontext') });
   });
 
   it('adds itself to ~/.cursor/mcp.json keeping every other server, backs the original up once, and never touches a file it cannot read', async () => {
@@ -547,14 +597,32 @@ describe('spacecontext setup', () => {
       await main(['setup', '--skip-mcp', '--skip-skill', '--json', ...args], h.io);
       return { h, step: summary(h).steps.find((step) => step.id === 'card')! };
     };
-    let result = await live({});
-    expect(result.step).toEqual({ id: 'card', status: 'skipped', detail: 'No card on file yet (1 free scan left)' });
-    expect(result.h.opened).toEqual([BILLING_URL]);
-    expect((await live({}, '--no-browser')).h.opened).toEqual([]);
+    const recharge = (extra: Record<string, unknown>) => ({ enabled: false, threshold_cents: null, amount_cents: null, payment_method_saved: false, last_error: null, ...extra });
 
-    // A paid top-up stands for a card.
+    // The API says whether the account has a card on file (a saved card, or a top-up already paid).
+    let result = await live({ auto_recharge: recharge({ card_on_file: false }) });
+    expect(result.step).toEqual({ id: 'card', status: 'skipped', detail: 'No card on file yet (1 free scan left)' });
+    expect(summary(result.h).next).toContain(`Live scans need a card on file — add one in Billing (nothing is charged): ${BILLING_URL}`);
+    expect(result.h.opened).toEqual([BILLING_URL]);
+    expect((await live({ auto_recharge: recharge({ card_on_file: false }) }, '--no-browser')).h.opened).toEqual([]);
+
+    // A top-up paid without saving the card, spent down to nothing: a card on file all the same; only funds are missing.
+    result = await live({ balance_cents: 0, free_scans_remaining: 0, auto_recharge: recharge({ card_on_file: true }) });
+    expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Card on file (a paid top-up): US$0.00, 0 free scans left' });
+    expect(summary(result.h).next).toContain(`Add funds before your next live scan (US$1.00 each): ${BILLING_URL}`);
+    expect(summary(result.h).next.some((item) => item.startsWith('Live scans need a card'))).toBe(false);
+    expect(result.h.opened).toEqual([]);
+
+    // An API without card_on_file: no saved card and no balance cannot be told apart from a top-up spent, so both are offered.
+    result = await live({});
+    expect(result.step).toEqual({ id: 'card', status: 'skipped', detail: 'No saved card and no balance (1 free scan left)' });
+    expect(summary(result.h).next).toContain(`Live scans need a card on file (a saved card, or a top-up already paid) — add a card or funds in Billing: ${BILLING_URL}`);
+    expect(result.h.opened).toEqual([BILLING_URL]);
+
+    // A balance stands for a paid top-up.
     result = await live({ balance_cents: 1000, free_scans_remaining: 0 });
     expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Prepaid balance: US$10.00, 0 free scans left' });
+    expect(summary(result.h).next.some((item) => item.startsWith('Add funds'))).toBe(false);
     expect(result.h.opened).toEqual([]);
 
     result = await live(apiError('INSUFFICIENT_SCOPE', 403));

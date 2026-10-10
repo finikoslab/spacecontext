@@ -244,15 +244,56 @@ async function signIn(run: Run): Promise<KeyInUse> {
 
 // ------------------------------------------------------------------ 2. MCP server
 
+/**
+ * The spacecontext entry `claude mcp get spacecontext` shows (the one Claude
+ * Code uses here): its URL, null for a server run as a command, and its scope
+ * ("User config (…)", "Local config (…)"…). Null when it could not be read.
+ */
+function claudeEntry(result: RunResult): { url: string | null; scope: string | null } | null {
+  if (result.code !== 0) return null;
+  const field = (name: string) => new RegExp(`^\\s*${name}:[ \\t]*(\\S.*?)\\s*$`, 'mi').exec(result.output)?.[1] ?? null;
+  if (field('Type') === null) return null;
+  return { url: field('URL'), scope: field('Scope') };
+}
+
+/**
+ * Adds the server for the user. When Claude Code already has a "spacecontext"
+ * server, it is kept if it is this one; one pointing elsewhere is replaced only
+ * with --yes, and only in the user scope, which setup writes.
+ */
 async function claudeCode(run: Run, program: string): Promise<void> {
   const id = 'mcp:claude-code';
   if (needsShell(program)) return report(run, id, 'failed', `${program} runs only through a shell; run: ${BY_HAND['claude-code']}`);
-  const result = await run.run(program, ['mcp', 'add', '--transport', 'http', '--scope', 'user', SERVER, MCP_URL], { timeoutMs: COMMAND_TIMEOUT_MS });
-  if (result.code === 0 || /already exists/i.test(result.output)) {
+  const add = () => run.run(program, ['mcp', 'add', '--transport', 'http', '--scope', 'user', SERVER, MCP_URL], { timeoutMs: COMMAND_TIMEOUT_MS });
+  const result = await add();
+  if (result.code === 0) {
     run.next.push(AFTER['claude-code']);
-    return report(run, id, 'done', result.code === 0 ? 'MCP server added (user scope)' : 'MCP server already added');
+    return report(run, id, 'done', 'MCP server added (user scope)');
   }
-  report(run, id, 'failed', `${why(result, 'claude')}; run: ${BY_HAND['claude-code']}`);
+  if (!/already exists/i.test(result.output)) return report(run, id, 'failed', `${why(result, 'claude')}; run: ${BY_HAND['claude-code']}`);
+
+  const current = claudeEntry(await run.run(program, ['mcp', 'get', SERVER], { timeoutMs: COMMAND_TIMEOUT_MS }));
+  if (current === null) {
+    return report(run, id, 'skipped', `Claude Code already has a "${SERVER}" server, and where it points could not be read: check it with \`claude mcp get ${SERVER}\``);
+  }
+  if (current.url === MCP_URL) {
+    run.next.push(AFTER['claude-code']);
+    return report(run, id, 'done', 'MCP server already added');
+  }
+  const elsewhere = current.url ?? 'a command';
+  if (!run.options.yes) {
+    return report(run, id, 'skipped', `Claude Code already has a "${SERVER}" server for ${elsewhere}: kept it (--yes replaces it)`);
+  }
+  // A local or project server comes before the user's: it is not setup's to remove.
+  if (current.scope !== null && !/^user\b/i.test(current.scope)) {
+    return report(run, id, 'skipped', `Claude Code uses a "${SERVER}" server for ${elsewhere} from its ${current.scope}: kept it; remove it with \`claude mcp remove ${SERVER}\`, then run setup again`);
+  }
+  const removed = await run.run(program, ['mcp', 'remove', '--scope', 'user', SERVER], { timeoutMs: COMMAND_TIMEOUT_MS });
+  if (removed.code !== 0) return report(run, id, 'failed', `Could not replace the "${SERVER}" server for ${elsewhere}: ${why(removed, 'claude')}`);
+  const added = await add();
+  if (added.code !== 0) return report(run, id, 'failed', `Removed the "${SERVER}" server for ${elsewhere}, but adding this one failed: ${why(added, 'claude')}; run: ${BY_HAND['claude-code']}`);
+  run.next.push(AFTER['claude-code']);
+  report(run, id, 'done', `MCP server added (user scope), replacing the one for ${elsewhere}`);
 }
 
 /** The spacecontext entry of `codex mcp list --json`, when Codex has one. */
@@ -516,18 +557,35 @@ async function skill(run: Run): Promise<void> {
 
 // ------------------------------------------------------------------ 4. card and balance
 
+/** `card_on_file`: the API's own answer (a saved card, or a top-up already paid). Absent from older API versions. */
+type WalletCard = { card_on_file?: boolean };
+
 async function card(run: Run, use: KeyInUse): Promise<void> {
   if (!use.key) return report(run, 'card', 'skipped', 'No key to read the wallet with');
   if (keyMode(use.key) === 'test') return report(run, 'card', 'skipped', 'Test key: no card needed');
   try {
     const wallet = await api(run, use.key, use.baseUrl).wallet();
     const free = `${wallet.free_scans_remaining} free scan${wallet.free_scans_remaining === 1 ? '' : 's'} left`;
-    if (wallet.auto_recharge.payment_method_saved === false && wallet.balance_cents <= 0) {
-      run.next.push(`Live scans need a card on file — add it (nothing is charged, first live scan free): ${BILLING_URL}`);
+    const saved = wallet.auto_recharge.payment_method_saved === true;
+    const onFile = (wallet.auto_recharge as WalletCard).card_on_file ?? (wallet as WalletCard).card_on_file;
+    const openBilling = () => {
       if (!run.options.noBrowser && !run.options.yes) openInBrowser(run.io, BILLING_URL);
+    };
+    if (onFile === false) {
+      run.next.push(`Live scans need a card on file — add one in Billing (nothing is charged): ${BILLING_URL}`);
+      openBilling();
       return report(run, 'card', 'skipped', `No card on file yet (${free})`);
     }
-    const holder = wallet.auto_recharge.payment_method_saved ? 'Card on file' : 'Prepaid balance';
+    if (onFile === undefined && !saved && wallet.balance_cents <= 0) {
+      // An older API: no saved card and nothing on the balance, which may also be a top-up paid and spent.
+      run.next.push(`Live scans need a card on file (a saved card, or a top-up already paid) — add a card or funds in Billing: ${BILLING_URL}`);
+      openBilling();
+      return report(run, 'card', 'skipped', `No saved card and no balance (${free})`);
+    }
+    if (wallet.free_scans_remaining <= 0 && wallet.balance_cents < wallet.scan_price_cents) {
+      run.next.push(`Add funds before your next live scan (${dollars(wallet.scan_price_cents)} each): ${BILLING_URL}`);
+    }
+    const holder = saved ? 'Card on file' : onFile ? 'Card on file (a paid top-up)' : 'Prepaid balance';
     report(run, 'card', 'done', `${holder}: ${dollars(wallet.balance_cents)}, ${free}`);
   } catch (error) {
     if (error instanceof SpaceContextError && error.code === 'INSUFFICIENT_SCOPE') {

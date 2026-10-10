@@ -30,9 +30,9 @@ The same command, run by you: it opens the browser for the sign-in, and for Code
 | Step | What it does |
 | --- | --- |
 | Sign in | Uses the key the CLI already has (saved, or `SPACECONTEXT_API_KEY`) if the API accepts it; otherwise the device sign-in of [`login`](cli/install.md#sign-in). `--test` asks for a test key. The key is saved for the CLI and never printed. |
-| Assistants | Claude Code (`claude mcp add`, user scope), Codex (`codex mcp add`), Cursor (adds the server to `~/.cursor/mcp.json`, keeping your other servers and a copy in `mcp.json.bak`) and VS Code (`code --add-mcp`). By default the ones it finds; `--client codex,cursor` or `--client all` to choose. |
+| Assistants | Claude Code (`claude mcp add`, user scope), Codex (`codex mcp add`), Cursor (adds the server to `~/.cursor/mcp.json`, keeping your other servers and a copy in `mcp.json.bak`) and VS Code (`code --add-mcp`). By default the ones it finds; `--client codex,cursor` or `--client all` to choose. A `spacecontext` server that already points elsewhere is kept (skipped), unless you pass `--yes`. |
 | Skill | Saves the [skill](#3-install-the-skill) as `~/.claude/skills/spacecontext/SKILL.md`. A copy you have edited is kept unless you pass `--yes`. |
-| Card | With a live key, reads the wallet: if there is no card on file, it opens **Billing** in the console (adding a card charges nothing, and the first live scan stays free). It never asks for card details in the terminal. |
+| Card | With a live key, reads the wallet: with no card on file (a saved card, or a top-up already paid), it opens **Billing** in the console (adding a card charges nothing); with a card but no funds and no free scan left, it says to add funds. It never asks for card details in the terminal. |
 | Next | What is left to do, a few lines of SDK code and the docs. |
 
 `--yes` runs without questions and without opening the browser (for agents); `--json` prints only a summary, `{ "steps": [{ "id", "status", "detail" }], "next": [...] }`, on standard output. `--no-browser` prints links instead of opening them; `--skip-login`, `--skip-mcp` and `--skip-skill` leave a step out. The exit code is `0` when you are signed in and at least one assistant is connected (or you skipped those steps), `1` otherwise. → [CLI commands](cli/commands.md#get-started)

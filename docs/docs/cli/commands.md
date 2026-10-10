@@ -20,7 +20,7 @@ Everything in one go: signs in (the device sign-in of `login`, unless the key th
 | --- | --- |
 | `--client <list>` | `claude-code`, `codex`, `cursor`, `vscode`, comma-separated, or `all`. Default: the clients found on this machine. A client named but not installed fails; with `all` it is skipped. |
 | `--test` | Sign in with a test key (free, the demo space). |
-| `--yes` | No questions and no browser, for agents. Also replaces a skill file you edited (kept as `SKILL.md.bak`) and a `spacecontext` server that points elsewhere. |
+| `--yes` | No questions and no browser, for agents. Also replaces a skill file you edited (kept as `SKILL.md.bak`) and a `spacecontext` server that points elsewhere in Claude Code (its user scope; a local or project one is reported, not removed), Codex or Cursor. Without `--yes` that server is kept and the step says skipped. |
 | `--json` | Only the summary on standard output: `{ "steps": [{ "id", "status", "detail" }], "next": [...] }`. Progress and the sign-in code go to standard error. |
 | `--no-browser` | Print links instead of opening them. |
 | `--skip-login`, `--skip-mcp`, `--skip-skill` | Leave out a step. |
