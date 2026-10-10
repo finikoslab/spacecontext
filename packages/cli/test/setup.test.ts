@@ -418,6 +418,8 @@ describe('spacecontext setup', () => {
       await rm(skillFile());
       result = await run(answer);
       expect(result.step.status).toBe('done');
+      // The site may well be up (a 404 before a deploy): the detail says the download failed, not that it was unreachable.
+      expect(result.step.detail).toContain('the published one could not be downloaded from spacecontext.app');
       expect(await readFile(skillFile(), 'utf8')).toBe(bundled);
     }
   });

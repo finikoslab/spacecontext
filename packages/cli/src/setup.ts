@@ -523,7 +523,7 @@ async function skill(run: Run): Promise<void> {
   const downloaded = await downloadSkill(run.fetch);
   const content = downloaded ?? bundled;
   if (content === null) return report(run, 'skill', 'failed', `Could not download ${SKILL_URL}, and the CLI's own copy is missing`);
-  const origin = downloaded === null ? ' (the copy shipped with the CLI: spacecontext.app was not reachable)' : '';
+  const origin = downloaded === null ? ' (the copy shipped with the CLI: the published one could not be downloaded from spacecontext.app)' : '';
 
   let existing: string | null = null;
   try {
