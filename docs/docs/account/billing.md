@@ -86,7 +86,7 @@ In the console, open **Billing → Invoice details**, choose **Individual** or *
 - **VAT number**, for a company. It is required for a company in the EU, the United Kingdom, Switzerland or Norway. Type it with its country prefix, as in `IT12345678901` (in the EU and the UK the console adds the prefix if you leave it out). After you save, Stripe checks it with the tax authority, and the card shows **Verified**, **Pending check** or **Not verified**.
 - **Italian customers.** A company gives its **Codice destinatario SDI** (7 characters) or its **PEC** address for the electronic invoice: either is enough, and without either the invoice goes to its tax drawer (*cassetto fiscale*). An individual can add their **codice fiscale**.
 
-Set them **before you pay**: invoices already issued do not change. If you have not set them in the console, Stripe's payment page lets you give them while paying: tick the box for purchasing as a business and enter the company name and VAT number there. The details are kept by Stripe with your customer record; the [privacy policy](https://spacecontext.app/privacy/) says how they are used.
+Set them **before you pay**: invoices already issued do not change. If you have not set them in the console, Stripe's payment page lets you give them while paying: tick the box for purchasing as a business and enter the company name and VAT number there. Once your details are on file, the payment page no longer asks for them, and the name and address of the card you pay with never replace them: a company paying with a card in someone's name still gets its own invoice. The details are kept by Stripe with your customer record; the [privacy policy](https://spacecontext.app/privacy/) says how they are used.
 
 ### Download your invoices
 
