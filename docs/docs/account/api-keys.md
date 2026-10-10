@@ -20,7 +20,7 @@ Create keys in the [console](https://spacecontext.app/developers/console/) under
 | | `sc_test_…` | `sc_live_…` |
 | --- | --- | --- |
 | Sees | The demo space `spc_demo` and spaces created with test keys | Your real spaces |
-| Scans | Free, complete at once, always return the demo content | Real analysis; first one free, then paid from your balance |
+| Scans | Free, complete at once, always return the demo content | Real analysis; the account's free scan first (one per card), then paid from your balance |
 | Models | None are called | Vision and language models |
 | Webhooks | Sent to endpoints in test mode | Sent to endpoints in live mode |
 | Card on file | Never needed | Needed for a key with `scans:write` |
@@ -42,7 +42,7 @@ Give an agent the narrowest key that does the job: `spaces:read` alone for an as
 
 ## Live keys that can scan need a card
 
-A live key with `scans:write` (one of the default scopes) can be created only once your account has a **card on file**: add one in the console under **Billing → Add a card**. Stripe saves it and nothing is charged; your first live scan stays free, and scans are still paid from your balance. See [Billing](billing.md#add-a-card).
+A live key with `scans:write` (one of the default scopes) can be created only once your account has a **card on file**: add one in the console under **Billing → Add a card**. Stripe saves it and nothing is charged; scans are still paid from your balance, after the account's free scan if it has one (one free scan per card). See [Billing](billing.md#add-a-card).
 
 Without a card, creating such a key answers `402 PAYMENT_METHOD_REQUIRED`, whether you create it in the console, approve it for `spacecontext login` or allow scanning when you connect an assistant. Test keys and live keys without `scans:write` (read-only) never need a card. Removing the card later does not revoke the keys you already have.
 

@@ -50,7 +50,7 @@ console.log(document.stats.items, 'items');
 
 `scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one.
 
-A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), and its charge is refunded. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, your first scan is free and each one after that costs US$1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
+A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), and its charge is refunded. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, the account's free scan is used first (a new account has one, one free scan per card) and each scan after that costs US$1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
 
 ## Methods
 

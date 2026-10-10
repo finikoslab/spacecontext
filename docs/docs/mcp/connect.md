@@ -32,7 +32,7 @@ To disconnect, remove the connector in your assistant, or revoke its key in the 
 
 A connection allowed to scan gets a live key with `scans:write`, and such a key needs a [card on file](../account/billing.md#add-a-card). If your account has none, the page says so instead of connecting, and you choose:
 
-- **Add a card in the console** (the link opens **Billing**): Stripe saves it and nothing is charged; your bank may ask you to confirm it, and your first scan stays free. Then come back to the page within ten minutes and choose **Try again with scanning**.
+- **Add a card in the console** (the link opens **Billing**): Stripe saves it and nothing is charged; your bank may ask you to confirm it. Then come back to the page within ten minutes and choose **Try again with scanning**.
 - **Connect read-only**: the assistant reads, searches and asks your spaces but cannot scan or spend. Connect again later to allow scanning.
 - **Deny access**.
 

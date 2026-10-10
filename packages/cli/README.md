@@ -42,7 +42,7 @@ The demo space contains two real scans of an apartment in Brisbane (photos at ch
 ## Scan your own space
 
 ```bash
-npx spacecontext login                                   # a live key: the first live scan is free
+npx spacecontext login                                   # a live key: a new account's first live scan is free (one per card)
 npx spacecontext check ./photos                          # optional: usable frames, key locations still missing
 npx spacecontext scan ./flat.mp4 --name "Seaside flat" --type apartment
 npx spacecontext search "where is the water shut-off?"

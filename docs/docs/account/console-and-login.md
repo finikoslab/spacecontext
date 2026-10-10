@@ -23,9 +23,9 @@ It is the **same account as the Space Context iPhone app**, whichever way you si
 
 | Section | What you can do |
 | --- | --- |
-| **Overview** | Spaces, documented items, scans and questions this month, balance; 30-day charts of scans, API requests, questions and spend; usage per key; the latest scans, updated live. A short **Get started** checklist takes a new account from the demo (free) to a card on file (nothing charged) to its first live scan (free). |
+| **Overview** | Spaces, documented items, scans and questions this month, balance; 30-day charts of scans, API requests, questions and spend; usage per key; the latest scans, updated live. A short **Get started** checklist takes a new account from the demo (free) to a card on file (nothing charged) to its first live scan (free, one free scan per card). |
 | **Spaces** | Every space you can read, and a search across all of them. Open one for its summary, issues, key locations, how-tos and facts, the inventory by area with the **original photos**, questions answered with sources, the scan history with **before/after comparisons**, and exports (Agent Skill, JSON). |
-| **New scan** | Drop a walkthrough video or photos, see the price (the first live scan is free), follow the analysis step by step, and land on the result. |
+| **New scan** | Drop a walkthrough video or photos, see the price (the account's free scan, if it has one, or $1.00), follow the analysis step by step, and land on the result. |
 | **Connect AI** | The MCP server URL and the steps for Claude, Claude Code, ChatGPT and Cursor, with the assistants already connected. |
 | **API keys** | Create test and live keys with scopes and a monthly spending cap (a live key that can scan needs a card on file); revoke them. Keys created by the MCP connector carry an **MCP** badge; keys approved for a terminal are named `CLI · …`. |
 | **Billing** | Balance, the card on file (added without a charge), top-ups by card through Stripe, automatic top-up, spend chart, every movement, and invoices. |

@@ -27,7 +27,7 @@ spacecontext login --test     # a test key: free, the demo space
 
 The terminal shows a code and opens the [console](https://spacecontext.app/developers/console/) (sign in with Apple, Google, GitHub or your email if you are not yet). Type the code there, check what is asking, choose what the key may do, and approve: the terminal receives its key and saves it in `~/.config/spacecontext/config.json` (or `$XDG_CONFIG_HOME/spacecontext/`), readable by your user only. The key never passes through the browser, and the console never sees your terminal.
 
-A live key that can scan (`scans:write`) needs a card on file. If your account has none, the console tells you so instead of approving: add one under **Billing → Add a card** (nothing is charged, and your first live scan stays free) and approve again, or approve a key without `scans:write`. The terminal says this while it waits. `login --test` never needs a card.
+A live key that can scan (`scans:write`) needs a card on file. If your account has none, the console tells you so instead of approving: add one under **Billing → Add a card** (nothing is charged) and approve again, or approve a key without `scans:write`. The terminal says this while it waits. `login --test` never needs a card.
 
 Approve only a code you are looking at in your own terminal: the name shown in the console is what the terminal said about itself. The code is never carried in a link for that reason. `--no-browser` only prints the link.
 

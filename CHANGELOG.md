@@ -13,6 +13,9 @@ All packages of this repository share a version.
 - SDK: a dropped event stream reconnects instead of throwing; `require()` works; sources ship in the source maps; LICENSE in every package.
 - CLI: `login --key -` reads the key without echo; an empty `SPACECONTEXT_API_KEY` counts as unset.
 - MCP: Enter on the consent page approves; `create_scan` refuses videos over 100 MB before creating a space; reconnecting revokes only the keys of the grants it replaces.
+- SDK: `scans.wait`, `scans.events` and `scan()` stop at `timeoutMs` even while the event stream only sends pings, and close the stream; MCP `follow_scan` answers within `max_wait_seconds`. When the stream cannot be had (the account's 10 open streams all in use, `429`; a failing stream; a proxy) they poll `GET /scans/{id}` instead, less often while nothing changes and no sooner than a `429` asks, instead of failing a scan already started and charged (`sc.scan()`, CLI `scan`, `scan-status --follow`, MCP `follow_scan`).
+- CLI: `setup` checks an existing Claude Code `spacecontext` server: kept when it points here, reported as skipped when it points elsewhere, replaced (user scope) with `--yes`. The card step uses the wallet's `card_on_file` when the API sends it (a paid top-up counts as a card), and otherwise asks for "a card or funds".
+- Docs: top-ups from US$10; one free scan per card (a card already used on another account brings none); the daily caps on new spaces (200) and scans (500) per mode and the 10 open event streams per account.
 
 
 ### SDK (`@spacecontext/sdk`)

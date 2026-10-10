@@ -115,7 +115,7 @@ curl -X POST https://api.spacecontext.app/v1/spaces/spc_demo/ask \
   -d '{"question": "Where is the fuse box?"}'
 ```
 
-When you're ready to scan your own spaces, add a card in the console (nothing is charged: a live key that can scan needs one), sign in with `npx spacecontext login` to get a live key and scan a video. Your first live scan is free. Full walkthrough: [Quickstart](https://spacecontext.app/developers/docs/quickstart/).
+When you're ready to scan your own spaces, add a card in the console (nothing is charged: a live key that can scan needs one), sign in with `npx spacecontext login` to get a live key and scan a video. The first live scan of a new account is free (one free scan per card). Full walkthrough: [Quickstart](https://spacecontext.app/developers/docs/quickstart/).
 
 ## What you get
 
@@ -135,15 +135,15 @@ When you're ready to scan your own spaces, add a card in the console (nothing is
 
 | | Price |
 | --- | --- |
-| Test keys, on the demo space | Free, unlimited |
-| First live scan of an account | Free |
+| Test keys, on the demo space | Free, within the [limits](https://spacecontext.app/developers/docs/limits/) |
+| First live scan of a new account | Free, one free scan per card: a card already used on another Space Context account (even a deleted one) brings none |
 | Each live scan after that | **US$1.00**, from a prepaid balance |
 | Failed scans | Refunded automatically |
 | Reading, search, questions and frame checks | Included, within the [limits](https://spacecontext.app/developers/docs/limits/) |
 | Spaces scanned with the iPhone app | Readable at no cost |
 | Live scans, and live keys that can scan | Need a card on file: saved in the console without a charge, or a top-up already paid |
 
-You top up the balance by card through Stripe ($5 to $500 per payment), with optional automatic top-up and a monthly spending cap per key. Every top-up comes with an invoice. See [Billing](https://spacecontext.app/developers/docs/account/billing/).
+You top up the balance by card through Stripe ($10 to $500 per payment), with optional automatic top-up and a monthly spending cap per key. Every top-up comes with an invoice. See [Billing](https://spacecontext.app/developers/docs/account/billing/).
 
 ## Limits
 
@@ -156,6 +156,8 @@ You top up the balance by card through Stripe ($5 to $500 per payment), with opt
 | Questions (`ask`) | 20 per minute, 200 answered per day per account |
 | Frame checks | 2 000 per day per account |
 | Scans processing at once | 10 per account |
+| New spaces, new scans | 200 spaces and 500 scans per day per account, in each mode (test keys included); reset at midnight UTC |
+| Open event streams (`GET /v1/scans/{id}/events`) | 10 per account at once, test and live together; the SDK, the CLI and the MCP server poll instead when all are in use |
 
 Every limit is listed in [Limits](https://spacecontext.app/developers/docs/limits/).
 

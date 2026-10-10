@@ -370,7 +370,8 @@ describe('authorization', () => {
       expect(asked.html).toContain('Scanning needs a card');
       expect(asked.html).toContain('href="https://spacecontext.app/developers/console/billing/"');
       expect(asked.html).toContain('charges nothing');
-      expect(asked.html).toContain('first scan of an account stays free');
+      // No promise of a free scan: a card already used on another account brings none.
+      expect(asked.html).not.toContain('stays free');
       expect(asked.html).toContain('<strong>owner@example.com</strong>');
       // The same consent, on a new handle bound to this browser, with the sign-in under a one-time ticket.
       expect(asked.handle).toBeTruthy();

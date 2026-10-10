@@ -18,7 +18,7 @@ Errors share one envelope: `{ "error": { "code", "message", "request_id", … } 
 | `INSUFFICIENT_SCOPE` | 403 | The key lacks a scope; `required_scopes` lists it. |
 | `PRO_REQUIRED` | 403 | Spaces scanned with the app need Space Context Pro (only when the service turns this rule on; today every account reads its app spaces). |
 | `NOT_FOUND` | 404 | No such space, scan or record for this key (test and live data are separate). |
-| `RATE_LIMIT_EXCEEDED` | 429 | Wait `Retry-After` seconds (or `retry_after` for daily limits). |
+| `RATE_LIMIT_EXCEEDED` | 429 | Wait `retry_after` seconds (also in `Retry-After`, except for the daily limits of search, questions and frame checks). `daily_limit` comes with the daily allowance of new spaces or scans; `max_streams` when the account already holds its open event streams (poll `GET /scans/{id}` instead). See [Limits](../limits.md). |
 | `INTERNAL_ERROR` | 500 | Retry later; if it persists, contact support with the request id. |
 
 ## Spaces, search and questions

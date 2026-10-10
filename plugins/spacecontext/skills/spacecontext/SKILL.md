@@ -22,7 +22,7 @@ Space Context turns a phone video of a space into a **Space Document**: an inven
 - Answer from the records. Say "not documented" instead of guessing. Cite the area, and offer the evidence photo.
 - In a comparison, `not_seen` means *not filmed again*, not *gone*: only `removed` and `resolved` are confirmed by a frame.
 - Passwords and codes are hidden unless the user allowed sensitive values when connecting.
-- Before a live scan, tell the user the price (`wallet`): the first live scan is free, then US$1.00 from a prepaid balance; failed scans are refunded to the balance. Scanning needs a card on file in the console (nothing is charged when it is added).
+- Before a live scan, tell the user the price (`wallet`): free if `free_scans_remaining` is above 0 (a new account has one free scan, one per card), otherwise US$1.00 from a prepaid balance; failed scans are refunded to the balance. Scanning needs a card on file in the console (nothing is charged when it is added).
 - Videos: MP4, MOV or M4V, up to 100 MB and 10 minutes; or up to 120 photos.
 
 ## More

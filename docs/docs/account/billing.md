@@ -9,8 +9,8 @@ Reading, searching and asking spaces are included. **Live scans** are paid from 
 
 | | Price |
 | --- | --- |
-| Test keys | Free, unlimited |
-| First live scan of an account | Free |
+| Test keys | Free, within the [limits](../limits.md) |
+| First live scan of a new account | Free, one free scan per card (see [Add a card](#add-a-card)) |
 | Each live scan after that | **$1.00**, charged when the scan starts |
 | Failed scans | Refunded automatically |
 | Live scans, and live keys that can scan | Need a card on file: saved in the console without a charge, or a top-up already paid |
@@ -24,7 +24,8 @@ A **live key that can scan** (`scans:write`), whether you create it in the conso
 In the console, open **Billing → Add a card** (a new account also finds it in the **Get started** checklist of the Overview). As for a top-up, you first accept the billing terms (below). A **Stripe Checkout** page saves the card and **charges nothing**; your bank may ask you to confirm it with **3-D Secure**. The card counts once Stripe confirms it, within a few seconds of coming back to the console.
 
 - The card is stored by Stripe, never by us. It is the same saved card that automatic top-up uses, but saving it does not turn automatic top-up on.
-- Your first live scan stays free. Scans are paid from the balance: the card is charged only by a top-up you make or an automatic top-up you turn on.
+- **One free scan per card.** The first live scan of a new account is free, but a card brings a free scan only once: if the first card the account saves or pays a top-up with was already used on another Space Context account (even one since deleted), the account gets no free scan. Nothing is charged either way, and `free_scans_remaining` in the wallet says whether the free scan is there.
+- Scans are paid from the balance: the card is charged only by a top-up you make or an automatic top-up you turn on.
 - A new card replaces the previous one. **Remove saved card** deletes it from Stripe; keys you already created keep working.
 
 ## Add funds

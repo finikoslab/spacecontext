@@ -38,4 +38,4 @@ A scan usually takes a few minutes. If it fails (`VIDEO_UNREADABLE`, `VIDEO_TOO_
 
 ## Cost
 
-$1.00 per live scan, the first one free. See [Billing](../account/billing.md).
+$1.00 per live scan; the first live scan of a new account is free (one free scan per card). See [Billing](../account/billing.md).

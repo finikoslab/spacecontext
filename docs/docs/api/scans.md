@@ -25,6 +25,8 @@ curl -X POST $API/spaces -H "$AUTH" -H "Content-Type: application/json" \
 
 `external_id` (up to 128 characters) lets you store your own reference, for example a listing id.
 
+An account creates at most 200 spaces and 500 scans a day in each mode, test keys included; past that, `429 RATE_LIMIT_EXCEEDED` with `Retry-After` until midnight UTC and the allowance in `daily_limit`. A retry with the same `external_id` or `Idempotency-Key` returns what was already created and does not count again.
+
 ## 2. Declare the scan
 
 For a video, declare its type and exact size:
@@ -110,6 +112,8 @@ event: scan
 id: 2
 data: {"object":"scan","id":"scn_8a…","status":"processing","stage":"observing",…}
 ```
+
+An account holds at most 10 streams open at once, test and live together: the next one answers `429 RATE_LIMIT_EXCEEDED` with `Retry-After: 30` and `max_streams`. Close one, or poll meanwhile; the SDK, the CLI and the MCP server poll for you.
 
 Polling `GET /scans/{id}` every few seconds works too, and so do the `scan.completed` and `scan.failed` [webhooks](webhooks.md) for servers that must not hold a connection.
 

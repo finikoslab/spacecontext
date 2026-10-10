@@ -7,7 +7,7 @@ description: 'From zero to a searchable space in five minutes, with a free test 
 
 **Using a coding agent?** Paste the prompt in [Setup](setup.md) into Claude Code, Cursor or Codex, or run `npx spacecontext@latest setup` yourself: it signs you in, connects your assistants and installs the skill.
 
-**No code at all?** Open the [console](https://spacecontext.app/developers/console/), sign in with Apple, Google, GitHub or your email, switch to **Test** and open the demo space: inventory, photos, questions and a comparison of two scans. Then add a card under **Billing → Add a card** (nothing is charged; live keys that can scan need one), switch to **Live**, open **New scan** and drop a video of a room: the first live scan is free. **Connect AI** adds your spaces to Claude or ChatGPT in a minute.
+**No code at all?** Open the [console](https://spacecontext.app/developers/console/), sign in with Apple, Google, GitHub or your email, switch to **Test** and open the demo space: inventory, photos, questions and a comparison of two scans. Then add a card under **Billing → Add a card** (nothing is charged; live keys that can scan need one), switch to **Live**, open **New scan** and drop a video of a room: the first live scan of a new account is free (one free scan per card). **Connect AI** adds your spaces to Claude or ChatGPT in a minute.
 
 ![The Spaces page of the console in Test mode: the demo space, with its areas, items and issues, and a search box across every space](/docs/console/spaces.jpg)
 
@@ -59,7 +59,7 @@ When you are ready for your own spaces:
 
 1. Add a card in the console under **Billing → Add a card**: a live key that can scan needs one. Stripe saves it and nothing is charged.
 2. Sign in again for a **live** key (or create one in the console).
-3. Scan a real video: your first live scan is free.
+3. Scan a real video: the first live scan of a new account is free (one free scan per card, see [Billing](account/billing.md#add-a-card)).
 
 ```bash
 npx spacecontext login                      # approve a live key in the console

@@ -69,8 +69,11 @@ curl "https://api.spacecontext.app/v1/spaces?limit=20&cursor=$NEXT" -H "Authoriz
 | Questions (`ask`), per account | 20 per minute, 200 answered per day |
 | Frame checks, per account | 2 000 per day |
 | Scans processing at once, per account | 10 (more on request) |
+| New spaces, per account | 200 per day in each mode (test keys included) |
+| New scans, per account | 500 per day in each mode (test keys included) |
+| Event streams open at once, per account | 10, test and live together |
 
-A refused request answers `429 RATE_LIMIT_EXCEEDED` with a `Retry-After` header (seconds), or `retry_after` in the body for daily limits. The SDK and the CLI wait and retry short waits for you. See [Limits](../limits.md).
+A refused request answers `429 RATE_LIMIT_EXCEEDED` with the seconds to wait in `retry_after`, and in a `Retry-After` header for per-minute limits, new spaces and scans, and event streams. Daily limits reset at midnight UTC; new spaces and scans also say their allowance in `daily_limit`. An eleventh event stream answers `Retry-After: 30` with `max_streams`: poll `GET /scans/{id}` until one closes. The SDK and the CLI wait and retry short waits for you, and follow a scan by polling when no stream can be opened. See [Limits](../limits.md).
 
 ## Test mode
 

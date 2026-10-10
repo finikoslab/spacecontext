@@ -26,10 +26,17 @@ description: 'Sizes, rates and quotas of the Space Context API.'
 | Questions (`ask`) | 20 per minute and 200 answered per day per account |
 | Frame checks (`POST /frames/check`) | 2 000 per day per account (free) |
 | Scans processing at once | 10 per account; more on request |
-| Event stream (`GET /scans/{id}/events`) | 30 minutes per connection; reconnect to keep following |
+| New spaces (`POST /spaces`) | 200 per day per account, in each mode (test keys included) |
+| New scans (`POST /spaces/{id}/scans`) | 500 per day per account, in each mode (test keys included) |
+| Event streams (`GET /scans/{id}/events`) open at once | 10 per account, test and live together |
+| Event streams opened | 20 per minute per account |
+| Event stream length | 30 minutes per connection; reconnect to keep following |
 | Evidence frames | Signed links expire; read the document again for fresh ones |
 
-Exceeding a rate answers `429 RATE_LIMIT_EXCEEDED` with `Retry-After`.
+Exceeding a rate answers `429 RATE_LIMIT_EXCEEDED` with the seconds to wait in `retry_after`, and in the `Retry-After` header too for per-minute limits, new spaces and scans, and event streams:
+
+- **Daily limits** reset at midnight UTC. New spaces and new scans answer with the time left until then and their allowance in `daily_limit`; a retry with the same `Idempotency-Key` (scans) or `external_id` (spaces) returns what was already created and does not count again. Search, questions and frame checks answer `retry_after: 3600`.
+- **Event streams**: with 10 open, the next one answers `Retry-After: 30` and `max_streams: 10`. Close one, or poll `GET /scans/{id}` meanwhile; the SDK, the CLI and the MCP server do this for you.
 
 ## Account
 

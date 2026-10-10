@@ -184,7 +184,7 @@ export function cardRequiredPage(
     `<h1>Scanning needs a card</h1>
 <p>Signed in as <strong>${escapeHtml(input.email)}</strong>.</p>
 ${requester(input.consent)}
-<p>To let an assistant <strong>scan spaces</strong>, your Space Context account needs a card on file. Adding one charges nothing (your bank may ask you to confirm it), and the first scan of an account stays free.</p>
+<p>To let an assistant <strong>scan spaces</strong>, your Space Context account needs a card on file. Adding one charges nothing (your bank may ask you to confirm it).</p>
 <p><a href="${CONSOLE_BILLING_URL}" target="_blank" rel="noopener noreferrer">Add a card in the console</a> (Billing → Add a card), then come back to this page within ten minutes and try again.</p>
 <form method="post" action="/authorize/approve">
 ${hidden({ handle: input.handle, oauth: input.oauth, ticket: input.ticket, ...(input.sensitive ? { sensitive: '1' } : {}) })}
