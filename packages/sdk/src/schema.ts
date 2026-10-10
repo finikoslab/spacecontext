@@ -1078,6 +1078,12 @@ export interface components {
                 payment_method_saved?: boolean;
                 last_error?: string | null;
             };
+            /** @description Console only (absent from `GET /wallet`): the first time this account accepted the current version of the billing terms, with the box of a payment or card page; null if never, or only an older version. The box is still ticked on every page (`accept_terms`), and the first acceptance is kept on later payments for a dispute. */
+            terms_accepted?: {
+                version: string;
+                /** Format: date-time */
+                accepted_at: string;
+            } | null;
         };
         SpaceCreateRequest: {
             name: string;

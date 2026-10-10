@@ -4836,6 +4836,26 @@
                 ]
               }
             }
+          },
+          "terms_accepted": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "version",
+              "accepted_at"
+            ],
+            "description": "Console only (absent from `GET /wallet`): the first time this account accepted the current version of the billing terms, with the box of a payment or card page; null if never, or only an older version. The box is still ticked on every page (`accept_terms`), and the first acceptance is kept on later payments for a dispute.",
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           }
         }
       },
