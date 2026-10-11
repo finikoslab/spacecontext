@@ -408,6 +408,47 @@ describe('scan() in one call', () => {
     }
   });
 
+  it('takes every container the API reads, by the file extension or the Blob type, and refuses the others before the API', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'sc-video-'));
+    try {
+      const declared = async (source: Parameters<SpaceContext['scan']>[0]) => {
+        const { fetch, calls } = flow();
+        await client(fetch).scan(source, { space: SPACE_ID });
+        return JSON.parse(calls[0]!.body as string).input.video;
+      };
+      for (const [name, type] of [
+        ['tour.mp4', 'video/mp4'],
+        ['tour.MOV', 'video/quicktime'],
+        ['tour.m4v', 'video/x-m4v'],
+        ['tour.3gp', 'video/3gpp'],
+        ['tour.webm', 'video/webm'],
+        ['tour.mkv', 'video/x-matroska'],
+      ] as const) {
+        await writeFile(path.join(directory, name), new Uint8Array([1, 2, 3, 4]));
+        expect(await declared(path.join(directory, name)), name).toEqual({ content_type: type, content_length: 4 });
+      }
+      // A MediaRecorder's Blob names its codecs: the bare type is declared.
+      expect(await declared(new Blob([new Uint8Array(4)], { type: 'video/webm;codecs=vp9,opus' }))).toEqual({ content_type: 'video/webm', content_length: 4 });
+      // A File without a type, by its name.
+      expect(await declared(new File([new Uint8Array(4)], 'clip.3gp'))).toEqual({ content_type: 'video/3gpp', content_length: 4 });
+      expect(await declared({ video: new Uint8Array(4), contentType: 'video/matroska' })).toEqual({ content_type: 'video/matroska', content_length: 4 });
+
+      const { fetch, calls } = flow();
+      const sc = client(fetch);
+      await writeFile(path.join(directory, 'tour.avi'), new Uint8Array([1, 2, 3, 4]));
+      await expect(sc.scan(path.join(directory, 'tour.avi'), { space: SPACE_ID })).rejects.toThrow('expected a video (.mp4 .mov .m4v .3gp .webm .mkv)');
+      await expect(sc.scan(new Blob([new Uint8Array(4)], { type: 'video/x-msvideo' }), { space: SPACE_ID })).rejects.toThrow(
+        "The Blob's type (video/x-msvideo) is not a video the API takes"
+      );
+      await expect(sc.scan({ video: new Uint8Array(4), contentType: 'video/ogg' as 'video/mp4' }, { space: SPACE_ID })).rejects.toThrow(
+        'contentType must be one of video/mp4, video/quicktime, video/x-m4v, video/3gpp, video/webm, video/x-matroska, video/matroska'
+      );
+      expect(calls).toHaveLength(0);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('follows the scan by polling when the account has all its event streams open, instead of failing a scan already charged', async () => {
     vi.useFakeTimers();
     const { fetch, calls } = flow({ streamsBusy: true });
@@ -450,7 +491,7 @@ describe('scan() in one call', () => {
     await expect(sc.scan({ frames: [frame, { ...frame, data: new Uint8Array(2 * 1024 * 1024 + 1) }] }, { name: 'x' })).rejects.toThrow(/Frame 1 is larger than 2 MB/);
     await expect(sc.scan({ video: new ArrayBuffer(100 * 1024 * 1024 + 1), contentType: 'video/mp4' }, { name: 'x' })).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('larger than 100 MB: record at 1080p'),
+      message: expect.stringContaining('larger than 100 MB: record at 720p or trim it, or compress it (the spacecontext CLI does it when ffmpeg is installed)'),
     });
     expect(calls).toHaveLength(0);
   });

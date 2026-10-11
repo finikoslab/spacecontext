@@ -609,14 +609,15 @@ describe('spacecontext CLI, housekeeping', () => {
     expect(h.stderr()).toContain('larger than 2 MB');
     expect(h.calls).toEqual([]);
 
-    // A phone video in 4K: how to make it fit, not only that it does not.
+    // A phone video in 4K, without ffmpeg: how to make it fit, not only that it does not.
     const video = path.join(directory, 'IMG_0042.MOV');
     await writeFile(video, '');
     await truncate(video, 390 * 1024 * 1024);
+    h.io.platform = 'linux';
     expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h.io)).toBe(2);
     expect(h.stderr()).toContain('IMG_0042.MOV is 390.0 MB: a video can be up to 100 MB');
-    expect(h.stderr()).toContain('Record at 1080p (iPhone: Settings > Camera > Record Video > 1080p)');
-    expect(h.stderr()).toContain('`ffmpeg -i IMG_0042.MOV -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4`');
+    expect(h.stderr()).toContain('Install ffmpeg and run it again: the CLI compresses the video to fit\n    (`sudo apt install ffmpeg`, or your package manager)');
+    expect(h.stderr()).toContain('Or record at 720p and keep it short: a phone at 1080p fills 100 MB in about a minute\n    (iPhone: Settings > Camera > Record Video > 720p HD at 30 fps)');
     expect(h.calls).toEqual([]);
 
     const ok = path.join(directory, 'ok');
@@ -631,6 +632,189 @@ describe('spacecontext CLI, housekeeping', () => {
     expect(await main(['scan', 'ok', '--name', 'Flat'], failing.io)).toBe(1);
     expect(failing.calls.some((call) => call.method === 'DELETE' && call.path === `/scans/${SCAN_ID}`)).toBe(true);
     expect(failing.stderr()).toContain(`spacecontext delete-space ${SPACE_ID}`);
+  });
+});
+
+/**
+ * A fake ffprobe and ffmpeg on a PATH of their own (node scripts): ffprobe says
+ * `seconds`, ffmpeg reports progress and writes `outputBytes` at its output, or
+ * fails. Every call is logged next to them.
+ */
+async function fakeVideoTools(folder: string, options: { seconds: string; outputBytes?: number; fail?: string }) {
+  const bin = path.join(directory, folder);
+  await mkdir(bin, { recursive: true });
+  const log = path.join(bin, 'calls.jsonl');
+  // An absolute interpreter: the scripts run with the test's own environment.
+  const shebang = process.execPath.includes(' ') ? '#!/usr/bin/env node' : `#!${process.execPath}`;
+  const record = `require('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify([require('node:path').basename(process.argv[1]), ...process.argv.slice(2)]) + '\\n');`;
+  await writeFile(path.join(bin, 'ffprobe'), `${shebang}\n${record}\nprocess.stdout.write(${JSON.stringify(`${options.seconds}\n`)});\n`, { mode: 0o755 });
+  const encode = options.fail
+    ? `process.stderr.write(${JSON.stringify(`${options.fail}\n`)}); process.exit(1);`
+    : [
+        `for (const us of [0, 1000000, 2000000]) process.stdout.write('frame=1\\nout_time_us=' + us + '\\nprogress=continue\\n');`,
+        `process.stdout.write('progress=end\\n');`,
+        `const out = process.argv[process.argv.length - 1];`,
+        `require('node:fs').writeFileSync(out, '');`,
+        `require('node:fs').truncateSync(out, ${options.outputBytes ?? 4});`,
+      ].join('\n');
+  await writeFile(path.join(bin, 'ffmpeg'), `${shebang}\n${record}\n${encode}\n`, { mode: 0o755 });
+  return {
+    bin,
+    calls: async (): Promise<string[][]> => {
+      try {
+        return (await readFile(log, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as string[]);
+      } catch {
+        return [];
+      }
+    },
+  };
+}
+
+/** The value after `flag` in an argument list. */
+const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
+
+describe.skipIf(process.platform === 'win32')('scan: a video too big is compressed with ffmpeg', () => {
+  const videoScan = (contentType: string, bytes: number) =>
+    scan('awaiting_upload', {
+      input: { kind: 'video', language: 'en', frame_count: null, video: { content_type: contentType, content_length: bytes }, has_transcript: false },
+      upload: { kind: 'video', method: 'PUT', url: `${BASE}/scans/${SCAN_ID}/video`, headers: { 'Content-Type': contentType } },
+    });
+  const scanRoutes = (contentType: string, bytes: number): Route[] => [
+    (call) => (call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans` ? json(videoScan(contentType, bytes), 201) : undefined),
+    (call) => (call.method === 'PUT' && call.path === `/scans/${SCAN_ID}/video` ? json({ object: 'scan_video', scan_id: SCAN_ID, bytes }) : undefined),
+    (call) => (call.method === 'POST' && call.path === `/scans/${SCAN_ID}/start` ? json(scan('queued'), 202) : undefined),
+    (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}/events` ? stream([scan('complete')]) : undefined),
+    (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(document) : undefined),
+  ];
+  async function bigVideo(name: string, bytes = 390 * 1024 * 1024): Promise<string> {
+    const file = path.join(directory, name);
+    await writeFile(file, '');
+    await truncate(file, bytes);
+    return file;
+  }
+
+  it('re-encodes it to an MP4 that fits, with the bitrate from its duration, uploads that and deletes it', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '400.000000', outputBytes: 12_345 });
+    const input = await bigVideo('IMG_0042.MOV');
+    const h = harness(scanRoutes('video/mp4', 12_345), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    // A clock that stands still: the durations printed do not depend on how fast the fake runs.
+    h.io.now = () => 0;
+    expect(await main(['scan', 'IMG_0042.MOV', '--space', SPACE_ID], h.io)).toBe(0);
+
+    const [probe, encode] = await tools.calls();
+    expect(probe).toEqual(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', input]);
+    // 90% of 100 MB over 400 s: 1,887,436 bit/s in all, 96 kbit/s of it mono AAC; under 2.5 Mbit/s the long side is 1280.
+    expect(encode![0]).toBe('ffmpeg');
+    const args = encode!.slice(1);
+    expect(after(args, '-i')).toBe(input);
+    expect(after(args, '-c:v')).toBe('libx264');
+    expect(after(args, '-preset')).toBe('veryfast');
+    expect(after(args, '-b:v')).toBe('1791436');
+    expect(after(args, '-maxrate')).toBe('1791436');
+    expect(after(args, '-bufsize')).toBe('3582872');
+    expect(after(args, '-c:a')).toBe('aac');
+    expect(after(args, '-b:a')).toBe('96000');
+    expect(after(args, '-ac')).toBe('1');
+    expect(after(args, '-movflags')).toBe('+faststart');
+    expect(after(args, '-vf')).toBe("scale=w='trunc(min(1,1280/max(iw,ih))*iw/2)*2':h='trunc(min(1,1280/max(iw,ih))*ih/2)*2'");
+    // Never the rotation turned off: ffmpeg turns a phone's video upright.
+    expect(args).not.toContain('-noautorotate');
+
+    // The compressed file is what is declared and uploaded, as an MP4; then it is gone.
+    expect(JSON.parse(String(h.calls[0]!.body)).input.video).toEqual({ content_type: 'video/mp4', content_length: 12_345 });
+    expect(h.calls[1]!.method).toBe('PUT');
+    expect(h.calls[1]!.headers.get('content-type')).toBe('video/mp4');
+    const output = args.at(-1)!;
+    expect(path.basename(output)).toBe('video.mp4');
+    await expect(stat(path.dirname(output))).rejects.toThrow();
+    expect(h.stderr()).toContain('› Compressing IMG_0042.MOV…\n✓ Compressed IMG_0042.MOV  390.0 MB → 12 KB, H.264 up to 720p, in 0s\n');
+  });
+
+  it('compresses a video that fits only when asked (--compress), and caps the bitrate of a short one at 8 Mbit/s', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '60.5', outputBytes: 40 });
+    await writeFile(path.join(directory, 'tour.webm'), new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]));
+
+    const asIs = harness(scanRoutes('video/webm', 4), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    expect(await main(['scan', 'tour.webm', '--space', SPACE_ID], asIs.io)).toBe(0);
+    expect(await tools.calls()).toEqual([]);
+    expect(JSON.parse(String(asIs.calls[0]!.body)).input.video).toEqual({ content_type: 'video/webm', content_length: 4 });
+
+    const asked = harness(scanRoutes('video/mp4', 40), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    expect(await main(['scan', 'tour.webm', '--space', SPACE_ID, '--compress', '--json'], asked.io)).toBe(0);
+    const encode = (await tools.calls()).find((call) => call[0] === 'ffmpeg')!.slice(1);
+    expect(after(encode, '-b:v')).toBe(String(8_000_000 - 96_000));
+    expect(after(encode, '-vf')).toContain('min(1,1920/max(iw,ih))');
+    expect(JSON.parse(String(asked.calls[0]!.body)).input.video).toEqual({ content_type: 'video/mp4', content_length: 40 });
+    // --json: stderr stays quiet.
+    expect(asked.stderr()).toBe('');
+  });
+
+  it('refuses a video over 10 minutes before encoding it, and creates nothing', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '612.48' });
+    await bigVideo('IMG_0042.MOV');
+    const h = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('✗ IMG_0042.MOV lasts 612.5 s: a video can last up to 600 s (10 minutes)\n');
+    expect(h.stderr()).toContain('`ffmpeg -i IMG_0042.MOV -t 600 -c copy trimmed.MOV`');
+    expect((await tools.calls()).map((call) => call[0])).toEqual(['ffprobe']);
+    expect(h.calls).toEqual([]);
+
+    // A duration ffprobe cannot read: said, nothing encoded.
+    const unknown = await fakeVideoTools('unknown', { seconds: 'N/A' });
+    const h2 = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: unknown.bin });
+    expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h2.io)).toBe(2);
+    expect(h2.stderr()).toContain('ffprobe could not read how long IMG_0042.MOV lasts: the file does not say how long it lasts');
+    expect(h2.stderr()).toContain('› Check that the video plays, or export it again as .mp4\n');
+    expect((await unknown.calls()).map((call) => call[0])).toEqual(['ffprobe']);
+    expect(h2.calls).toEqual([]);
+    // A browser's WebM: how to give it a duration; it fits, so it can also go as it is.
+    await writeFile(path.join(directory, 'recording.webm'), new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]));
+    expect(await main(['scan', 'recording.webm', '--name', 'Flat', '--compress'], h2.io)).toBe(2);
+    expect(h2.stderr()).toContain('› A WebM recorded in a browser does not say how long it lasts: remux it first\n    (`ffmpeg -i in.webm -c copy out.webm`)\n  › Or send it as it is, without --compress\n');
+  });
+
+  it('says what ffmpeg said when it fails, and refuses a result still too big; nothing is created and the copy is gone', async () => {
+    await bigVideo('IMG_0042.MOV');
+    const broken = await fakeVideoTools('broken', { seconds: '300', fail: 'IMG_0042.MOV: Invalid data found when processing input' });
+    const h = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: broken.bin });
+    expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h.io)).toBe(1);
+    expect(h.stderr()).toContain('› Compressing IMG_0042.MOV…\n✗ Error: ffmpeg could not compress the video: IMG_0042.MOV: Invalid data found when processing input\n');
+    const failed = (await broken.calls()).find((call) => call[0] === 'ffmpeg')!;
+    await expect(stat(path.dirname(failed.at(-1)!))).rejects.toThrow();
+    expect(h.calls).toEqual([]);
+
+    const bloated = await fakeVideoTools('bloated', { seconds: '300', outputBytes: 101 * 1024 * 1024 });
+    const h2 = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: bloated.bin });
+    expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h2.io)).toBe(1);
+    expect(h2.stderr()).toContain('Error: Compressed, IMG_0042.MOV is still 101.0 MB, over 100 MB: trim it and scan again');
+    const encoded = (await bloated.calls()).find((call) => call[0] === 'ffmpeg')!;
+    await expect(stat(path.dirname(encoded.at(-1)!))).rejects.toThrow();
+    expect(h2.calls).toEqual([]);
+  });
+
+  it('never compresses with --no-compress, and refuses --compress without ffmpeg or on photos', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '120' });
+    await bigVideo('IMG_0042.MOV');
+    const h = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat', '--no-compress'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('IMG_0042.MOV is 390.0 MB: a video can be up to 100 MB');
+    expect(h.stderr()).toContain('Without --no-compress the CLI compresses it to fit, when ffmpeg is installed');
+    expect(await tools.calls()).toEqual([]);
+
+    expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat', '--compress', '--no-compress'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('Pass --compress or --no-compress, not both');
+    await mkdir(path.join(directory, 'photos'));
+    await writeFile(path.join(directory, 'photos', 'frame-1.jpg'), new Uint8Array([0xff, 0xd8]));
+    expect(await main(['scan', 'photos', '--name', 'Flat', '--compress'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('--compress re-encodes a video: photos are sent as they are');
+
+    const without = harness([], { SPACECONTEXT_API_KEY: KEY });
+    without.io.platform = 'darwin';
+    await writeFile(path.join(directory, 'tour.mp4'), new Uint8Array(4));
+    expect(await main(['scan', 'tour.mp4', '--name', 'Flat', '--compress'], without.io)).toBe(2);
+    expect(without.stderr()).toContain('✗ --compress needs ffmpeg and ffprobe on the PATH\n  › Install ffmpeg: `brew install ffmpeg`\n');
+    expect(h.calls).toEqual([]);
+    expect(without.calls).toEqual([]);
   });
 });
 

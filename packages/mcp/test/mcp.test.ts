@@ -938,8 +938,13 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     await initialize(accessToken);
     const listed = (await rpc(accessToken, 'tools/list')).result.tools as Array<{ name: string; description: string; inputSchema: any }>;
     const createScan = listed.find((entry) => entry.name === 'create_scan')!;
-    expect(createScan.description).toContain('up to 100 MB and 10 minutes');
+    expect(createScan.description).toContain('Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 100 MB and 10 minutes)');
     expect(createScan.inputSchema.properties.video.properties.content_length.maximum).toBe(100 * MB);
+    // The containers the API takes, and nothing else.
+    expect(createScan.inputSchema.properties.video.properties.content_type.enum).toEqual(['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/3gpp', 'video/webm', 'video/x-matroska', 'video/matroska']);
+    const avi = await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/x-msvideo', content_length: 1234 } } });
+    expect(avi.error ?? avi.result?.isError).toBeTruthy();
+    expect(backend.calls.some((entry) => entry.method === 'POST' && entry.path === '/spaces')).toBe(false);
     // The languages a report can be written in, as the API takes them.
     expect(createScan.inputSchema.properties.language.enum).toEqual(['en', 'it', 'es', 'fr', 'de', 'pt', 'nl']);
     expect(createScan.inputSchema.properties.language.description).toContain('en (default), it, es, fr, de, pt or nl');
@@ -952,8 +957,9 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     expect(tooBig.error ?? tooBig.result?.isError).toBeTruthy();
     expect(backend.calls.some((entry) => entry.method === 'POST' && entry.path === '/spaces')).toBe(false);
 
-    const largest = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 100 * MB } });
+    const largest = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/webm', content_length: 100 * MB } });
     expect(largest.isError).toBeUndefined();
+    expect(backend.calls.find((entry) => entry.method === 'POST' && entry.path === '/spaces/spc_new/scans')!.body).toMatchObject({ input: { video: { content_type: 'video/webm', content_length: 100 * MB } } });
     expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/spaces/spc_new')).toBe(false);
 
     // Refused by the API all the same: the space made for it goes too.

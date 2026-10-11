@@ -121,7 +121,7 @@ When you're ready to scan your own spaces, add a card in the console (nothing is
 
 | | How | Docs |
 | --- | --- | --- |
-| **Scan** a video (MP4, MOV, M4V) or up to 120 photos; the analysis runs server-side, no ffmpeg needed | `sc.scan()`, `spacecontext scan`, `POST /v1/spaces/{id}/scans` | [Scans](https://spacecontext.app/developers/docs/api/scans/) |
+| **Scan** a video (MP4, MOV, M4V, 3GP, WebM, Matroska) or up to 120 photos; the analysis runs server-side, no ffmpeg needed | `sc.scan()`, `spacecontext scan`, `POST /v1/spaces/{id}/scans` | [Scans](https://spacecontext.app/developers/docs/api/scans/) |
 | **Read** a space as a versioned JSON document, by section | `GET /v1/spaces/{id}` | [The Space Document](https://spacecontext.app/developers/docs/api/space-document/) |
 | **Search** every space in any language ("rubinetto dell'acqua" finds "water shut-off valve") | `GET /v1/search` | [Search and ask](https://spacecontext.app/developers/docs/api/search-and-ask/) |
 | **Ask** one space and get a short answer with citations and photos, or "not documented" | `POST /v1/spaces/{id}/ask` | [Search and ask](https://spacecontext.app/developers/docs/api/search-and-ask/) |

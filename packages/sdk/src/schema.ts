@@ -1154,8 +1154,11 @@ export interface components {
                     timestamp_ms?: number | null;
                 }[];
                 video?: {
-                    /** @enum {string} */
-                    content_type: "video/mp4" | "video/quicktime" | "video/x-m4v";
+                    /**
+                     * @description The container of the file: MP4, MOV, M4V or 3GP (H.264, HEVC 8 or 10 bit, AV1, ProRes, MPEG-4 part 2, H.263; AAC, Opus, PCM, AMR or no audio; any frame rate; rotation metadata applied, fragmented MP4 included), WebM or Matroska. A WebM recorded in a browser (MediaRecorder) has no duration and cannot be read: the scan fails with `VIDEO_UNREADABLE`, not charged; remux it first (`ffmpeg -i in.webm -c copy out.webm`). Any other type is refused here with 400 `INVALID_CONTENT_TYPE`.
+                     * @enum {string}
+                     */
+                    content_type: "video/mp4" | "video/quicktime" | "video/x-m4v" | "video/3gpp" | "video/webm" | "video/x-matroska" | "video/matroska";
                     content_length: number;
                 };
                 transcript?: {
@@ -2087,6 +2090,10 @@ export interface operations {
                 "video/mp4": string;
                 "video/quicktime": string;
                 "video/x-m4v": string;
+                "video/3gpp": string;
+                "video/webm": string;
+                "video/x-matroska": string;
+                "video/matroska": string;
             };
         };
         responses: {

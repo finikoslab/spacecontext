@@ -40,7 +40,23 @@ export const DEFAULT_BASE_URL = 'https://api.spacecontext.app/v1';
 export const FINAL_SCAN_STATUSES: ReadonlySet<Scan['status']> = new Set(['complete', 'failed', 'cancelled']);
 
 export type FrameContentType = 'image/jpeg' | 'image/png' | 'image/webp';
-export type VideoContentType = 'video/mp4' | 'video/quicktime' | 'video/x-m4v';
+/** The container of a scan's video, as the API declares it (`input.video.content_type`). */
+export type VideoContentType = NonNullable<ScanInput['video']>['content_type'];
+
+/**
+ * The video containers a scan takes: MP4, MOV, M4V, 3GP, WebM and Matroska
+ * (both names of its type). Any other type is refused when the scan is
+ * declared (400 `INVALID_CONTENT_TYPE`), before anything is charged.
+ */
+export const VIDEO_CONTENT_TYPES = [
+  'video/mp4',
+  'video/quicktime',
+  'video/x-m4v',
+  'video/3gpp',
+  'video/webm',
+  'video/x-matroska',
+  'video/matroska',
+] as const satisfies readonly VideoContentType[];
 /**
  * Bytes to upload. A `Blob` is read lazily: in Node, `fs.openAsBlob(path)`
  * uploads a 100 MB video without loading it in memory.

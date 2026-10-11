@@ -71,7 +71,9 @@ export function hints(error: SpaceContextError, context: ErrorContext): string[]
     case 'FILE_TOO_LARGE':
     case 'INVALID_CONTENT_TYPE':
     case 'EMPTY_FILE':
-      return ['Videos: .mp4 .mov .m4v up to 100 MB; photos: .jpg .png .webp up to 2 MB each'];
+      return [
+        'Videos: .mp4 .mov .m4v .3gp .webm .mkv up to 100 MB and 10 minutes (with ffmpeg\ninstalled, `spacecontext scan` compresses a bigger one); photos: .jpg .png .webp\nup to 2 MB each',
+      ];
     case 'FOOTAGE_UNUSABLE':
       return [`Film again in good light, slowly, showing whole rooms: ${RECORDING_TIPS_URL}`, '`spacecontext check <photos-dir>` tells usable photos before a scan'];
     case 'ANALYSIS_EMPTY':
@@ -79,7 +81,10 @@ export function hints(error: SpaceContextError, context: ErrorContext): string[]
     case 'VIDEO_TOO_LONG':
       return ['A video can last up to 10 minutes: trim it, or scan it in two parts'];
     case 'VIDEO_UNREADABLE':
-      return ['Check that the video plays, or export it again as .mp4'];
+      return [
+        'Check that the video plays, or export it again as .mp4',
+        'A WebM recorded in a browser does not say how long it lasts: remux it first\n(`ffmpeg -i in.webm -c copy out.webm`)',
+      ];
     case 'AI_ANALYSIS_FAILED':
     case 'AI_OVERLOADED':
     case 'PROCESSING_TIMEOUT':

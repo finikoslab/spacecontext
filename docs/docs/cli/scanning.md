@@ -1,7 +1,7 @@
 ---
 title: 'Scanning a space'
 sidebar_label: 'Scanning'
-description: 'How to record a space so the analysis finds everything: video and photo limits, recording tips, what happens after the upload and what a live scan costs.'
+description: 'How to record a space for a scan: video formats and limits, phone video sizes and automatic compression, recording tips, what happens next and the cost.'
 ---
 
 # Scanning a space
@@ -10,7 +10,7 @@ description: 'How to record a space so the analysis finds everything: video and 
 
 | Input | Limits |
 | --- | --- |
-| Video | MP4, MOV (including iPhone HEVC) or M4V; up to 100 MB and 10 minutes |
+| Video | MP4, MOV (including iPhone HEVC), M4V, 3GP, WebM or Matroska (`.mkv`); up to 100 MB and 10 minutes |
 | Photos | Up to 120 JPEG, PNG or WebP, 2 MB each, in the order they were taken |
 | Transcript (API only, optional) | Up to 600 segments of 2 000 characters, with their times |
 
@@ -18,11 +18,30 @@ From a video, the server takes 36 to 120 frames spread over its length (about on
 
 ### Recording tips
 
-Phones often record in 4K, and a minute of 4K is several hundred MB: well over the 100 MB limit. 1080p is plenty for a scan.
+Phones record far more than a scan needs. A default Android recording at 1080p and 30 fps runs at 16–17 Mbps, about 120 MB a minute: it reaches 100 MB after about 50 seconds. In 4K it gets there after about 19 seconds. To fit the full 10 minutes, a video needs about 1.4 Mbps in all, for example 720p H.264 at about 1.2 Mbps with 96 kbps AAC audio.
 
-- **Record at 1080p.** On an iPhone: Settings > Camera > Record Video > 1080p.
-- **Keep clips short.** A minute at 1080p is about 60–130 MB, depending on the codec.
-- **Or compress** a video you already have: `ffmpeg -i in.mov -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4`.
+- **Let the CLI compress it.** With [ffmpeg](https://ffmpeg.org/download.html) installed (macOS: `brew install ffmpeg`; Debian or Ubuntu: `sudo apt install ffmpeg`; Windows: `winget install ffmpeg`), `spacecontext scan` re-encodes a video over 100 MB into an MP4 that fits, then uploads that. See [below](#automatic-compression).
+- **Record at 720p** to send videos as they are. On an iPhone: Settings > Camera > Record Video > 720p HD at 30 fps; on Android, the video size in the camera's settings.
+- **Keep clips short**, or trim what you do not need.
+
+### Automatic compression
+
+When a video is over 100 MB and `ffmpeg` and `ffprobe` are on the `PATH`, the CLI reads its duration and encodes a temporary copy before creating anything:
+
+- the bitrate fills 90% of 100 MB over the duration, at most 8 Mbps: 10 minutes get about 1.26 Mbps, a minute gets 8 Mbps;
+- video in H.264 (`-preset veryfast`), its long side at most 1920 pixels, or 1280 when the bitrate is under 2.5 Mbps; a smaller video is never enlarged;
+- audio in AAC, mono, 96 kbps; `+faststart`;
+- a phone's rotation is applied, so the copy is upright.
+
+A status line shows the progress; the copy is uploaded and then deleted, and your file is never changed. A video over 10 minutes is refused before encoding, since the API would refuse it too. `--compress` compresses a video that already fits; `--no-compress` never compresses (a video over 100 MB is then refused). Without ffmpeg, a video over 100 MB is refused with how to install it.
+
+The same in one command, without the CLI (long side 1280, about 1.3 Mbps in all):
+
+```bash
+ffmpeg -i in.mov -vf "scale='if(gt(iw,ih),1280,-2)':'if(gt(iw,ih),-2,1280)'" \
+  -c:v libx264 -preset veryfast -b:v 1200k -maxrate 1200k -bufsize 2400k \
+  -c:a aac -b:a 96k -ac 1 -movflags +faststart out.mp4
+```
 
 ## Record well
 

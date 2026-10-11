@@ -38,6 +38,17 @@ curl -X POST $API/spaces/spc_3f…/scans -H "$AUTH" -H "Content-Type: applicatio
   -d '{"input": {"kind": "video", "language": "en", "video": {"content_type": "video/mp4", "content_length": 48211983}}}'
 ```
 
+`content_type` is the file's container:
+
+| `content_type` | Container | Read inside it |
+| --- | --- | --- |
+| `video/mp4`, `video/quicktime`, `video/x-m4v`, `video/3gpp` | MP4, MOV, M4V, 3GP | H.264, HEVC (8 and 10 bit), AV1, ProRes, MPEG-4 part 2, H.263; AAC, Opus, PCM, AMR or no audio; fragmented MP4 too |
+| `video/webm`, `video/x-matroska`, `video/matroska` | WebM, Matroska (`.mkv`) | VP9 or H.264; Opus or AAC |
+
+Any frame rate is fine, and a phone's rotation is applied: a portrait video gives upright frames. Any other type (AVI, MPEG-TS, Ogg, FLV, WMV…) is refused here with `400 INVALID_CONTENT_TYPE`, before anything is created or charged; convert it to MP4 first: `ffmpeg -i in.avi -c:v libx264 -c:a aac -movflags +faststart out.mp4`.
+
+The duration is read from the container itself, whatever type you declared (for a fragmented MP4 that does not state it, from the video), and a video over 10 minutes fails with `VIDEO_TOO_LONG`, refunded. A WebM recorded in a browser with `MediaRecorder` states no duration and cannot be read: its scan fails with `VIDEO_UNREADABLE`, refunded. Remux it first, which writes the duration: `ffmpeg -i in.webm -c copy out.webm`.
+
 For photos, list them in order, with their time in milliseconds when you know it:
 
 ```json
@@ -82,7 +93,9 @@ The answer is the scan, with upload instructions:
 curl -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @flat.mp4
 ```
 
-**Recording tips.** Phones often record in 4K (several hundred MB a minute); 1080p is plenty. Record at 1080p (iPhone: Settings > Camera > Record Video > 1080p) and keep clips short: a minute at 1080p is about 60–130 MB depending on the codec. Or compress first: `ffmpeg -i in.mov -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4`.
+The `Content-Type` of the upload must be the declared type: another one is refused with `415 INVALID_CONTENT_TYPE`.
+
+**Size.** Phones record far more than a scan needs: a default Android recording at 1080p (16–17 Mbps) reaches 100 MB after about 50 seconds, and a 4K one after about 19 seconds. Ten minutes fit at about 1.4 Mbps in all, for example 720p H.264 at about 1.2 Mbps with 96 kbps AAC. Record at 720p, trim, or compress before uploading; the [CLI](../cli/scanning.md#automatic-compression) compresses a bigger video by itself when ffmpeg is installed.
 
 **Photos**: one `PUT` per photo to `upload.url_template` with `{index}` replaced, starting at 0:
 

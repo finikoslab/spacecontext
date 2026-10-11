@@ -1,10 +1,13 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 import { describeScan, REPORT_LANGUAGES, SpaceContext, SpaceContextError, type FrameCheck, type ReportLanguage, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
-import { writeFile } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { apiUrl, clearConfig, configDirectory, readConfig, setting, signedInConfig, writeConfig } from './lib/config.js';
 import { stat } from 'node:fs/promises';
-import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './lib/files.js';
+import { compressionPlan, compressVideo, findVideoTools, installFfmpeg, pathWhich, probeDuration, type CompressionPlan } from './lib/compress.js';
+import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, scanSource, UsageError, writeSkill } from './lib/files.js';
 import { COMMAND_HELP, commandHelp, GLOBAL_OPTIONS, mainHelp, SPACE_TYPES, usageOf } from './terminal/help.js';
 import { hints, type ErrorContext } from './terminal/hints.js';
 import { BILLING_URL, DEFAULT_API_URL, KEYS_URL } from './lib/links.js';
@@ -59,6 +62,8 @@ const OPTIONS = {
   type: { type: 'string' },
   language: { type: 'string' },
   'no-wait': { type: 'boolean' },
+  compress: { type: 'boolean' },
+  'no-compress': { type: 'boolean' },
   format: { type: 'string' },
   follow: { type: 'boolean' },
   test: { type: 'boolean' },
@@ -704,6 +709,7 @@ async function scan(context: Context): Promise<void> {
   if (Boolean(values.space) === Boolean(values.name)) {
     throw new UsageError(values.space ? 'Pass --space or --name, not both' : 'Say where the scan goes: --name <name> for a new space, or --space <space-id>', [], true);
   }
+  if (values.compress && values['no-compress']) throw new UsageError('Pass --compress or --no-compress, not both', [], true);
   const language = (values.language ?? 'en') as ReportLanguage;
   if (!REPORT_LANGUAGES.includes(language)) {
     throw new UsageError(`--language must be one of ${REPORT_LANGUAGES.join(', ')} (the language of the report; the narration can be in any language)`);
@@ -714,13 +720,21 @@ async function scan(context: Context): Promise<void> {
   }
   const output = format(values);
   const source = await scanSource(input);
+  if (values.compress && source.kind !== 'video') throw new UsageError('--compress re-encodes a video: photos are sent as they are');
+  // A video over 100 MB is compressed to fit when ffmpeg is installed; --compress always, --no-compress never.
+  const platform = io.platform ?? process.platform;
+  const compressing = source.kind === 'video' && !values['no-compress'] && (Boolean(values.compress) || source.size > MAX_VIDEO_BYTES);
+  const tools = compressing ? await findVideoTools(io.which ?? pathWhich(io.env, platform)) : null;
+  if (values.compress && !tools) throw new UsageError('--compress needs ffmpeg and ffprobe on the PATH', [`Install ffmpeg: ${installFfmpeg(platform)}`]);
   // Checked before anything is created: the API limits, from the same source as the SDK.
-  if (source.kind === 'video' && source.size > MAX_VIDEO_BYTES) {
-    // Phones often record in 4K: hundreds of MB a minute, where 1080p is plenty.
+  if (source.kind === 'video' && source.size > MAX_VIDEO_BYTES && !tools) {
+    // A phone at 1080p records about 120 MB a minute; 10 minutes fit at about 1.4 Mbps.
     const name = path.basename(source.file);
     throw new UsageError(`${name} is ${size(source.size)}: a video can be up to ${MAX_VIDEO_BYTES / 1_048_576} MB`, [
-      'Record at 1080p (iPhone: Settings > Camera > Record Video > 1080p) and keep it short',
-      `Or compress it: \`ffmpeg -i ${/^[\w.-]+$/.test(name) ? name : 'in.mov'} -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4\``,
+      values['no-compress']
+        ? 'Without --no-compress the CLI compresses it to fit, when ffmpeg is installed'
+        : `Install ffmpeg and run it again: the CLI compresses the video to fit\n(${installFfmpeg(platform)})`,
+      'Or record at 720p and keep it short: a phone at 1080p fills 100 MB in about a minute\n(iPhone: Settings > Camera > Record Video > 720p HD at 30 fps)',
     ]);
   }
   let totalBytes = source.kind === 'video' ? source.size : 0;
@@ -730,6 +744,28 @@ async function scan(context: Context): Promise<void> {
       if (bytes > MAX_FRAME_BYTES) throw new UsageError(`${path.basename(frame.file)} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
       totalBytes += bytes;
     }
+  }
+  // The duration sets the bitrate; a video the API would refuse as too long is refused before encoding it.
+  let plan: CompressionPlan | null = null;
+  if (tools && source.kind === 'video') {
+    const name = path.basename(source.file);
+    const probe = await probeDuration(tools, source.file, io.run);
+    if (probe.seconds === null) {
+      throw new UsageError(`ffprobe could not read how long ${name} lasts: ${probe.reason}`, [
+        source.contentType === 'video/webm' || source.contentType === 'video/x-matroska'
+          ? 'A WebM recorded in a browser does not say how long it lasts: remux it first\n(`ffmpeg -i in.webm -c copy out.webm`)'
+          : 'Check that the video plays, or export it again as .mp4',
+        // Under 100 MB only --compress asked for it.
+        ...(source.size <= MAX_VIDEO_BYTES ? ['Or send it as it is, without --compress'] : []),
+      ]);
+    }
+    if (probe.seconds > MAX_VIDEO_SECONDS) {
+      const extension = path.extname(name) || '.mp4';
+      throw new UsageError(`${name} lasts ${Math.round(probe.seconds * 10) / 10} s: a video can last up to ${MAX_VIDEO_SECONDS} s (10 minutes)`, [
+        `Trim it: \`ffmpeg -i ${/^[\w.-]+$/.test(name) ? name : `in${extension}`} -t ${MAX_VIDEO_SECONDS} -c copy trimmed${extension}\`, or film it again`,
+      ]);
+    }
+    plan = compressionPlan(probe.seconds);
   }
   const sc = await client(context);
   const now = io.now ?? Date.now;
@@ -743,6 +779,13 @@ async function scan(context: Context): Promise<void> {
 
   let spaceId = values.space!;
   let started: Scan | undefined;
+  let encoding = false;
+  // The compressed copy, in a folder of its own: removed after the upload, on failure and on Ctrl+C.
+  let temporary: string | null = null;
+  const discard = async () => {
+    if (temporary) await rm(temporary, { recursive: true, force: true });
+    temporary = null;
+  };
   const released: Array<() => void> = [];
   const onInterrupt = (handler: () => void) => {
     const release = io.onInterrupt?.(handler);
@@ -752,9 +795,45 @@ async function scan(context: Context): Promise<void> {
     onInterrupt(() => {
       status?.stop();
       if (started) return;
+      if (encoding) {
+        io.stderr(`\n${err.warn} Interrupted while compressing: nothing was created or charged.\n`);
+        return;
+      }
       const left = values.name && spaceId ? ` The space ${spaceId} has no scan: \`spacecontext delete-space ${spaceId}\` removes it.` : '';
       io.stderr(`\n${err.warn} Interrupted during the upload: a scan that has not started is never charged.${left}\n`);
     });
+    let video = source.kind === 'video' ? { file: source.file, contentType: source.contentType, size: source.size } : null;
+    if (video && tools && plan) {
+      const folder = await mkdtemp(path.join(tmpdir(), 'spacecontext-'));
+      temporary = folder;
+      onInterrupt(() => rmSync(folder, { recursive: true, force: true }));
+      const compressed = path.join(folder, 'video.mp4');
+      encoding = true;
+      status?.step(`Compressing ${name}`);
+      let bytes: number;
+      try {
+        bytes = await compressVideo({
+          tools,
+          input: video.file,
+          output: compressed,
+          plan,
+          ...(io.run ? { run: io.run } : {}),
+          onProgress: (fraction) => status?.update(`Compressing ${name}  ${Math.floor(fraction * 100)}%`),
+        });
+      } catch (error) {
+        status?.fail();
+        throw error;
+      }
+      encoding = false;
+      if (bytes > MAX_VIDEO_BYTES) {
+        status?.fail();
+        throw new Error(`Compressed, ${name} is still ${size(bytes)}, over ${MAX_VIDEO_BYTES / 1_048_576} MB: trim it and scan again`);
+      }
+      const picture = plan.longSide === 1280 ? '720p' : '1080p';
+      status?.complete(`Compressed ${name}`, `${size(video.size)} → ${size(bytes)}, H.264 up to ${picture}, in ${duration(status.elapsed())}`);
+      video = { file: compressed, contentType: 'video/mp4', size: bytes };
+      totalBytes = bytes;
+    }
     if (values.name) {
       status?.step('Creating the space', { plain: false });
       const created = await sc.spaces.create({ name: values.name, ...(spaceType ? { space_type: spaceType as SpaceType } : {}) });
@@ -764,8 +843,10 @@ async function scan(context: Context): Promise<void> {
 
     try {
       if (source.kind === 'video') {
+        // The compressed copy when there is one.
+        const upload = video ?? source;
         status?.step(`Uploading ${name}`);
-        started = await sc.scans.fromVideo(spaceId, { data: await fileBlob(source.file), contentType: source.contentType, language });
+        started = await sc.scans.fromVideo(spaceId, { data: await fileBlob(upload.file), contentType: upload.contentType, language });
       } else {
         const count = source.files.length;
         status?.step(`Uploading ${plural(count, 'photo')}`);
@@ -782,6 +863,8 @@ async function scan(context: Context): Promise<void> {
         status?.line(`${err.warn} The space ${spaceId} was created but has no scan: scan again with --space ${spaceId}, or remove it with \`spacecontext delete-space ${spaceId}\`.`);
       }
       throw error;
+    } finally {
+      await discard();
     }
     const scanId = started.id;
     context.failure.scanId = scanId;
@@ -818,6 +901,7 @@ async function scan(context: Context): Promise<void> {
     status?.line(`${err.ok} ${err.bold('Scan complete')} in ${duration(now() - began)}`);
   } finally {
     status?.stop();
+    await discard();
     for (const release of released) release();
   }
 

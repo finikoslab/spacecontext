@@ -1,4 +1,4 @@
-import type { FrameContentType, ReportLanguage, Scan, ScanInput, SkillBundle, SpaceContext, SpaceDocument, SpaceType, UploadBody, VideoContentType } from './client.js';
+import { VIDEO_CONTENT_TYPES, type FrameContentType, type ReportLanguage, type Scan, type ScanInput, type SkillBundle, type SpaceContext, type SpaceDocument, type SpaceType, type UploadBody, type VideoContentType } from './client.js';
 import { SpaceContextError } from './errors.js';
 
 /**
@@ -9,7 +9,7 @@ import { SpaceContextError } from './errors.js';
 
 /** What to scan. */
 export type ScanSource =
-  /** A path (Node only): a video file (.mp4 .mov .m4v), an image, or a folder of images (one frame each, sorted by name). */
+  /** A path (Node only): a video file (.mp4 .mov .m4v .3gp .webm .mkv), an image, or a folder of images (one frame each, sorted by name). */
   | string
   /** A video or an image, with its type in `blob.type` (a `File` from an input element has it). */
   | Blob
@@ -104,14 +104,32 @@ const MAX_FRAMES = 120;
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
-const VIDEO_TYPES: Record<string, VideoContentType> = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.m4v': 'video/x-m4v' };
+/** The type of a video file from its extension: the containers the API takes. */
+const VIDEO_TYPES: Record<string, VideoContentType> = {
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/x-m4v',
+  '.3gp': 'video/3gpp',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
+};
+const VIDEO_EXTENSIONS = Object.keys(VIDEO_TYPES).join(' ');
 const IMAGE_TYPES: Record<string, FrameContentType> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
-const VIDEO_CONTENT_TYPES = new Set<string>(Object.values(VIDEO_TYPES));
 const IMAGE_CONTENT_TYPES = new Set<string>(Object.values(IMAGE_TYPES));
+
+/** Read when called, never at load: client.js and this module import each other. */
+function isVideoType(type: string): type is VideoContentType {
+  return (VIDEO_CONTENT_TYPES as readonly string[]).includes(type);
+}
 
 function extension(name: string): string {
   const dot = name.lastIndexOf('.');
   return dot === -1 ? '' : name.slice(dot).toLowerCase();
+}
+
+/** `video/webm` from `video/webm;codecs=vp9,opus` (a MediaRecorder's Blob): the API takes the bare type. */
+function mediaType(type: string): string {
+  return type.split(';')[0]!.trim().toLowerCase();
 }
 
 function invalid(message: string): SpaceContextError {
@@ -133,13 +151,16 @@ function frameOf(entry: Blob | ScanFrame, index: number): ScanFrame {
 async function resolveSource(source: ScanSource): Promise<Resolved> {
   if (typeof source === 'string') return resolvePath(source);
   if (source instanceof Blob) {
-    const type = source.type || VIDEO_TYPES[extension((source as File).name ?? '')] || IMAGE_TYPES[extension((source as File).name ?? '')] || '';
-    if (VIDEO_CONTENT_TYPES.has(type)) return { kind: 'video', data: source, contentType: type as VideoContentType };
+    const name = (source as File).name ?? '';
+    const type = mediaType(source.type) || VIDEO_TYPES[extension(name)] || IMAGE_TYPES[extension(name)] || '';
+    if (isVideoType(type)) return { kind: 'video', data: source, contentType: type };
     if (IMAGE_CONTENT_TYPES.has(type)) return { kind: 'frames', frames: [frameOf(source, 0)] };
-    throw invalid('The Blob has no usable type: pass { video, contentType } or { frames } instead');
+    throw invalid(
+      `The Blob's type (${source.type || 'none'}) is not a video the API takes (${VIDEO_CONTENT_TYPES.join(', ')}) nor an image: pass { video, contentType } or { frames } instead`
+    );
   }
   if ('video' in source) {
-    if (!VIDEO_CONTENT_TYPES.has(source.contentType)) throw invalid('contentType must be video/mp4, video/quicktime or video/x-m4v');
+    if (!isVideoType(source.contentType)) throw invalid(`contentType must be one of ${VIDEO_CONTENT_TYPES.join(', ')}`);
     return { kind: 'video', data: source.video, contentType: source.contentType };
   }
   if (source.frames.length === 0) throw invalid('At least one frame is required');
@@ -186,7 +207,7 @@ async function resolvePath(target: string): Promise<Resolved> {
   if (video) return { kind: 'video', data: await fs.openAsBlob(target), contentType: video };
   const image = IMAGE_TYPES[extension(target)];
   if (image) return { kind: 'frames', frames: [{ data: await fs.openAsBlob(target), contentType: image, timestampMs: null }] };
-  throw invalid(`${target}: expected a video (.mp4 .mov .m4v), an image, or a folder of images`);
+  throw invalid(`${target}: expected a video (${VIDEO_EXTENSIONS}), an image, or a folder of images`);
 }
 
 function byteLength(body: UploadBody): number {
@@ -197,7 +218,10 @@ function byteLength(body: UploadBody): number {
 function checkLimits(resolved: Resolved): void {
   if (resolved.kind === 'video') {
     if (byteLength(resolved.data) > MAX_VIDEO_BYTES) {
-      throw invalid(`The video is larger than ${MAX_VIDEO_BYTES / 1_048_576} MB: record at 1080p, or compress it`);
+      // A phone at 1080p fills 100 MB in about a minute; 10 minutes fit at about 1.4 Mbps.
+      throw invalid(
+        `The video is larger than ${MAX_VIDEO_BYTES / 1_048_576} MB: record at 720p or trim it, or compress it (the spacecontext CLI does it when ffmpeg is installed)`
+      );
     }
     return;
   }

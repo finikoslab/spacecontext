@@ -14,7 +14,7 @@ npx spacecontext --help              # every command, by group
 npx spacecontext scan --help         # one command: its options and examples
 ```
 
-Needs Node.js 22.12 or later. Run it with `npx`, or install it with `npm install -g spacecontext`. Videos are analysed on the server, so you don't need ffmpeg.
+Needs Node.js 22.12 or later. Run it with `npx`, or install it with `npm install -g spacecontext`. Videos are analysed on the server, so you don't need ffmpeg; with ffmpeg installed, `scan` compresses a video over 100 MB to fit.
 
 ## Set up everything at once
 
@@ -52,7 +52,7 @@ npx spacecontext search "where is the water shut-off?"
 npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 ```
 
-`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order). It then starts the analysis and follows it live: at a terminal, a status line with the stage in progress and its elapsed time, and a ✓ line for each stage done ("Reading the video", "Looking at the frames", "Extracting the context"…). At the end it prints the space and the commands to ask it, export it as a skill and read it again. Press Ctrl+C after the start and the scan goes on on the server; the CLI tells you how to follow it again. After the free scan, each live scan costs $1.00 from your prepaid balance, and failed scans are refunded. If an upload fails, the scan is cancelled and nothing is charged. A live key that can scan needs a card on file in the console first: adding one charges nothing.
+`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, `.3gp`, `.webm`, `.mkv`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order). A phone at 1080p fills 100 MB in about a minute: when `ffmpeg` and `ffprobe` are installed, a bigger video is re-encoded to an H.264 MP4 that fits (the bitrate from its duration, upright, a temporary copy deleted after the upload), and one over 10 minutes is refused before encoding; `--compress` compresses a video that fits, `--no-compress` never compresses. It then starts the analysis and follows it live: at a terminal, a status line with the stage in progress and its elapsed time, and a ✓ line for each stage done ("Reading the video", "Looking at the frames", "Extracting the context"…). At the end it prints the space and the commands to ask it, export it as a skill and read it again. Press Ctrl+C after the start and the scan goes on on the server; the CLI tells you how to follow it again. After the free scan, each live scan costs $1.00 from your prepaid balance, and failed scans are refunded. If an upload fails, the scan is cancelled and nothing is charged. A live key that can scan needs a card on file in the console first: adding one charges nothing.
 
 ## Commands
 

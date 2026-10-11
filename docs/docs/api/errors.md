@@ -37,7 +37,8 @@ When the deep pass of a space scanned with the app could not finish, the documen
 | --- | --- | --- |
 | `INVALID_STATE` | 409 | The scan is not in a state for this (for example uploading to a started scan, deleting a space with a scan in progress). |
 | `UPLOAD_INCOMPLETE` | 409 | Start refused: frames missing, or the video missing or of another size than declared. |
-| `INVALID_CONTENT_TYPE` | 415 | Not a JPEG, PNG or WebP frame, or not an MP4, MOV or M4V video. |
+| `INVALID_CONTENT_TYPE` | 400 | On create: the video's `content_type` is not one the API reads (`video/mp4`, `video/quicktime`, `video/x-m4v`, `video/3gpp`, `video/webm`, `video/x-matroska`, `video/matroska`). Nothing is created or charged; convert the video to MP4 first ([Scans](scans.md#2-declare-the-scan)). |
+| `INVALID_CONTENT_TYPE` | 415 | On an upload: a frame (or `POST /frames/check`) that is not a JPEG, PNG or WebP image, or a video sent with a `Content-Type` other than the declared one. |
 | `FILE_TOO_LARGE` | 413 | Over 2 MB per frame, or over the video size of the upload. |
 | `EMPTY_FILE` | 400 | The upload has no bytes. |
 | `SCANS_IN_PROGRESS` | 429 | On start: ten scans of the account are already processing; start again when one finishes. On create: twenty scans are waiting for their upload (`max_open_scans`); upload and start them, or cancel some with `DELETE /scans/{id}`. |
@@ -49,7 +50,7 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 
 | `scan.error.code` | Meaning |
 | --- | --- |
-| `VIDEO_UNREADABLE` | The video could not be decoded. |
+| `VIDEO_UNREADABLE` | The video could not be decoded, or its length could not be read: a WebM recorded in a browser (`MediaRecorder`) states none; remux it first (`ffmpeg -i in.webm -c copy out.webm`). |
 | `VIDEO_TOO_LONG` | Over 10 minutes. |
 | `FOOTAGE_UNUSABLE` | Every frame was too dark, blurred or covered, or showed no place (a drawing, a screen). Refused before the analysis; film again in good light. |
 | `ANALYSIS_EMPTY` | No space was recognised in the frames. |

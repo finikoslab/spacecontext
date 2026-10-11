@@ -1,6 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
 import { serverIcons } from '../brand.js';
-import { REPORT_LANGUAGES, SpaceContextError, type Scan, type ScanInput, type SpaceContext } from '@spacecontext/sdk';
+import { REPORT_LANGUAGES, SpaceContextError, VIDEO_CONTENT_TYPES, type Scan, type ScanInput, type SpaceContext } from '@spacecontext/sdk';
 import * as z from 'zod';
 import { compact, compactDocument, compactScan, DATA_NOTE, SECTIONS } from './views.js';
 
@@ -24,7 +24,6 @@ const MAX_FRAMES = 120;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const SPACE_TYPES = ['apartment', 'house', 'office', 'warehouse', 'vehicle', 'boat', 'camper', 'shop', 'garage', 'appliance', 'other'] as const;
 const FRAME_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
-const VIDEO_CONTENT_TYPES = ['video/mp4', 'video/quicktime', 'video/x-m4v'] as const;
 
 const spaceId = z
   .string()
@@ -341,7 +340,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}, origin 
     {
       title: 'Create a scan',
       description:
-        'Declares a new scan of a space (an existing one, or a space created now). Frames (up to 120 images): then send each image with upload_frame (index 0…n-1). Video (up to 100 MB and 10 minutes): the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
+        'Declares a new scan of a space (an existing one, or a space created now). Frames (up to 120 images): then send each image with upload_frame (index 0…n-1). Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 100 MB and 10 minutes): the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
       inputSchema: z.object({
         space_id: spaceId.optional().describe('Scan this existing space again (the new scan is checked against the previous one).'),
         new_space: z
@@ -350,7 +349,14 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}, origin 
           .describe('Create a space for the scan instead of space_id.'),
         source: z.enum(['video', 'frames']),
         video: z
-          .object({ content_type: z.enum(VIDEO_CONTENT_TYPES), content_length: z.number().int().min(1).max(MAX_VIDEO_BYTES).describe('Exact size in bytes, at most 100 MB.') })
+          .object({
+            content_type: z
+              .enum(VIDEO_CONTENT_TYPES)
+              .describe(
+                'The container: video/mp4, video/quicktime (MOV), video/x-m4v, video/3gpp (3GP), video/webm, or video/x-matroska / video/matroska (MKV). Other containers (AVI, MPEG-TS…) are refused: convert to MP4 first. A WebM recorded in a browser has no duration and fails, refunded.'
+              ),
+            content_length: z.number().int().min(1).max(MAX_VIDEO_BYTES).describe('Exact size in bytes, at most 100 MB.'),
+          })
           .optional()
           .describe('With source video: up to 100 MB and 10 minutes.'),
         frames: z.object({ count: z.number().int().min(1).max(MAX_FRAMES) }).optional().describe('With source frames: how many images will be uploaded.'),

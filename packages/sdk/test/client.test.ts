@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { REPORT_LANGUAGES, SpaceContext, SpaceContextError, type Scan } from '../src/index.js';
+import { REPORT_LANGUAGES, SpaceContext, SpaceContextError, VIDEO_CONTENT_TYPES, type Scan } from '../src/index.js';
 
 const LIVE = 'sc_live_abcdefghijklmnop';
 const TEST = 'sc_test_abcdefghijklmnop';
@@ -273,6 +273,13 @@ describe('SpaceContext client', () => {
     const { fetch, calls } = fakeFetch((call) => (call.url.endsWith('/start') ? json(scan({ status: 'queued', upload: null }), 202) : call.method === 'PUT' ? json({}) : json(scan(), 201)));
     await client(fetch).scans.fromVideo('spc_1', { data: new Uint8Array(4), contentType: 'video/mp4', language: 'pt' });
     expect(JSON.parse(String(calls[0]!.body)).input).toMatchObject({ kind: 'video', language: 'pt' });
+  });
+
+  it('lists the video containers of the contract', async () => {
+    const contract = JSON.parse(await readFile(new URL('../../../openapi/openapi.json', import.meta.url), 'utf8')) as {
+      components: { schemas: Record<string, { properties: { input: { properties: { video: { properties: { content_type: { enum: string[] } } } } } } }> };
+    };
+    expect(contract.components.schemas.ScanCreateRequest!.properties.input.properties.video.properties.content_type.enum).toEqual([...VIDEO_CONTENT_TYPES]);
   });
 
   it('cancels a scan whose upload fails, and refuses oversized frames before sending them', async () => {
