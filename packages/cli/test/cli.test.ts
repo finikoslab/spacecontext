@@ -31,16 +31,27 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
+/** `GET /v1`, the API's descriptor, stating the deployment's limits (none: an API older than the field). */
+const limitsSay = (limits: { max_video_bytes: number; max_video_seconds?: number; max_photos?: number } | null): Route => (call) =>
+  call.method === 'GET' && call.path === ''
+    ? json({ name: 'space-context-api', version: 'v1', ...(limits ? { limits: { max_video_seconds: 600, max_photos: 120, ...limits } } : {}) })
+    : undefined;
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
 function harness(routes: Route[], env: Record<string, string> = {}) {
   const out: string[] = [];
   const err: string[] = [];
   const calls: Call[] = [];
   const urls: string[] = [];
+  let descriptorReads = 0;
   const fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input));
     urls.push(url.toString());
     const call: Call = { method: init.method ?? 'GET', path: url.pathname.replace(/^\/v1/, ''), search: url.searchParams, headers: new Headers(init.headers), body: init.body };
-    calls.push(call);
+    // The descriptor (the deployment's limits) is counted apart: it creates nothing.
+    if (call.method === 'GET' && call.path === '') descriptorReads += 1;
+    else calls.push(call);
     for (const route of routes) {
       const response = route(call);
       if (response) return response;
@@ -55,7 +66,7 @@ function harness(routes: Route[], env: Record<string, string> = {}) {
     prompt: null,
     fetch,
   };
-  return { io, calls, urls, routes, stdout: () => out.join(''), stderr: () => err.join('') };
+  return { io, calls, urls, routes, descriptorReads: () => descriptorReads, stdout: () => out.join(''), stderr: () => err.join('') };
 }
 
 const me: Route = (call) =>
@@ -609,7 +620,8 @@ describe('spacecontext CLI, housekeeping', () => {
     expect(h.stderr()).toContain('larger than 2 MB');
     expect(h.calls).toEqual([]);
 
-    // A phone video in 4K, without ffmpeg: how to make it fit, not only that it does not.
+    // A 390 MB video, without ffmpeg, where the API does not say its limits (an
+    // older deployment, or the descriptor not answering): 100 MB, as before.
     const video = path.join(directory, 'IMG_0042.MOV');
     await writeFile(video, '');
     await truncate(video, 390 * 1024 * 1024);
@@ -617,8 +629,19 @@ describe('spacecontext CLI, housekeeping', () => {
     expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h.io)).toBe(2);
     expect(h.stderr()).toContain('IMG_0042.MOV is 390.0 MB: a video can be up to 100 MB');
     expect(h.stderr()).toContain('Install ffmpeg and run it again: the CLI compresses the video to fit\n    (`sudo apt install ffmpeg`, or your package manager)');
-    expect(h.stderr()).toContain('Or record at 720p and keep it short: a phone at 1080p fills 100 MB in about a minute\n    (iPhone: Settings > Camera > Record Video > 720p HD at 30 fps)');
+    expect(h.stderr()).not.toContain('720p');
     expect(h.calls).toEqual([]);
+    expect(h.descriptorReads()).toBe(1);
+
+    // Over the limit the API states (4 GB): the real size, said in GB.
+    const huge = path.join(directory, 'huge.mov');
+    await writeFile(huge, '');
+    await truncate(huge, 5 * GB);
+    const stated = harness([limitsSay({ max_video_bytes: 4 * GB })], { SPACECONTEXT_API_KEY: KEY });
+    stated.io.platform = 'linux';
+    expect(await main(['scan', 'huge.mov', '--name', 'Flat'], stated.io)).toBe(2);
+    expect(stated.stderr()).toContain('huge.mov is 5.0 GB: a video can be up to 4 GB');
+    expect(stated.calls).toEqual([]);
 
     const ok = path.join(directory, 'ok');
     await mkdir(ok);
@@ -693,10 +716,10 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
     return file;
   }
 
-  it('re-encodes it to an MP4 that fits, with the bitrate from its duration, uploads that and deletes it', async () => {
+  it('re-encodes it to an MP4 that fits the 100 MB of an API without its own ingest, with the bitrate from its duration, uploads that and deletes it', async () => {
     const tools = await fakeVideoTools('bin', { seconds: '400.000000', outputBytes: 12_345 });
     const input = await bigVideo('IMG_0042.MOV');
-    const h = harness(scanRoutes('video/mp4', 12_345), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    const h = harness([limitsSay({ max_video_bytes: 100 * MB }), ...scanRoutes('video/mp4', 12_345)], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
     // A clock that stands still: the durations printed do not depend on how fast the fake runs.
     h.io.now = () => 0;
     expect(await main(['scan', 'IMG_0042.MOV', '--space', SPACE_ID], h.io)).toBe(0);
@@ -728,6 +751,54 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
     expect(path.basename(output)).toBe('video.mp4');
     await expect(stat(path.dirname(output))).rejects.toThrow();
     expect(h.stderr()).toContain('› Compressing IMG_0042.MOV…\n✓ Compressed IMG_0042.MOV  390.0 MB → 12 KB, H.264 up to 720p, in 0s\n');
+  });
+
+  it('sends a 390 MB video as it is where the API takes 4 GB, to the storage link, read from disk', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '400.000000', outputBytes: 12_345 });
+    await bigVideo('IMG_0042.MOV');
+    const bytes = 390 * MB;
+    const storage = 'https://bucket.r2.example/scans/source.mov?X-Amz-Signature=1';
+    const h = harness(
+      [
+        limitsSay({ max_video_bytes: 4 * GB }),
+        (call) =>
+          call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans`
+            ? json(
+                scan('awaiting_upload', {
+                  input: { kind: 'video', language: 'en', frame_count: null, video: { content_type: 'video/quicktime', content_length: bytes }, has_transcript: false },
+                  upload: { kind: 'video', method: 'PUT', url: storage, headers: { 'Content-Type': 'video/quicktime', 'Content-Length': String(bytes) } },
+                }),
+                201
+              )
+            : undefined,
+        (call) => (call.method === 'PUT' && call.path === '/scans/source.mov' ? new Response(null, { status: 200 }) : undefined),
+        ...scanRoutes('video/quicktime', bytes).slice(2),
+      ],
+      { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin }
+    );
+    expect(await main(['scan', 'IMG_0042.MOV', '--space', SPACE_ID], h.io)).toBe(0);
+    // No ffmpeg: it fits.
+    expect(await tools.calls()).toEqual([]);
+    expect(JSON.parse(String(h.calls[0]!.body)).input.video).toEqual({ content_type: 'video/quicktime', content_length: bytes });
+    const put = h.calls[1]!;
+    expect(put.method).toBe('PUT');
+    expect(put.headers.get('authorization')).toBeNull();
+    expect(put.body).toBeInstanceOf(Blob);
+    expect((put.body as Blob).size).toBe(bytes);
+    expect(h.stderr()).not.toContain('Compress');
+  });
+
+  it('compresses a video over the 4 GB the API takes at 8 Mbit/s and 1080p at most', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '540', outputBytes: 9_000 });
+    await bigVideo('tour.mkv', 5 * GB);
+    const h = harness([limitsSay({ max_video_bytes: 4 * GB }), ...scanRoutes('video/mp4', 9_000)], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    h.io.now = () => 0;
+    expect(await main(['scan', 'tour.mkv', '--space', SPACE_ID], h.io)).toBe(0);
+    const encode = (await tools.calls()).find((call) => call[0] === 'ffmpeg')!.slice(1);
+    expect(after(encode, '-b:v')).toBe(String(8_000_000 - 96_000));
+    expect(after(encode, '-vf')).toContain('min(1,1920/max(iw,ih))');
+    expect(JSON.parse(String(h.calls[0]!.body)).input.video).toEqual({ content_type: 'video/mp4', content_length: 9_000 });
+    expect(h.stderr()).toContain('✓ Compressed tour.mkv  5.0 GB → 9 KB, H.264 up to 1080p, in 0s\n');
   });
 
   it('compresses a video that fits only when asked (--compress), and caps the bitrate of a short one at 8 Mbit/s', async () => {

@@ -24,7 +24,7 @@ Space Context turns a phone video of a space into a **Space Document**: an inven
 - In a comparison, `not_seen` means *not filmed again*, not *gone*: only `removed` and `resolved` are confirmed by a frame.
 - Passwords and codes are hidden unless the user allowed sensitive values when connecting.
 - Before a live scan, tell the user the price (`wallet`): free if `free_scans_remaining` is above 0 (a new account has one free scan, one per card), otherwise US$1.00 from a prepaid balance; failed scans are refunded to the balance. Scanning needs a card on file in the console (nothing is charged when it is added).
-- Videos: MP4, MOV, M4V, 3GP, WebM or Matroska, up to 100 MB and 10 minutes (a phone at 1080p fills 100 MB in about a minute: record at 720p, or `spacecontext scan` compresses a bigger video when ffmpeg is installed); or up to 120 photos.
+- Videos: MP4, MOV, M4V, 3GP, WebM or Matroska, up to 4 GB and 10 minutes (`spacecontext scan` compresses a bigger video when ffmpeg is installed, and `--compress` re-encodes to a smaller H.264 file before uploading, useful on a slow connection); or up to 120 photos.
 
 ## More
 

@@ -1,20 +1,20 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { describeScan, REPORT_LANGUAGES, SpaceContext, SpaceContextError, type FrameCheck, type ReportLanguage, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { describeScan, fileBody, REPORT_LANGUAGES, SpaceContext, SpaceContextError, type FrameCheck, type ReportLanguage, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
 import { rmSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { apiUrl, clearConfig, configDirectory, readConfig, setting, signedInConfig, writeConfig } from './lib/config.js';
 import { stat } from 'node:fs/promises';
 import { compressionPlan, compressVideo, findVideoTools, installFfmpeg, pathWhich, probeDuration, type CompressionPlan } from './lib/compress.js';
-import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, scanSource, UsageError, writeSkill } from './lib/files.js';
+import { frameFiles, MAX_FRAME_BYTES, scanSource, UsageError, writeSkill } from './lib/files.js';
 import { COMMAND_HELP, commandHelp, GLOBAL_OPTIONS, mainHelp, SPACE_TYPES, usageOf } from './terminal/help.js';
 import { hints, type ErrorContext } from './terminal/hints.js';
 import { BILLING_URL, DEFAULT_API_URL, KEYS_URL } from './lib/links.js';
 import { setup } from './commands/setup.js';
 import { deviceLogin } from './commands/signin.js';
 import type { Runner } from './lib/system.js';
-import { brandLine, closest, duration, plural, size, spinning, Status, styleFor, table, tildePath, visibleWidth, type Style } from './terminal/ui.js';
+import { brandLine, closest, duration, plural, size, sizeLimit, spinning, Status, styleFor, table, tildePath, visibleWidth, type Style } from './terminal/ui.js';
 
 export const VERSION = '0.2.0';
 
@@ -667,7 +667,7 @@ async function check(context: Context): Promise<void> {
   try {
     for (const [index, frame] of files.entries()) {
       status?.update(`Checking image ${index + 1} of ${files.length}`);
-      checked.push({ file: path.basename(frame.file), check: await sc.frames.check(await fileBlob(frame.file), frame.contentType) });
+      checked.push({ file: path.basename(frame.file), check: await sc.frames.check(await fileBody(frame.file), frame.contentType) });
     }
   } finally {
     status?.stop();
@@ -721,22 +721,6 @@ async function scan(context: Context): Promise<void> {
   const output = format(values);
   const source = await scanSource(input);
   if (values.compress && source.kind !== 'video') throw new UsageError('--compress re-encodes a video: photos are sent as they are');
-  // A video over 100 MB is compressed to fit when ffmpeg is installed; --compress always, --no-compress never.
-  const platform = io.platform ?? process.platform;
-  const compressing = source.kind === 'video' && !values['no-compress'] && (Boolean(values.compress) || source.size > MAX_VIDEO_BYTES);
-  const tools = compressing ? await findVideoTools(io.which ?? pathWhich(io.env, platform)) : null;
-  if (values.compress && !tools) throw new UsageError('--compress needs ffmpeg and ffprobe on the PATH', [`Install ffmpeg: ${installFfmpeg(platform)}`]);
-  // Checked before anything is created: the API limits, from the same source as the SDK.
-  if (source.kind === 'video' && source.size > MAX_VIDEO_BYTES && !tools) {
-    // A phone at 1080p records about 120 MB a minute; 10 minutes fit at about 1.4 Mbps.
-    const name = path.basename(source.file);
-    throw new UsageError(`${name} is ${size(source.size)}: a video can be up to ${MAX_VIDEO_BYTES / 1_048_576} MB`, [
-      values['no-compress']
-        ? 'Without --no-compress the CLI compresses it to fit, when ffmpeg is installed'
-        : `Install ffmpeg and run it again: the CLI compresses the video to fit\n(${installFfmpeg(platform)})`,
-      'Or record at 720p and keep it short: a phone at 1080p fills 100 MB in about a minute\n(iPhone: Settings > Camera > Record Video > 720p HD at 30 fps)',
-    ]);
-  }
   let totalBytes = source.kind === 'video' ? source.size : 0;
   if (source.kind === 'frames') {
     for (const frame of source.files) {
@@ -745,9 +729,28 @@ async function scan(context: Context): Promise<void> {
       totalBytes += bytes;
     }
   }
+  const sc = await client(context);
+  // A video's limits are the API's own (4 GB and 10 minutes where it reads videos
+  // with its own ffmpeg), read before anything is created; an API that does not
+  // say them is taken to accept 100 MB, as before.
+  const limits = source.kind === 'video' ? await sc.limits() : null;
+  const overLimit = source.kind === 'video' && limits !== null && source.size > limits.maxVideoBytes;
+  // A video over the limit is compressed to fit when ffmpeg is installed; --compress always, --no-compress never.
+  const platform = io.platform ?? process.platform;
+  const compressing = source.kind === 'video' && !values['no-compress'] && (Boolean(values.compress) || overLimit);
+  const tools = compressing ? await findVideoTools(io.which ?? pathWhich(io.env, platform)) : null;
+  if (values.compress && !tools) throw new UsageError('--compress needs ffmpeg and ffprobe on the PATH', [`Install ffmpeg: ${installFfmpeg(platform)}`]);
+  if (source.kind === 'video' && limits && overLimit && !tools) {
+    const name = path.basename(source.file);
+    throw new UsageError(`${name} is ${size(source.size)}: a video can be up to ${sizeLimit(limits.maxVideoBytes)}`, [
+      values['no-compress']
+        ? 'Without --no-compress the CLI compresses it to fit, when ffmpeg is installed'
+        : `Install ffmpeg and run it again: the CLI compresses the video to fit\n(${installFfmpeg(platform)})`,
+    ]);
+  }
   // The duration sets the bitrate; a video the API would refuse as too long is refused before encoding it.
   let plan: CompressionPlan | null = null;
-  if (tools && source.kind === 'video') {
+  if (tools && source.kind === 'video' && limits) {
     const name = path.basename(source.file);
     const probe = await probeDuration(tools, source.file, io.run);
     if (probe.seconds === null) {
@@ -755,19 +758,20 @@ async function scan(context: Context): Promise<void> {
         source.contentType === 'video/webm' || source.contentType === 'video/x-matroska'
           ? 'A WebM recorded in a browser does not say how long it lasts: remux it first\n(`ffmpeg -i in.webm -c copy out.webm`)'
           : 'Check that the video plays, or export it again as .mp4',
-        // Under 100 MB only --compress asked for it.
-        ...(source.size <= MAX_VIDEO_BYTES ? ['Or send it as it is, without --compress'] : []),
+        // Under the limit only --compress asked for it.
+        ...(overLimit ? [] : ['Or send it as it is, without --compress']),
       ]);
     }
-    if (probe.seconds > MAX_VIDEO_SECONDS) {
+    const longest = limits.maxVideoSeconds;
+    if (probe.seconds > longest) {
       const extension = path.extname(name) || '.mp4';
-      throw new UsageError(`${name} lasts ${Math.round(probe.seconds * 10) / 10} s: a video can last up to ${MAX_VIDEO_SECONDS} s (10 minutes)`, [
-        `Trim it: \`ffmpeg -i ${/^[\w.-]+$/.test(name) ? name : `in${extension}`} -t ${MAX_VIDEO_SECONDS} -c copy trimmed${extension}\`, or film it again`,
+      const minutes = longest % 60 === 0 ? ` (${plural(longest / 60, 'minute')})` : '';
+      throw new UsageError(`${name} lasts ${Math.round(probe.seconds * 10) / 10} s: a video can last up to ${longest} s${minutes}`, [
+        `Trim it: \`ffmpeg -i ${/^[\w.-]+$/.test(name) ? name : `in${extension}`} -t ${longest} -c copy trimmed${extension}\`, or film it again`,
       ]);
     }
-    plan = compressionPlan(probe.seconds);
+    plan = compressionPlan(probe.seconds, limits.maxVideoBytes);
   }
-  const sc = await client(context);
   const now = io.now ?? Date.now;
   const began = now();
   // --json: stdout is the document and stderr stays quiet (errors aside).
@@ -803,7 +807,7 @@ async function scan(context: Context): Promise<void> {
       io.stderr(`\n${err.warn} Interrupted during the upload: a scan that has not started is never charged.${left}\n`);
     });
     let video = source.kind === 'video' ? { file: source.file, contentType: source.contentType, size: source.size } : null;
-    if (video && tools && plan) {
+    if (video && tools && plan && limits) {
       const folder = await mkdtemp(path.join(tmpdir(), 'spacecontext-'));
       temporary = folder;
       onInterrupt(() => rmSync(folder, { recursive: true, force: true }));
@@ -825,12 +829,13 @@ async function scan(context: Context): Promise<void> {
         throw error;
       }
       encoding = false;
-      if (bytes > MAX_VIDEO_BYTES) {
+      const maxBytes = limits.maxVideoBytes;
+      if (bytes > maxBytes) {
         status?.fail();
-        throw new Error(`Compressed, ${name} is still ${size(bytes)}, over ${MAX_VIDEO_BYTES / 1_048_576} MB: trim it and scan again`);
+        throw new Error(`Compressed, ${name} is still ${size(bytes)}, over ${sizeLimit(maxBytes)}: trim it and scan again`);
       }
       const picture = plan.longSide === 1280 ? '720p' : '1080p';
-      if (bytes >= video.size && video.size <= MAX_VIDEO_BYTES) {
+      if (bytes >= video.size && video.size <= maxBytes) {
         // --compress on a video that already fits can come out larger: the original is sent.
         status?.complete(`Kept ${name} as it is`, `compressing gave ${size(bytes)}, more than its ${size(video.size)}`);
       } else {
@@ -851,11 +856,12 @@ async function scan(context: Context): Promise<void> {
         // The compressed copy when there is one.
         const upload = video ?? source;
         status?.step(`Uploading ${name}`);
-        started = await sc.scans.fromVideo(spaceId, { data: await fileBlob(upload.file), contentType: upload.contentType, language });
+        // Read from disk while it uploads: a video can be gigabytes.
+        started = await sc.scans.fromVideo(spaceId, { data: await fileBody(upload.file), contentType: upload.contentType, language });
       } else {
         const count = source.files.length;
         status?.step(`Uploading ${plural(count, 'photo')}`);
-        const frames = await Promise.all(source.files.map(async (frame) => ({ data: await fileBlob(frame.file), contentType: frame.contentType })));
+        const frames = await Promise.all(source.files.map(async (frame) => ({ data: await fileBody(frame.file), contentType: frame.contentType })));
         started = await sc.scans.fromFrames(spaceId, frames, { language, onUpload: (index) => status?.update(`Uploading photo ${index + 1} of ${count}`) });
       }
       if (status) {

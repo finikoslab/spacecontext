@@ -180,10 +180,17 @@ export function duration(ms: number): string {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 }
 
-/** `48.2 MB`, `812 KB`. */
+/** `4.2 GB`, `48.2 MB`, `812 KB`. */
 export function size(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** A limit, without a needless decimal: `100 MB`, `4 GB`, `95 MB`. */
+export function sizeLimit(bytes: number): string {
+  const [value, unit] = bytes >= 1024 ** 3 ? [bytes / 1024 ** 3, 'GB'] : [bytes / 1_048_576, 'MB'];
+  return `${Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`;
 }
 
 /** `1 item`, `3 items`. */

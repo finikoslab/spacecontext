@@ -4,25 +4,35 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { compressionPlan, compressVideo, ffmpegArgs, findVideoTools, pathWhich, probeDuration, type VideoTools } from '../src/lib/compress.js';
-import { MAX_VIDEO_BYTES } from '../src/lib/files.js';
+/** The limit of an API without its own video ingest (and of one that does not say its limits), and of one with it. */
+const MB_100 = 100 * 1024 * 1024;
+const GB_4 = 4 * 1024 ** 3;
 
-describe('the bitrate that fits 100 MB', () => {
+describe("the bitrate that fits the API's limit", () => {
   it('aims at 90% of 100 MB over the duration, at most 8 Mbit/s, with 96 kbit/s of mono AAC', () => {
     // Ten minutes, the longest the API takes: about 1.26 Mbit/s, so 720p.
-    expect(compressionPlan(600)).toEqual({ seconds: 600, totalBitrate: 1_258_291, videoBitrate: 1_162_291, audioBitrate: 96_000, longSide: 1280 });
+    expect(compressionPlan(600, MB_100)).toEqual({ seconds: 600, totalBitrate: 1_258_291, videoBitrate: 1_162_291, audioBitrate: 96_000, longSide: 1280 });
     // 0.9 × 104,857,600 B × 8 / 302 s = 2,499,916 bit/s: just under 2.5 Mbit/s, still 720p.
-    expect(compressionPlan(302)).toMatchObject({ totalBitrate: 2_499_916, longSide: 1280 });
-    expect(compressionPlan(301)).toMatchObject({ totalBitrate: 2_508_221, longSide: 1920 });
+    expect(compressionPlan(302, MB_100)).toMatchObject({ totalBitrate: 2_499_916, longSide: 1280 });
+    expect(compressionPlan(301, MB_100)).toMatchObject({ totalBitrate: 2_508_221, longSide: 1920 });
     // A short clip: capped, a scan gains nothing above 8 Mbit/s.
-    expect(compressionPlan(30)).toMatchObject({ totalBitrate: 8_000_000, videoBitrate: 7_904_000, longSide: 1920 });
+    expect(compressionPlan(30, MB_100)).toMatchObject({ totalBitrate: 8_000_000, videoBitrate: 7_904_000, longSide: 1920 });
     for (const seconds of [1, 19, 50, 120, 300, 599.9, 600]) {
-      const plan = compressionPlan(seconds);
-      expect((plan.totalBitrate * seconds) / 8, String(seconds)).toBeLessThanOrEqual(0.9 * MAX_VIDEO_BYTES);
+      const plan = compressionPlan(seconds, MB_100);
+      expect((plan.totalBitrate * seconds) / 8, String(seconds)).toBeLessThanOrEqual(0.9 * MB_100);
     }
   });
 
+  it('stays at 8 Mbit/s and 1080p under a limit of 4 GB: ten minutes take about 600 MB', () => {
+    for (const seconds of [1, 60, 300, 600]) {
+      expect(compressionPlan(seconds, GB_4), String(seconds)).toEqual({ seconds, totalBitrate: 8_000_000, videoBitrate: 7_904_000, audioBitrate: 96_000, longSide: 1920 });
+    }
+    // Any limit: 90% of it at most.
+    expect(compressionPlan(600, 95 * 1024 * 1024)).toMatchObject({ totalBitrate: 1_195_376, longSide: 1280 });
+  });
+
   it('builds the ffmpeg command as an argument array: H.264 veryfast, the long side capped and never enlarged, AAC mono, faststart', () => {
-    const args = ffmpegArgs('/videos/IMG 0042.MOV', '/tmp/x/video.mp4', compressionPlan(600));
+    const args = ffmpegArgs('/videos/IMG 0042.MOV', '/tmp/x/video.mp4', compressionPlan(600, MB_100));
     expect(args).toEqual([
       '-hide_banner',
       '-nostdin',
@@ -117,7 +127,7 @@ describe.skipIf(!realTools)('with the real ffmpeg', () => {
     const duration = await probeDuration(tools, input);
     expect(duration.seconds).toBeGreaterThan(1.9);
     // Ten minutes' worth of bitrate on two seconds: the 1280 cap applies.
-    const plan = { ...compressionPlan(600), seconds: duration.seconds! };
+    const plan = { ...compressionPlan(600, MB_100), seconds: duration.seconds! };
     const output = path.join(directory, 'video.mp4');
     const progress: number[] = [];
     const bytes = await compressVideo({ tools, input, output, plan, onProgress: (fraction) => progress.push(fraction) });
@@ -140,7 +150,7 @@ describe.skipIf(!realTools)('with the real ffmpeg', () => {
     const small = path.join(directory, 'small.mkv');
     execFileSync(tools.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=15:duration=1', '-c:v', 'libx264', '-preset', 'ultrafast', small]);
     const smallOutput = path.join(directory, 'small.mp4');
-    await compressVideo({ tools, input: small, output: smallOutput, plan: { ...compressionPlan(60), seconds: 1 } });
+    await compressVideo({ tools, input: small, output: smallOutput, plan: { ...compressionPlan(60, MB_100), seconds: 1 } });
     expect(probe(smallOutput).streams.find((stream) => stream.codec_type === 'video')).toMatchObject({ codec_name: 'h264', width: 640, height: 360 });
   });
 });

@@ -1,12 +1,12 @@
 import { stat } from 'node:fs/promises';
-import { MAX_VIDEO_BYTES } from './files.js';
 import { findExecutable, runProgram, type Runner } from './system.js';
 
 /**
- * A video over the API's 100 MB re-encoded to fit, with ffmpeg when it is
- * installed. Phones record far more than a scan needs: a default Android
- * recording at 1080p (16–17 Mbps) reaches 100 MB in about 50 seconds, and 10
- * minutes fit only at about 1.4 Mbps, which H.264 at 720p holds well.
+ * A video re-encoded with ffmpeg, when it is installed: to fit when it is over
+ * the API's limit (4 GB where the API reads videos with its own ffmpeg, 100 MB
+ * on an older deployment), or to upload less on a slow connection
+ * (`--compress`). A scan needs no more than 8 Mbit/s; under 100 MB, 10 minutes
+ * fit only at about 1.4 Mbit/s, which H.264 at 720p holds well.
  */
 
 export type VideoTools = { ffmpeg: string; ffprobe: string };
@@ -27,7 +27,7 @@ export const MAX_TOTAL_BITRATE = 8_000_000;
 export const AUDIO_BITRATE = 96_000;
 /** Below this total bitrate the long side drops from 1920 to 1280: 1080p at 1.2 Mbps is blockier than 720p. */
 export const SMALL_PICTURE_BELOW = 2_500_000;
-/** Of the 100 MB, what the bitrate aims at: the rest is the container and the encoder's overshoot. */
+/** Of the API's limit, what the bitrate aims at: the rest is the container and the encoder's overshoot. */
 const SIZE_MARGIN = 0.9;
 
 export type CompressionPlan = {
@@ -41,9 +41,9 @@ export type CompressionPlan = {
   longSide: 1920 | 1280;
 };
 
-/** The bitrates and size that make `seconds` of video fit in 100 MB with a 10% margin. */
-export function compressionPlan(seconds: number): CompressionPlan {
-  const totalBitrate = Math.min(MAX_TOTAL_BITRATE, Math.floor((SIZE_MARGIN * MAX_VIDEO_BYTES * 8) / seconds));
+/** The bitrates that make `seconds` of video fit in `maxBytes` (the API's limit) with a 10% margin, at most 8 Mbit/s. */
+export function compressionPlan(seconds: number, maxBytes: number): CompressionPlan {
+  const totalBitrate = Math.min(MAX_TOTAL_BITRATE, Math.floor((SIZE_MARGIN * maxBytes * 8) / seconds));
   return {
     seconds,
     totalBitrate,

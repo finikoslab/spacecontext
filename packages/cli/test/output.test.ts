@@ -120,9 +120,12 @@ describe('help', () => {
     const topic = harness([]);
     expect(await main(['help', 'scan'], topic.io)).toBe(0);
     expect(topic.stdout()).toContain('--no-wait');
-    expect(topic.stdout()).toContain('Video: .mp4 .mov .m4v .3gp .webm .mkv, up to 100 MB and 10 minutes');
-    expect(topic.stdout()).toContain('A bigger video is compressed to fit (H.264 MP4) when ffmpeg is\n  installed');
-    expect(topic.stdout()).toContain('--no-compress');
+    expect(topic.stdout()).toContain('Video: .mp4 .mov .m4v .3gp .webm .mkv, up to 4 GB and 10 minutes');
+    expect(topic.stdout()).toContain('A bigger video is compressed to fit (H.264 MP4) when ffmpeg is\n  installed; --compress makes any video smaller first, for a slow connection.');
+    expect(topic.stdout()).toMatch(/--compress +Re-encode to a smaller H\.264 file before uploading\n/);
+    expect(topic.stdout()).toMatch(/--no-compress +Never compress: a video over the limit is refused\n/);
+    expect(topic.stdout()).not.toContain('100 MB');
+    expect(topic.stdout()).not.toContain('1080p');
     expect(topic.stdout()).toContain('Languages: en English, it Italiano, es Español, fr Français, de Deutsch,\n             pt Português, nl Nederlands\n');
     expect(await main(['help', 'teleport'], topic.io)).toBe(2);
     expect(topic.stderr()).toContain('No command "teleport"');

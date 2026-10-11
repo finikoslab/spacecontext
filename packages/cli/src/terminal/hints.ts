@@ -72,7 +72,7 @@ export function hints(error: SpaceContextError, context: ErrorContext): string[]
     case 'INVALID_CONTENT_TYPE':
     case 'EMPTY_FILE':
       return [
-        'Videos: .mp4 .mov .m4v .3gp .webm .mkv up to 100 MB and 10 minutes (with ffmpeg\ninstalled, `spacecontext scan` compresses a bigger one); photos: .jpg .png .webp\nup to 2 MB each',
+        'Videos: .mp4 .mov .m4v .3gp .webm .mkv up to 4 GB and 10 minutes (with ffmpeg\ninstalled, `spacecontext scan` compresses a bigger one); photos: .jpg .png .webp\nup to 2 MB each',
       ];
     case 'FOOTAGE_UNUSABLE':
       return [`Film again in good light, slowly, showing whole rooms: ${RECORDING_TIPS_URL}`, '`spacecontext check <photos-dir>` tells usable photos before a scan'];

@@ -1,4 +1,3 @@
-import { openAsBlob } from 'node:fs';
 import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { FrameContentType, SkillBundle, VideoContentType } from '@spacecontext/sdk';
@@ -22,11 +21,9 @@ const FRAME_TYPES: Record<string, FrameContentType> = {
   '.webp': 'image/webp',
 };
 
-/** The API's limits (src/v1/scans/model.ts in the API). */
+/** The API's limits for photos (src/v1/scans/model.ts in the API); a video's are the deployment's own (`sc.limits()`). */
 export const MAX_FRAMES = 120;
 export const MAX_FRAME_BYTES = 2 * 1024 * 1024;
-export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-export const MAX_VIDEO_SECONDS = 10 * 60;
 
 /** Wrong usage (exit code 2): what is wrong, and optionally what to run instead. */
 export class UsageError extends Error {
@@ -84,11 +81,6 @@ export async function frameFiles(input: string): Promise<Array<{ file: string; c
   const source = await scanSource(input);
   if (source.kind !== 'frames') throw new UsageError(`${input}: expected an image or a directory of images`);
   return source.files;
-}
-
-/** A Blob read from disk only while it is uploaded. */
-export function fileBlob(file: string): Promise<Blob> {
-  return openAsBlob(file);
 }
 
 /**
