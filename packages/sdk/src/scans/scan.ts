@@ -1,5 +1,5 @@
-import { VIDEO_CONTENT_TYPES, type FrameContentType, type ReportLanguage, type Scan, type ScanInput, type SkillBundle, type SpaceContext, type SpaceDocument, type SpaceType, type UploadBody, type VideoContentType } from './client.js';
-import { SpaceContextError } from './errors.js';
+import { VIDEO_CONTENT_TYPES, type FrameContentType, type ReportLanguage, type Scan, type ScanInput, type SkillBundle, type SpaceContext, type SpaceDocument, type SpaceType, type UploadBody, type VideoContentType } from '../client/client.js';
+import { SpaceContextError } from '../errors.js';
 
 /**
  * `sc.scan(source, options)`: one call from a video (or photos) to the space's

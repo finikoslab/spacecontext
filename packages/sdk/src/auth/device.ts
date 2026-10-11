@@ -1,6 +1,6 @@
-import { DEFAULT_BASE_URL } from './client.js';
-import { errorFromResponse, SpaceContextError } from './errors.js';
-import type { components } from './schema.js';
+import { DEFAULT_BASE_URL } from '../client/client.js';
+import { errorFromResponse, SpaceContextError } from '../errors.js';
+import type { components } from '../generated/schema.js';
 
 /**
  * Device sign-in: how a terminal or a tool without a browser session gets an

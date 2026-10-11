@@ -1,7 +1,7 @@
-import type { components } from './schema.js';
-import { errorFromResponse, SpaceContextError } from './errors.js';
+import type { components } from '../generated/schema.js';
+import { errorFromResponse, SpaceContextError } from '../errors.js';
 import { parseServerSentEvents, type ServerSentEvent } from './sse.js';
-import { runScan, type ScanFormat, type ScanOptions, type ScanResult, type ScanSource } from './scan.js';
+import { runScan, type ScanFormat, type ScanOptions, type ScanResult, type ScanSource } from '../scans/scan.js';
 
 type Schemas = components['schemas'];
 export type SpaceDocument = Schemas['SpaceDocument'];
