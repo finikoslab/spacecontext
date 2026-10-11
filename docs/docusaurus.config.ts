@@ -2,8 +2,10 @@ import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import { themes as prismThemes } from 'prism-react-renderer';
 
-// Space Context developer documentation: published at spacecontext.app/developers/docs,
-// buildable on its own at docs.spacecontext.app.
+// Space Context developer documentation: published at spacecontext.app/developers/docs
+// (the website syncs these Markdown files). This build is for previewing them on
+// their own: it is never indexed (`noIndex`), so a copy deployed anywhere never
+// competes with the pages on spacecontext.app in search.
 // The API reference is rendered by Scalar from static/openapi.json, copied from
 // ../openapi/openapi.json before every start and build (scripts/copy-openapi.mjs).
 
@@ -13,6 +15,7 @@ const config: Config = {
   favicon: 'img/favicon.svg',
   url: 'https://docs.spacecontext.app',
   baseUrl: '/',
+  noIndex: true,
   trailingSlash: false,
   onBrokenLinks: 'throw',
   onBrokenAnchors: 'throw',
