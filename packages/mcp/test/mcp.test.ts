@@ -3,9 +3,9 @@ import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import type { Env } from '../src/env';
-import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/html';
-import { CARD_TOOLS } from '../src/card';
-import { keysOfReplacedGrants } from '../src/authorize';
+import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/auth/html';
+import { CARD_TOOLS } from '../src/server/card';
+import { keysOfReplacedGrants } from '../src/auth/authorize';
 
 const ORIGIN = 'https://mcp.example.test';
 const REDIRECT = 'https://claude.example/api/mcp/auth_callback';

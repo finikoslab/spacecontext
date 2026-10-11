@@ -1,6 +1,6 @@
 import { AuthorizationError, CimdFetchError, type AuthRequest, type ConsentDescription } from '@cloudflare/workers-oauth-provider';
-import { BackendError, backendJson } from './backend.js';
-import type { Env, GrantProps } from './env.js';
+import { BackendError, backendJson } from '../api/backend.js';
+import type { Env, GrantProps } from '../env.js';
 import { cardRequiredPage, consentPage, emailPage, errorPage, keyLimitPage, page, type SignInProviders } from './html.js';
 
 /** Scopes this server can grant, as advertised in its OAuth metadata. */

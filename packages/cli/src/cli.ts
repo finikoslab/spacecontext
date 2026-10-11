@@ -2,16 +2,16 @@ import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 import { describeScan, REPORT_LANGUAGES, SpaceContext, SpaceContextError, type FrameCheck, type ReportLanguage, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
 import { writeFile } from 'node:fs/promises';
-import { apiUrl, clearConfig, configDirectory, readConfig, setting, signedInConfig, writeConfig } from './config.js';
+import { apiUrl, clearConfig, configDirectory, readConfig, setting, signedInConfig, writeConfig } from './lib/config.js';
 import { stat } from 'node:fs/promises';
-import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
-import { COMMAND_HELP, commandHelp, GLOBAL_OPTIONS, mainHelp, SPACE_TYPES, usageOf } from './help.js';
-import { hints, type ErrorContext } from './hints.js';
-import { BILLING_URL, DEFAULT_API_URL, KEYS_URL } from './links.js';
-import { setup } from './setup.js';
-import { deviceLogin } from './signin.js';
-import type { Runner } from './system.js';
-import { brandLine, closest, duration, plural, size, spinning, Status, styleFor, table, tildePath, visibleWidth, type Style } from './ui.js';
+import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './lib/files.js';
+import { COMMAND_HELP, commandHelp, GLOBAL_OPTIONS, mainHelp, SPACE_TYPES, usageOf } from './terminal/help.js';
+import { hints, type ErrorContext } from './terminal/hints.js';
+import { BILLING_URL, DEFAULT_API_URL, KEYS_URL } from './lib/links.js';
+import { setup } from './commands/setup.js';
+import { deviceLogin } from './commands/signin.js';
+import type { Runner } from './lib/system.js';
+import { brandLine, closest, duration, plural, size, spinning, Status, styleFor, table, tildePath, visibleWidth, type Style } from './terminal/ui.js';
 
 export const VERSION = '0.2.0';
 

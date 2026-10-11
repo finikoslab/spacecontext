@@ -1,5 +1,5 @@
 import { SpaceContext } from '@spacecontext/sdk';
-import type { Env } from './env.js';
+import type { Env } from '../env.js';
 
 /**
  * `fetch` towards the API: through the service binding when there is one, with

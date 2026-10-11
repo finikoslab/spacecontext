@@ -1,4 +1,4 @@
-import type { Io } from './cli.js';
+import type { Io } from '../cli.js';
 
 /**
  * How the CLI looks in a terminal: colours, symbols, a live status line and

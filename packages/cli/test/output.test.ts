@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { main, type Io } from '../src/cli.js';
-import { COMMAND_HELP } from '../src/help.js';
-import { closest, colorEnabled, duration, Status, styleFor, table } from '../src/ui.js';
+import { COMMAND_HELP } from '../src/terminal/help.js';
+import { closest, colorEnabled, duration, Status, styleFor, table } from '../src/terminal/ui.js';
 
 /** How the CLI looks: help, errors and their next steps, terminals and pipes, NO_COLOR, and --json left alone. */
 

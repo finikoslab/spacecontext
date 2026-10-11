@@ -1,11 +1,11 @@
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { iconResponse } from './brand.js';
 import { createMcpHandler } from 'agents/mcp/server';
-import { authHandler, REQUIRED_SCOPES, SCOPES_SUPPORTED } from './authorize.js';
-import { apiClient } from './backend.js';
+import { authHandler, REQUIRED_SCOPES, SCOPES_SUPPORTED } from './auth/authorize.js';
+import { apiClient } from './api/backend.js';
 import type { Env, GrantProps } from './env.js';
-import { serverCard } from './card.js';
-import { createServer } from './tools.js';
+import { serverCard } from './server/card.js';
+import { createServer } from './server/tools.js';
 
 /**
  * `/mcp`, reached only with a valid access token: the library has checked it and

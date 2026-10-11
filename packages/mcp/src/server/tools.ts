@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
-import { serverIcons } from './brand.js';
+import { serverIcons } from '../brand.js';
 import { REPORT_LANGUAGES, SpaceContextError, type Scan, type ScanInput, type SpaceContext } from '@spacecontext/sdk';
 import * as z from 'zod';
 import { compact, compactDocument, compactScan, DATA_NOTE, SECTIONS } from './views.js';

@@ -1,5 +1,5 @@
 import type { ReportLanguage } from '@spacecontext/sdk';
-import { CLI_DOCS_URL, DEFAULT_API_URL } from './links.js';
+import { CLI_DOCS_URL, DEFAULT_API_URL } from '../lib/links.js';
 import { brandHeader, brandLine, type Style } from './ui.js';
 
 /**

@@ -1,5 +1,5 @@
 import type { SpaceContextError } from '@spacecontext/sdk';
-import { BILLING_URL, KEYS_URL, LIMITS_URL, RECORDING_TIPS_URL } from './links.js';
+import { BILLING_URL, KEYS_URL, LIMITS_URL, RECORDING_TIPS_URL } from '../lib/links.js';
 
 /** What the CLI knows when a request fails: enough to say what to do next. */
 export type ErrorContext = {

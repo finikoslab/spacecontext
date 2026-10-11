@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { main, type Io } from '../src/cli.js';
-import { BILLING_URL, bundledSkill, MCP_URL, SKILL_URL } from '../src/setup.js';
-import { browserCommand, findExecutable, needsShell, runProgram, writeFileAtomic, type RunOptions, type RunResult } from '../src/system.js';
+import { BILLING_URL, bundledSkill, MCP_URL, SKILL_URL } from '../src/commands/setup.js';
+import { browserCommand, findExecutable, needsShell, runProgram, writeFileAtomic, type RunOptions, type RunResult } from '../src/lib/system.js';
 
 const LIVE_KEY = 'sc_live_setupkey0123456789';
 const TEST_KEY = 'sc_test_setupkey0123456789';

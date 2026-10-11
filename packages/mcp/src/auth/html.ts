@@ -1,5 +1,5 @@
 import type { ConsentDescription } from '@cloudflare/workers-oauth-provider';
-import { ICON_SVG } from './brand.js';
+import { ICON_SVG } from '../brand.js';
 
 /** Escapes text for HTML content and attribute values. Every client-supplied string goes through it. */
 export function escapeHtml(value: string): string {

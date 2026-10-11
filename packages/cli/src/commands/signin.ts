@@ -1,9 +1,9 @@
 import { hostname } from 'node:os';
 import { deviceSignIn, type DeviceToken } from '@spacecontext/sdk';
-import type { Io } from './cli.js';
-import { configDirectory, setting, signedInConfig, writeConfig } from './config.js';
-import { openUrl } from './system.js';
-import { Status, styleFor } from './ui.js';
+import type { Io } from '../cli.js';
+import { configDirectory, setting, signedInConfig, writeConfig } from '../lib/config.js';
+import { openUrl } from '../lib/system.js';
+import { Status, styleFor } from '../terminal/ui.js';
 
 /** Opens a URL unless the caller said never (`openBrowser: null`); undefined uses the system opener. */
 export function openInBrowser(io: Io, url: string): void {

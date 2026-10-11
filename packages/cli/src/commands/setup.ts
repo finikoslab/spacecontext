@@ -4,13 +4,13 @@ import { access, chmod, copyFile, mkdir, readFile, stat, writeFile } from 'node:
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { SpaceContext, SpaceContextError } from '@spacecontext/sdk';
-import type { Io } from './cli.js';
-import { apiUrl, configDirectory, readConfig, setting } from './config.js';
-import { UsageError } from './files.js';
-import { BILLING_URL, DOCS_URL, KEYS_URL } from './links.js';
+import type { Io } from '../cli.js';
+import { apiUrl, configDirectory, readConfig, setting } from '../lib/config.js';
+import { UsageError } from '../lib/files.js';
+import { BILLING_URL, DOCS_URL, KEYS_URL } from '../lib/links.js';
 import { deviceLogin, openInBrowser } from './signin.js';
-import { findExecutable, needsShell, runProgram, writeFileAtomic, type RunResult, type Runner } from './system.js';
-import { brandHeader, brandLine, styleFor, type Style } from './ui.js';
+import { findExecutable, needsShell, runProgram, writeFileAtomic, type RunResult, type Runner } from '../lib/system.js';
+import { brandHeader, brandLine, styleFor, type Style } from '../terminal/ui.js';
 
 /**
  * `spacecontext setup`: sign in, connect the assistants found on this machine
@@ -472,7 +472,7 @@ async function connect(run: Run, wanted: Wanted): Promise<void> {
 
 /** The skill shipped with the CLI: a copy of plugins/spacecontext/skills/spacecontext/SKILL.md made at build time. */
 export function bundledSkill(): Promise<string> {
-  return readFile(new URL('../skill/SKILL.md', import.meta.url), 'utf8');
+  return readFile(new URL('../../skill/SKILL.md', import.meta.url), 'utf8');
 }
 
 function looksLikeSkill(text: string): boolean {

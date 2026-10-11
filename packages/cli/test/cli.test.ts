@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { main, VERSION, type Io } from '../src/cli.js';
-import { skillFilePath } from '../src/files.js';
+import { skillFilePath } from '../src/lib/files.js';
 
 const KEY = 'sc_live_clitestkey123';
 const BASE = 'https://api.example.test/v1';
