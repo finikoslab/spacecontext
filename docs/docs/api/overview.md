@@ -1,6 +1,6 @@
 ---
 title: 'API overview'
-description: 'Base URL, authentication, errors, pagination, idempotency and rate limits of the Space Context API.'
+description: 'How the Space Context REST API works: base URL, API key authentication, the error envelope, pagination, idempotency, rate limits, test mode and endpoints.'
 ---
 
 # API overview

@@ -1,9 +1,10 @@
 ---
-title: 'Scans'
-description: 'Create a space, declare a scan, upload a video or photos, start it and follow it.'
+title: 'Scans API'
+sidebar_label: 'Scans'
+description: 'Scan a space through the API: create the space, declare a video or photos, upload them, start the scan and follow it with server-sent events or webhooks.'
 ---
 
-# Scans
+# Scans API
 
 A scan goes through four calls: **create**, **upload**, **start**, then **follow** it (an event stream, polling, or [webhooks](webhooks.md)). The [SDK](../sdk/typescript.md) does all of it in one call, `sc.scan()`.
 

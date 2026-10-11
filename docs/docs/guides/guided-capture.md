@@ -1,9 +1,10 @@
 ---
-title: 'Guided capture'
-description: 'Check frames while a space is filmed: usable or not, and which key locations are still missing.'
+title: 'Guided capture: check frames while filming'
+sidebar_label: 'Guided capture'
+description: 'Check frames while a space is filmed with POST /frames/check: usable or not, which key locations each one shows and which are still missing before a scan.'
 ---
 
-# Guided capture
+# Guided capture: check frames while filming
 
 A scan is only as good as what was filmed. `POST /frames/check` looks at one frame in about half a second and says whether it is usable and which **key locations** it shows: electrical panel, water shut-off, boiler or water heater, smoke detector, fire extinguisher, router, thermostat, gas meter. An app that films a space can show a checklist that fills in while the person walks around, and point at what is still missing before the scan is made.
 

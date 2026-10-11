@@ -1,9 +1,10 @@
 ---
-title: 'Search and ask'
-description: 'Search across all your spaces in any language, and ask one space a question with cited answers.'
+title: 'Search spaces and ask questions'
+sidebar_label: 'Search and ask'
+description: 'Semantic search across all your spaces in any language, and questions to one space answered only from its records, with citations and evidence photos.'
 ---
 
-# Search and ask
+# Search spaces and ask questions
 
 ## Search across spaces
 

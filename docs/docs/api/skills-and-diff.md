@@ -1,9 +1,10 @@
 ---
-title: 'Skills and comparisons'
+title: 'Agent Skills, Markdown and scan comparisons'
+sidebar_label: 'Skills and comparisons'
 description: 'Export a space as a multi-file Agent Skill or as one Markdown page, and compare two scans of a space, with the evidence frames of both.'
 ---
 
-# Skills and comparisons
+# Agent Skills, Markdown and scan comparisons
 
 ## Agent Skill
 

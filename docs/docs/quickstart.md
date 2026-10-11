@@ -1,9 +1,10 @@
 ---
-title: 'Quickstart'
-description: 'From zero to a searchable space in five minutes, with a free test key.'
+title: 'Quickstart: a searchable space in five minutes'
+sidebar_label: 'Quickstart'
+description: 'From zero to a searchable space in five minutes with a free test key: sign in from the terminal, search and ask the demo space, export a skill, run a scan.'
 ---
 
-# Quickstart
+# Quickstart: a searchable space in five minutes
 
 **Using a coding agent?** Paste the prompt in [Setup](setup.md) into Claude Code, Cursor or Codex, or run `npx spacecontext@latest setup` yourself: it signs you in, connects your assistants and installs the skill.
 

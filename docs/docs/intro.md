@@ -2,7 +2,7 @@
 slug: /
 title: 'Space Context for developers'
 sidebar_label: 'Introduction'
-description: 'Film a space once, and your agents know it. API, CLI and MCP server for structured context about physical spaces.'
+description: 'Film a space once, and your agents know it: an API, MCP server, CLI and SDK that turn a video of a physical space into structured, searchable context.'
 ---
 
 # Space Context for developers

@@ -1,9 +1,10 @@
 ---
-title: 'Setup'
-description: 'Set up Space Context in two minutes: one command (or one prompt for your coding agent), or the steps by hand for Claude, Codex, Cursor, VS Code and the SDK.'
+title: 'Set up Space Context'
+sidebar_label: 'Setup'
+description: 'Set up Space Context in two minutes: one command or one prompt for your coding agent, or the steps by hand for Claude, Codex, Cursor, VS Code and the SDK.'
 ---
 
-# Setup
+# Set up Space Context
 
 One command, or the steps by hand, for the same result: your assistant connected to your spaces, the skill that tells it how to use them, and a key for the SDK, the CLI and the API.
 

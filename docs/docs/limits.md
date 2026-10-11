@@ -1,9 +1,10 @@
 ---
-title: 'Limits'
+title: 'API limits and quotas'
+sidebar_label: 'Limits'
 description: 'Sizes, rates and quotas of the Space Context API: uploads, requests per minute, daily search and question limits, scans at once, account and result limits.'
 ---
 
-# Limits
+# API limits and quotas
 
 ## Uploads
 

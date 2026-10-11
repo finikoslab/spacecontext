@@ -1,9 +1,10 @@
 ---
-title: 'API keys'
-description: 'Test and live keys, scopes, the card on file for live keys that can scan, monthly spending caps and revocation.'
+title: 'API keys and scopes'
+sidebar_label: 'API keys'
+description: 'Test and live API keys: what each mode sees, the four scopes, the card on file for live keys that can scan, monthly spending caps and revoking a key.'
 ---
 
-# API keys
+# API keys and scopes
 
 Every call to the API, the CLI and the SDK uses an **API key**, sent as a bearer token:
 

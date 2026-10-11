@@ -1,9 +1,10 @@
 ---
-title: 'Billing'
+title: 'Pricing and billing'
+sidebar_label: 'Billing'
 description: 'Free first scan, prepaid balance in US dollars, the card on file for live scans, Stripe top-ups, automatic top-up, taxes, invoices, refunds and the ledger.'
 ---
 
-# Billing
+# Pricing and billing
 
 Reading, searching and asking spaces are included. **Live scans** are paid from a **prepaid balance in US dollars**.
 

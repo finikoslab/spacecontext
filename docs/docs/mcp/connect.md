@@ -1,9 +1,10 @@
 ---
-title: 'Connect an assistant'
-description: 'Add the Space Context MCP server to Claude, Claude Code, Codex, ChatGPT, Cursor, VS Code or any MCP client that supports OAuth.'
+title: 'Connect an assistant to the MCP server'
+sidebar_label: 'Connect an assistant'
+description: 'Add the Space Context MCP server to Claude, Claude Code, Codex, ChatGPT, Cursor, VS Code or any OAuth MCP client, and choose what the assistant may do.'
 ---
 
-# Connect an assistant (MCP)
+# Connect an assistant to the MCP server
 
 The Space Context MCP server gives an AI assistant access to your spaces: it can list them, search them, read them by section or as one page, ask them questions, compare scans and look at the evidence photos. By default it is **read-only**: it cannot change, delete or scan anything, and cannot spend money. When you connect, you can also let it **scan spaces** for you (and check photos): each scan then uses your free scan or is paid from your balance, and the assistant can tell you the price first. Allowing scans needs a card on file in your account; a read-only connection never does.
 

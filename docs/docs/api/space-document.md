@@ -1,6 +1,6 @@
 ---
 title: 'The Space Document'
-description: 'The JSON document a space becomes: areas, items, issues, key locations, instructions, facts, Q&A, frames and coverage.'
+description: 'The JSON document a space becomes: areas, items, issues, key locations, instructions, facts, Q&A, evidence frames and coverage, and what redaction removes.'
 ---
 
 # The Space Document

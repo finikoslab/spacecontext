@@ -1,9 +1,10 @@
 ---
-title: 'Console and sign-in'
-description: 'The developer console: sign in with Apple, Google, GitHub or an emailed code, approve terminal sign-ins, and manage spaces, scans, keys, billing and webhooks.'
+title: 'The developer console and sign-in'
+sidebar_label: 'Console and sign-in'
+description: 'The developer console: sign in with Apple, Google, GitHub or an emailed code, approve terminal sign-ins, manage spaces, scans, keys, billing and webhooks.'
 ---
 
-# Console and sign-in
+# The developer console and sign-in
 
 The [console](https://spacecontext.app/developers/console/) is where you see and manage everything without writing code: your spaces, new scans, the assistants you connected, [API keys](api-keys.md), [billing](billing.md), [webhooks](../api/webhooks.md) and the audit log.
 

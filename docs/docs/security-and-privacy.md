@@ -1,6 +1,6 @@
 ---
 title: 'Security and privacy'
-description: 'How Space Context protects sensitive values, keeps agents safe from text in videos, stores data and deletes it.'
+description: 'How Space Context redacts sensitive values, withholds text in videos that addresses an AI, protects keys and sessions, and stores and deletes your data.'
 ---
 
 # Security and privacy

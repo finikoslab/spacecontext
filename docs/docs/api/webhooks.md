@@ -1,9 +1,10 @@
 ---
-title: 'Webhooks'
-description: 'Signed events when a scan completes or fails, or an automatic top-up is declined.'
+title: 'Webhook events and signatures'
+sidebar_label: 'Webhooks'
+description: 'Signed webhooks when a scan completes or fails or an automatic top-up is declined: the payload, HMAC-SHA256 checks in Node.js and Python, and retries.'
 ---
 
-# Webhooks
+# Webhook events and signatures
 
 Instead of polling, let Space Context call you. Add an endpoint in the [console](https://spacecontext.app/developers/console/) under **Webhooks**: an HTTPS URL, the events, and the mode (test events come from test keys, live events from live keys). The **signing secret** (`whsec_…`) is shown once.
 

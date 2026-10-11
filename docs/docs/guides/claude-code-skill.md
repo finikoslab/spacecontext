@@ -1,6 +1,6 @@
 ---
 title: 'Use a space in Claude Code'
-description: 'Export a space as an Agent Skill and let Claude Code answer from it, offline.'
+description: 'Export a space as an Agent Skill folder and let Claude Code answer from it offline: the export command, the files it writes and how to keep it current.'
 ---
 
 # Use a space in Claude Code

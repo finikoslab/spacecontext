@@ -1,6 +1,6 @@
 ---
 title: 'Check-in and check-out'
-description: 'Document a space before and after a stay, a rental or a move, and get what changed.'
+description: 'Scan a space before and after a stay, a rental or a move, then compare: items added, gone or moved, new issues, and what the second scan did not show.'
 ---
 
 # Check-in and check-out

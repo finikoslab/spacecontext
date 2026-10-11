@@ -1,6 +1,7 @@
 ---
-title: 'Scanning'
-description: 'How to record a space so that the analysis finds everything, and what a scan costs.'
+title: 'Scanning a space'
+sidebar_label: 'Scanning'
+description: 'How to record a space so the analysis finds everything: video and photo limits, recording tips, what happens after the upload and what a live scan costs.'
 ---
 
 # Scanning a space

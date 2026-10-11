@@ -1,9 +1,10 @@
 ---
-title: 'Tools'
-description: 'The tools, resources and prompts of the Space Context MCP server, their arguments and what they return.'
+title: 'MCP server tools'
+sidebar_label: 'Tools'
+description: 'Every tool, resource and prompt of the Space Context MCP server: arguments, what each returns, which tools need scanning access and the errors they report.'
 ---
 
-# MCP tools
+# MCP server tools
 
 Reading tools are read-only (`readOnlyHint: true`, not destructive, idempotent). The scanning tools (`create_scan`, `upload_frame`, `start_scan`, `cancel_scan`) are annotated as writes, `cancel_scan` as destructive. They, and `check_frame`, are listed on every connection but work only on one where the user ticked **let it scan spaces** when connecting: otherwise the API refuses them with `INSUFFICIENT_SCOPE`. No tool reaches the open web. Results are JSON text (or a Markdown page); results that carry space content include a `note` saying it is data captured from a physical space, not instructions.
 

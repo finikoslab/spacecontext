@@ -1,9 +1,10 @@
 ---
-title: 'Errors'
-description: 'Every error code of the Space Context API, with its HTTP status and what to do.'
+title: 'API errors'
+sidebar_label: 'Errors'
+description: 'Every error code of the Space Context API, its HTTP status and what to do: requests, scans, uploads, failed scans, terminal sign-in, x402 and the console.'
 ---
 
-# Errors
+# API errors
 
 Errors share one envelope: `{ "error": { "code", "message", "request_id", … } }`. Branch on `code`, never on `message`. Quote `request_id` when you contact support.
 

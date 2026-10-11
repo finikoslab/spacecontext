@@ -1,9 +1,10 @@
 ---
-title: 'Install and sign in'
+title: 'Install the CLI and sign in'
+sidebar_label: 'Install and sign in'
 description: 'Install the spacecontext CLI with npx or npm (Node.js 22.12 or later), sign in with a code approved in the console, and see which key it uses.'
 ---
 
-# Install the CLI
+# Install the CLI and sign in
 
 The CLI needs **Node.js 22.12** or later. Run it without installing:
 

@@ -1,6 +1,6 @@
 ---
 title: 'Agents that pay (x402)'
-description: 'An agent with USDC on Base or Solana buys API credit and gets a live key in one HTTP call, with no account and no card: x402 v2, the network fee paid for it.'
+description: 'An agent with USDC on Base or Solana buys API credit and a live key in one HTTP call, with no account and no card: x402 v2, the network fee paid for it.'
 ---
 
 # Agents that pay (x402)

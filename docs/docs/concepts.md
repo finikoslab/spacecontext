@@ -1,9 +1,10 @@
 ---
-title: 'Concepts'
-description: 'Spaces, scans, the Space Document, test and live mode, scopes and screening.'
+title: 'Concepts: spaces, scans and the Space Document'
+sidebar_label: 'Concepts'
+description: 'The ideas behind the Space Context API: spaces and scans, the Space Document and its base and deep levels, test and live mode, key scopes and screening.'
 ---
 
-# Concepts
+# Concepts: spaces, scans and the Space Document
 
 ## Spaces
 
