@@ -50,9 +50,7 @@ Prices and top-up amounts are in US dollars and **exclude applicable taxes**. Wh
 
 ## What you accept when you add funds
 
-Before the payment page opens, the console asks you to accept these terms; Stripe's page repeats them next to the pay button. Adding a card asks for the same acceptance, and nothing is charged on that page.
-
-You do not have to tick the box every time: once you have accepted the current version, the console remembers it, and the box starts ticked with the date you accepted written under it (you can untick it). When the terms change, the box starts empty again until you accept the new version. The payment is opened only with the box ticked.
+You accept these terms **once**, with a box in the console the first time you add credit or save a card. After that the console does not ask again: Stripe's payment page repeats them next to its pay button. When the terms change, the box is shown once more for the new version.
 
 - **The credit is supplied at once.** It is added to your balance as soon as the payment succeeds, and the scans you start use it: you ask for it to be supplied now.
 - **Credit already used cannot be refunded.** A scan that fails is refunded to your balance automatically (see below). Money goes back to a card only if you ask: write to support about unused credit. Statutory rights, where they apply, are not affected.
