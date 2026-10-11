@@ -29,7 +29,7 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 | Record | Main fields |
 | --- | --- |
 | **Area** | `id`, `name`, `type` (`kitchen`, `bathroom`, `bedroom`, …), `level`, `condition` (`code`, `notes`), `description`, `features`, `access_from`, `item_ids`, `issue_ids` |
-| **Item** | `id`, `area_id`, `name`, `canonical_name`, `category`, `subcategory`, `quantity`, `location` (where in the area), `condition`, `brand`, `model`, `attributes`, `visible_text`, `aliases`, `note`, `previous_item_id` (the same object in the previous scan) |
+| **Item** | `id`, `area_id`, `name`, `canonical_name`, `category`, `subcategory`, `quantity`, `location` (where in the area), `condition`, `brand`, `model`, `attributes`, `visible_text`, `aliases`, `note`, `issue_ids` (its issues), `previous_item_id` (the same object in the previous scan) |
 | **Issue** | `id`, `area_id`, `item_id`, `title`, `description`, `category`, `severity` (`low`, `medium`, `high`, `critical`), `suggested_action`, `previous_issue_id` |
 | **Key location** | `id`, `kind` (`water_shutoff`, `electrical_panel`, `gas_shutoff`, `water_heater`, `heating_control`, `router`, `fire_extinguisher`, `smoke_detector`, `emergency_exit`, `keys`, meters, `alarm_panel`, …), `label`, `area_id`, `location`, `notes` |
 | **Instruction** | `id`, `title`, `area_id`, `item_id`, `steps`, `source_quote` (what was said) |

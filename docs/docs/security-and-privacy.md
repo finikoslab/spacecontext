@@ -9,7 +9,7 @@ description: 'How Space Context protects sensitive values, keeps agents safe fro
 
 Videos often show or mention things an assistant should not repeat: the Wi-Fi password, door and alarm codes, where the spare keys are, phone numbers.
 
-- The deep pass marks such facts as **sensitive**; a rule-based second net also catches passwords and codes announced in text, card numbers, IBANs, emails and phone numbers that it missed.
+- The deep pass marks such facts as **sensitive**; a rule-based second net also catches passwords and codes announced in text, card numbers, IBANs, emails and international phone numbers (written with their country code) that it missed.
 - Keys without the `spaces:sensitive` scope read the **redacted** document: those values are removed from every field, frames that show them have no URL, and the transcript and the owner's own answers are not available. Search results never contain them, whatever the key.
 - A space scanned with the app is readable by such a key only after it has been screened.
 - MCP connections never get sensitive values unless you tick the box when you connect.
