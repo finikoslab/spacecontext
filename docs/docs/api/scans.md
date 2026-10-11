@@ -30,7 +30,7 @@ An account creates at most 200 spaces and 500 scans a day in each mode, test key
 
 ## 2. Declare the scan
 
-For a video, declare its type and exact size:
+For a video, declare its type and exact size, up to 4 GB:
 
 ```bash
 curl -X POST $API/spaces/spc_3f…/scans -H "$AUTH" -H "Content-Type: application/json" \
@@ -87,15 +87,19 @@ The answer is the scan, with upload instructions:
 
 ## 3. Upload
 
-**Video**: `PUT` the bytes to `upload.url` with `upload.headers`. When the URL points to storage (a signed link, valid for an hour), do not send your API key. When it points to the API (`…/v1/scans/{id}/video`, up to 95 MB), send the `Authorization` header as usual. A video can be up to 100 MB and 10 minutes.
+**Video**: `PUT` the bytes to `upload.url` with `upload.headers`. A video can be up to 4 GB and 10 minutes. When the URL points to storage (a signed link, valid for an hour), do not send your API key; only this link takes a video over 95 MB. When it points to the API (`…/v1/scans/{id}/video`, up to 95 MB, in `upload.max_bytes`), send the `Authorization` header as usual.
 
 ```bash
-curl -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @flat.mp4
+curl -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --upload-file flat.mp4
 ```
+
+`--upload-file` sends the file from disk as it goes, with its length; `--data-binary @flat.mp4` would read all of it into memory first.
+
+`GET /v1` states the limits of the deployment it answers for in `limits` (`max_video_bytes`, `max_video_seconds`, `max_photos`). A `content_length` over `max_video_bytes` is refused when the scan is declared (`400 VALIDATION_ERROR`, with the limit in the message), before anything is uploaded or charged. A deployment that does not state its limits takes videos up to 100 MB.
 
 The `Content-Type` of the upload must be the declared type: another one is refused with `415 INVALID_CONTENT_TYPE`.
 
-**Size.** Phones record far more than a scan needs: a default Android recording at 1080p (16–17 Mbps) reaches 100 MB after about 50 seconds, and a 4K one after about 19 seconds. Ten minutes fit at about 1.4 Mbps in all, for example 720p H.264 at about 1.2 Mbps with 96 kbps AAC. Record at 720p, trim, or compress before uploading; the [CLI](../cli/scanning.md#automatic-compression) compresses a bigger video by itself when ffmpeg is installed.
+**Size.** A phone's default recording fits: ten minutes at 1080p (16–17 Mbps) come to about 1.2 GB, and in 4K at 30 fps to about 3 GB. On a slow connection, compress before uploading (a scan needs no more than about 8 Mbps); the [CLI](../cli/scanning.md#automatic-compression) does it with `--compress` when ffmpeg is installed, and by itself for a video over the limit.
 
 **Photos**: one `PUT` per photo to `upload.url_template` with `{index}` replaced, starting at 0:
 

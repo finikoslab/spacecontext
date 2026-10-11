@@ -150,7 +150,7 @@ You top up the balance by card through Stripe ($10 to $500 per payment), with op
 
 | | Limit |
 | --- | --- |
-| Video | Up to 100 MB and 10 minutes |
+| Video | Up to 4 GB and 10 minutes |
 | Photos | 120 per scan, JPEG, PNG or WebP, 2 MB each |
 | Requests | 120 per minute per key |
 | Search | 20 per minute, 1 000 per day per account |

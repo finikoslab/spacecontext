@@ -92,7 +92,7 @@ spacecontext scan-status <scan-id> [--follow]
 spacecontext cancel <scan-id>
 ```
 
-`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, `.3gp`, `.webm`, `.mkv`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order), starts the analysis and follows it live, printing each stage in words (`Reading the video`, `Looking at the frames`, `Extracting the context`…). With `--name` it first creates a space (`--type` is one of `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance`, `other`); with `--space` it scans an existing space again, and the new scan is checked against the previous one. `--language` is the language of the report: `en` (English, the default), `it` (Italiano), `es` (Español), `fr` (Français), `de` (Deutsch), `pt` (Português) or `nl` (Nederlands), whatever language is spoken. `--format` chooses what to print when it is done: a summary (`text`), the whole document (`json`), one Markdown page (`markdown`, to stdout or `--out <file>`) or an Agent Skill folder (`skill`, written to `--out <dir>`). With `--no-wait` it returns once the scan has started; `scan-status --follow` picks it up again and prints every change until the end.
+`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, `.3gp`, `.webm`, `.mkv`, up to 4 GB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order), starts the analysis and follows it live, printing each stage in words (`Reading the video`, `Looking at the frames`, `Extracting the context`…). With `--name` it first creates a space (`--type` is one of `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance`, `other`); with `--space` it scans an existing space again, and the new scan is checked against the previous one. `--language` is the language of the report: `en` (English, the default), `it` (Italiano), `es` (Español), `fr` (Français), `de` (Deutsch), `pt` (Português) or `nl` (Nederlands), whatever language is spoken. `--format` chooses what to print when it is done: a summary (`text`), the whole document (`json`), one Markdown page (`markdown`, to stdout or `--out <file>`) or an Agent Skill folder (`skill`, written to `--out <dir>`). With `--no-wait` it returns once the scan has started; `scan-status --follow` picks it up again and prints every change until the end.
 
 At a terminal, the stage in progress is a live line with its elapsed time, and each finished stage stays as a ✓ line with how long it took; piped, each stage is one plain `› stage…` line. At the end, the CLI prints the space (areas and items, key locations, issues) and the commands to ask it, export it as a skill and read it again:
 
@@ -121,14 +121,14 @@ Next
   › Read it again: spacecontext space spc_3f9c…
 ```
 
-A video over 100 MB is compressed to fit when `ffmpeg` and `ffprobe` are installed: an H.264 MP4 at the bitrate its duration allows (at most 8 Mbps, 720p under 2.5 Mbps), upright, uploaded and then deleted; a video over 10 minutes is refused before encoding. `--compress` compresses a video that already fits, `--no-compress` never compresses. Without ffmpeg, a video over 100 MB is refused with how to install it. See [Scanning](scanning.md#automatic-compression).
+The limits are the ones the API states, read before anything is created (an API that does not state them is taken to accept 100 MB). A video over the limit is compressed to fit when `ffmpeg` and `ffprobe` are installed: an H.264 MP4 at the bitrate its duration allows (at most 8 Mbps, 720p under 2.5 Mbps), upright, uploaded and then deleted; a video over 10 minutes is refused before encoding. `--compress` re-encodes to a smaller H.264 file before uploading (useful on a slow connection), `--no-compress` never compresses. Without ffmpeg, a video over the limit is refused with how to install it. See [Scanning](scanning.md#automatic-compression).
 
 ```text
-$ spacecontext scan ./IMG_0042.MOV --name "Seaside flat"
+$ spacecontext scan ./IMG_0042.MOV --name "Seaside flat" --compress
 ◆ Scanning IMG_0042.MOV (video, 390.0 MB) into a new space "Seaside flat"
-✓ Compressed IMG_0042.MOV  390.0 MB → 88.4 MB, H.264 up to 720p, in 1m 52s
+✓ Compressed IMG_0042.MOV  390.0 MB → 176.4 MB, H.264 up to 1080p, in 1m 52s
 ✓ Space created  spc_3f9c…
-✓ Uploaded IMG_0042.MOV  88.4 MB in 31s
+✓ Uploaded IMG_0042.MOV  176.4 MB in 59s
 …
 ```
 

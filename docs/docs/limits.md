@@ -10,14 +10,14 @@ description: 'Sizes, rates and quotas of the Space Context API: uploads, request
 
 | | Limit |
 | --- | --- |
-| Video | MP4, MOV, M4V, 3GP, WebM or Matroska; up to 100 MB and 10 minutes (the duration read from the file) |
-| Video through the API (when no direct upload link is offered) | 95 MB |
+| Video | MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes (the duration read from the file) |
+| Video through the API (when no direct upload link is offered) | 95 MB: a bigger video goes to the direct upload link |
 | Photos per scan | 120, JPEG, PNG or WebP, 2 MB each |
 | Transcript | 600 segments of up to 2 000 characters |
 | Direct upload link | Valid 1 hour |
 | Time to start a scan after creating it | 24 hours, then it is cancelled |
 
-A phone at 1080p fills 100 MB in about a minute; ten minutes fit at about 1.4 Mbps. Record at 720p, or let the [CLI](cli/scanning.md#automatic-compression) compress the video when ffmpeg is installed.
+`GET /v1` states the limits of the deployment it answers for in `limits` (`max_video_bytes`, `max_video_seconds`, `max_photos`); the SDK, the CLI and the console read them there, and take a deployment that does not state them to accept 100 MB. Ten minutes of a phone's default 1080p recording come to about 1.2 GB. On a slow connection, the [CLI](cli/scanning.md#automatic-compression) re-encodes a video to a smaller file before uploading it (`--compress`) when ffmpeg is installed.
 
 ## Rates
 

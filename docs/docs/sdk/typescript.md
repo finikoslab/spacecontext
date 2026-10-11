@@ -35,7 +35,7 @@ console.log(document.items.length, 'items');
 console.log(markdown);                      // one readable page of the whole space
 ```
 
-`scan()` takes a path (a video, an image, or a folder of photos; Node only), a `Blob`/`File` with its type, `{ video, contentType }` or `{ frames: [...] }`. A video is MP4, MOV, M4V, 3GP, WebM or Matroska (`.mp4`, `.mov`, `.m4v`, `.3gp`, `.webm`, `.mkv`, or the types in `VIDEO_CONTENT_TYPES`), up to 100 MB: a bigger one is refused before anything is created (the CLI compresses it when ffmpeg is installed). Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts, streams the scan's events to `onProgress` (`space_created` with `spaceId`, `uploading`, `uploaded`, `started`, one `scan` per change of status or stage with its `stage` and `label`, `complete`) and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` when asked. A scan that fails throws a `SpaceContextError` whose `code` is the scan's error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`; its charge is refunded.
+`scan()` takes a path (a video, an image, or a folder of photos; Node only), a `Blob`/`File` with its type, `{ video, contentType }` or `{ frames: [...] }`. A video is MP4, MOV, M4V, 3GP, WebM or Matroska (`.mp4`, `.mov`, `.m4v`, `.3gp`, `.webm`, `.mkv`, or the types in `VIDEO_CONTENT_TYPES`), up to 4 GB and 10 minutes. `sc.limits()` reads the API's own limits once (`{ maxVideoBytes, maxVideoSeconds, maxPhotos }`; an API that does not state them is taken to accept 100 MB), and a bigger video is refused before anything is created (the CLI compresses it when ffmpeg is installed). A video from a path is read from disk as it uploads, never into memory. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts, streams the scan's events to `onProgress` (`space_created` with `spaceId`, `uploading`, `uploaded`, `started`, one `scan` per change of status or stage with its `stage` and `label`, `complete`) and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` when asked. A scan that fails throws a `SpaceContextError` whose `code` is the scan's error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`; its charge is refunded.
 
 Other options: `externalId` (with `name`: the same id returns the same space), `language` (the language of the report: `en`, `it`, `es`, `fr`, `de`, `pt` or `nl`, default `en`, listed in `REPORT_LANGUAGES`; the narration can be in any language), `transcript` (with photos; videos are transcribed by the API), `recordedAt`, `device`, `timeoutMs` (default 20 minutes, then `TIMEOUT` while the scan goes on) and `signal`.
 
@@ -54,22 +54,23 @@ const skill = await sc.spaces.skill('spc_…');                      // { name, 
 
 const me = await sc.me();                                          // the account and the key's mode and scopes
 const wallet = await sc.wallet();                                  // balance_cents, free scans left, scan_price_cents
+const limits = await sc.limits();                                  // the largest and longest video, the most photos, on this API
 const check = await sc.frames.check(bytes, 'image/jpeg');          // usable? which key locations? (guided capture)
 ```
 
 ## Scanning
 
 ```ts
-import { openAsBlob } from 'node:fs';
-import { describeScan } from '@spacecontext/sdk';
+import { describeScan, fileBody } from '@spacecontext/sdk';
 
 const space = await sc.spaces.create({ name: 'Seaside flat', space_type: 'apartment' });
 
-// Video: created, uploaded and started in one call. The file is streamed from disk.
-const scan = await sc.scans.fromVideo(space.id, { data: await openAsBlob('flat.mp4'), contentType: 'video/mp4', language: 'en' });
+// Video: created, uploaded and started in one call. fileBody reads the file from disk as it
+// uploads (a Blob, or a stream of its exact length from 4 GiB, which fs.openAsBlob miscounts).
+const scan = await sc.scans.fromVideo(space.id, { data: await fileBody('flat.mp4'), contentType: 'video/mp4', language: 'en' });
 
 // Or photos, in order:
-// await sc.scans.fromFrames(space.id, [{ data: await openAsBlob('1.jpg'), contentType: 'image/jpeg', timestampMs: 0 }, …]);
+// await sc.scans.fromFrames(space.id, [{ data: await fileBody('1.jpg'), contentType: 'image/jpeg', timestampMs: 0 }, …]);
 
 const done = await sc.scans.wait(scan.id, { onProgress: (s) => console.log(s.status, s.stage) });
 if (done.status !== 'complete') throw new Error(done.error?.message);
