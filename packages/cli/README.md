@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/spacecontext?logo=npm)](https://www.npmjs.com/package/spacecontext)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/finikoslab/spacecontext/blob/HEAD/LICENSE)
-[![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Node >= 22.12](https://img.shields.io/badge/node-%3E%3D22.12-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Docs](https://img.shields.io/badge/docs-spacecontext.app-7C3AED)](https://spacecontext.app/developers/docs/cli/install/)
 
 [Space Context](https://spacecontext.app/developers/) from the terminal. Film a space once, then search it, ask it questions, compare scans and hand it to your agents as an Agent Skill or a Markdown page.
@@ -12,7 +12,7 @@ npx spacecontext --help              # every command, by group
 npx spacecontext scan --help         # one command: its options and examples
 ```
 
-Needs Node.js 22 or later. Run it with `npx`, or install it with `npm install -g spacecontext`. Videos are analysed on the server, so you don't need ffmpeg.
+Needs Node.js 22.12 or later. Run it with `npx`, or install it with `npm install -g spacecontext`. Videos are analysed on the server, so you don't need ffmpeg.
 
 ## Set up everything at once
 

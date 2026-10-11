@@ -1,7 +1,7 @@
 import { AuthorizationError, CimdFetchError, type AuthRequest, type ConsentDescription } from '@cloudflare/workers-oauth-provider';
 import { BackendError, backendJson } from './backend.js';
 import type { Env, GrantProps } from './env.js';
-import { cardRequiredPage, consentPage, emailPage, errorPage, page, type SignInProviders } from './html.js';
+import { cardRequiredPage, consentPage, emailPage, errorPage, keyLimitPage, page, type SignInProviders } from './html.js';
 
 /** Scopes this server can grant, as advertised in its OAuth metadata. */
 export const SCOPES_SUPPORTED = ['spaces:read', 'spaces:sensitive', 'scans:write', 'offline_access'];
@@ -66,6 +66,11 @@ async function readForm(request: Request): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const [name, value] of form.entries()) if (typeof value === 'string') out[name] = value;
   return out;
+}
+
+/** The API's answer when the account already holds its 20 active keys (400 `VALIDATION_ERROR`, no code of its own). */
+function isKeyLimit(error: unknown): boolean {
+  return error instanceof BackendError && error.status === 400 && error.code === 'VALIDATION_ERROR' && /key limit/i.test(error.message);
 }
 
 function validEmail(value: string | undefined): string | null {
@@ -409,6 +414,9 @@ async function approve(request: Request, env: Env): Promise<Response> {
         body: { name: `MCP · ${described.consent.clientName}`.slice(0, 60), mode: 'live', scopes, source: 'oauth' },
       });
     } catch (error) {
+      // Nothing was created: a key revoked in the console makes room. The used
+      // handle's cookie is cleared.
+      if (isKeyLimit(error)) return keyLimitPage(approved.headers);
       if (!(scanning && error instanceof BackendError && error.code === 'PAYMENT_METHOD_REQUIRED')) throw error;
       // A live key that can scan needs a card on file. The handle was used, so the
       // same consent starts again for the request just approved, bound to this

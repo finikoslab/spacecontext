@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@spacecontext/sdk?logo=npm)](https://www.npmjs.com/package/@spacecontext/sdk)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/finikoslab/spacecontext/blob/HEAD/LICENSE)
-[![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Node >= 22.12](https://img.shields.io/badge/node-%3E%3D22.12-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Types included](https://img.shields.io/badge/types-included-3178C6?logo=typescript&logoColor=white)](https://spacecontext.app/developers/docs/sdk/typescript/)
 [![Docs](https://img.shields.io/badge/docs-spacecontext.app-7C3AED)](https://spacecontext.app/developers/docs/sdk/typescript/)
 
@@ -10,7 +10,7 @@ The TypeScript client for [Space Context](https://spacecontext.app/developers/),
 
 - **One call** from a video (or a folder of photos) to the document, with progress reported as the analysis runs.
 - **Typed from the [OpenAPI contract](https://api.spacecontext.app/v1/openapi.json)**: every schema is exported.
-- **No runtime dependencies.** Runs in Node.js 22+, Deno, Cloudflare Workers and browsers.
+- **No runtime dependencies.** Runs in Node.js 22.12+, Deno, Cloudflare Workers and browsers.
 
 ## Install
 
@@ -48,7 +48,7 @@ const { spaceId, document, markdown } = await sc.scan('./flat.mp4', {
 console.log(document.stats.items, 'items');
 ```
 
-`scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one. `onProgress` receives, in order, `space_created` (with `name`), `uploading`, `uploaded`, `started`, a `scan` event at every change of status or stage (with `stage` and `label`), then `complete`.
+`scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one. `onProgress` receives, in order, `space_created` (with `spaceId`), `uploading`, `uploaded`, `started`, a `scan` event at every change of status or stage (with `stage` and `label`), then `complete`.
 
 A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`, and its charge is refunded. After `timeoutMs` (default 20 minutes) it throws `TIMEOUT`, and the scan goes on. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, the account's free scan is used first (a new account has one, one free scan per card) and each scan after that costs US$1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
 
@@ -88,7 +88,7 @@ const { api_key } = await deviceSignIn({
 });
 ```
 
-The person types the code in the console and approves it, and the key arrives in your tool. A live key that can scan needs a card on file: without one, the console asks the person to add it (nothing is charged) or to approve a key without `scans:write`. The key never travels through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves.
+The person types the code in the console and approves it, and the key arrives in your tool. A live key that can scan needs a card on file: without one, the console asks the person to add it (nothing is charged) or to approve a key without `scans:write`. The key never travels through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves. A `name` longer than 60 characters is cut; a poll that gets no answer is made again until the code expires, and every failure is a `SpaceContextError` (`NETWORK_ERROR` when the API cannot be reached).
 
 ## Errors
 
@@ -125,7 +125,7 @@ new SpaceContext({ apiKey, baseUrl, maxRetries, maxRetryDelayMs, timeoutMs, fetc
 
 ## Behaviour and safety
 
-- **Retries**: a `429` is retried after `Retry-After`. `502`–`504` and network errors are retried only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry, and `cancel` and `delete` are never repeated after a network error or a `5xx`.
+- **Retries**: a `429` `RATE_LIMIT_EXCEEDED` is retried after `Retry-After`; `SCANS_IN_PROGRESS` (ten scans running) is returned at once. `502`–`504` and network errors are retried only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry, and `cancel` and `delete` are never repeated after a network error or a `5xx`.
 - **Following a scan**: `scans.events`, `scans.wait` and `scan()` follow the event stream and reconnect when it ends early. When no stream can be had (a proxy that does not stream, all 10 of the account's open streams in use, the stream failing), they poll `GET /scans/{id}` instead, every `intervalMs` (default 3 s) and less often, up to every 15 s, while nothing changes. At `timeoutMs` (default 20 minutes) they throw `TIMEOUT` with the last state in `details.scan`, even while the stream only sends pings, and close the stream.
 - **The key stays with the API**: it is sent only to the API's own origin and path, never to a storage upload URL, an evidence URL or another host. Redirects are never followed.
 - **Uploads**: pass a `Blob` (in Node, `fs.openAsBlob` streams a file from disk), an `ArrayBuffer` or a `Uint8Array`. Videos go straight to storage when the API offers a signed URL.

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, stat, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -114,7 +114,9 @@ describe('spacecontext CLI', () => {
     expect(await main(['login', '--key', KEY], h.io)).toBe(0);
     expect(h.stdout()).toContain('Logged in as dev@example.com with a live key');
     const file = path.join(directory, 'config', 'config.json');
-    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ apiKey: KEY });
+    // The API it was checked with is saved with it: the key goes to no other.
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ apiKey: KEY, baseUrl: BASE });
+    expect(h.stdout()).toContain(`config.json, for ${BASE}`);
     expect((await stat(file)).mode & 0o777).toBe(0o600);
 
     expect(await main(['whoami'], h.io)).toBe(0);
@@ -153,8 +155,8 @@ describe('spacecontext CLI', () => {
     expect(h.stderr()).not.toContain('card on file');
     expect(opened).toEqual(['https://spacecontext.example/developers/console/authorize/']);
     expect(h.stdout()).toContain('Logged in as dev@example.com with a test key (spaces:read, scans:read)');
-    // The base URL came from the environment, not from --base-url: it is not saved with the key.
-    expect(JSON.parse(await readFile(path.join(directory, 'config', 'config.json'), 'utf8'))).toEqual({ apiKey: KEY });
+    // The API signed in to, here from SPACECONTEXT_BASE_URL, is saved with the key.
+    expect(JSON.parse(await readFile(path.join(directory, 'config', 'config.json'), 'utf8'))).toEqual({ apiKey: KEY, baseUrl: BASE });
     expect(await main(['whoami'], h.io)).toBe(0);
     expect(await main(['logout'], h.io)).toBe(0);
 
@@ -183,7 +185,7 @@ describe('spacecontext CLI', () => {
     expect(await main(['login', '--key', '-'], h.io)).toBe(0);
     expect(asked).toEqual(['API key (input hidden): ']);
     expect(h.calls.at(-1)!.headers.get('authorization')).toBe(`Bearer ${KEY}`);
-    expect(JSON.parse(await readFile(path.join(directory, 'config', 'config.json'), 'utf8'))).toEqual({ apiKey: KEY });
+    expect(JSON.parse(await readFile(path.join(directory, 'config', 'config.json'), 'utf8'))).toEqual({ apiKey: KEY, baseUrl: BASE });
     expect(h.stdout() + h.stderr()).not.toContain(KEY);
 
     // Nothing typed, or no terminal to type in: nothing sent, nothing saved.
@@ -420,6 +422,34 @@ describe('spacecontext CLI', () => {
     expect(await main(['check', 'notes.txt'], harness([], { SPACECONTEXT_API_KEY: KEY }).io)).toBe(2);
   });
 
+  it('prints the transcript asked for with --transcript, with the time of each segment', async () => {
+    const said = {
+      ...document,
+      transcript: {
+        text: 'This is the kitchen. The fuse box is behind the coats.',
+        segments: [
+          { id: 'seg_1', start_ms: 1200, end_ms: 3000, text: 'This is the kitchen.' },
+          { id: 'seg_2', start_ms: 65_000, end_ms: 68_000, text: 'The fuse box is behind the coats.' },
+        ],
+      },
+    };
+    const h = harness([(call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(call.search.get('include') === 'transcript' ? said : document) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID, '--transcript'], h.io)).toBe(0);
+    expect(h.calls[0]!.search.get('include')).toBe('transcript');
+    expect(h.stdout()).toMatch(/\nTranscript\n  0:01 This is the kitchen\.\n  1:05 The fuse box is behind the coats\.\n$/);
+
+    // Without segments, the text; without either, said so; without --transcript, nothing.
+    const textOnly = harness([(call) => (call.path === `/spaces/${SPACE_ID}` ? json({ ...said, transcript: { text: said.transcript.text, segments: [] } }) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID, '--transcript'], textOnly.io)).toBe(0);
+    expect(textOnly.stdout()).toContain('Transcript\n  This is the kitchen. The fuse box is behind the coats.\n');
+    const silent = harness([(call) => (call.path === `/spaces/${SPACE_ID}` ? json({ ...said, transcript: { text: null, segments: [] } }) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID, '--transcript'], silent.io)).toBe(0);
+    expect(silent.stdout()).toContain('Transcript\n  Nothing was said.\n');
+    const plain = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID], plain.io)).toBe(0);
+    expect(plain.stdout()).not.toContain('Transcript');
+  });
+
   it('shows which key locations a scan filmed', async () => {
     const withChecklist = {
       ...document,
@@ -526,6 +556,34 @@ describe('spacecontext CLI, housekeeping', () => {
     expect(JSON.parse(h.stdout())).toEqual({ logged_out: true });
   });
 
+  it('sends the saved key only to the API it was saved for, whatever --base-url or SPACECONTEXT_BASE_URL name', async () => {
+    const h = harness([me], { SPACECONTEXT_BASE_URL: '' });
+    delete h.io.env.SPACECONTEXT_BASE_URL;
+    expect(await main(['login', '--key', KEY], h.io)).toBe(0);
+    // Saved for the default API: no base URL saved.
+    expect(JSON.parse(await readFile(path.join(directory, 'config', 'config.json'), 'utf8'))).toEqual({ apiKey: KEY });
+    const checked = h.calls.length;
+
+    expect(await main(['whoami', '--base-url', 'https://elsewhere.example/v1'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('The saved key is for https://api.spacecontext.app/v1: it is not sent to https://elsewhere.example/v1');
+    expect(h.stderr()).toContain('drop --base-url to use the saved key');
+    h.io.env.SPACECONTEXT_BASE_URL = 'https://staging.example/v1';
+    expect(await main(['spaces'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('`spacecontext login --base-url https://staging.example/v1`');
+    expect(h.stderr()).toContain('unset SPACECONTEXT_BASE_URL to use the saved key');
+    expect(h.calls).toHaveLength(checked);
+
+    // The same API written another way is the same API.
+    h.io.env.SPACECONTEXT_BASE_URL = 'https://api.spacecontext.app/v1/';
+    expect(await main(['whoami'], h.io)).toBe(0);
+    expect(h.urls.at(-1)).toBe('https://api.spacecontext.app/v1/me');
+    // A key given with the command goes where the command says.
+    h.io.env.SPACECONTEXT_BASE_URL = 'https://staging.example/v1';
+    expect(await main(['whoami', '--api-key', 'sc_live_stagingkey'], h.io)).toBe(0);
+    expect(h.urls.at(-1)).toBe('https://staging.example/v1/me');
+    expect(h.calls.at(-1)!.headers.get('authorization')).toBe('Bearer sc_live_stagingkey');
+  });
+
   it('sends a key from the environment to the default API, never to the URL saved with another key', async () => {
     const h = harness([me], { SPACECONTEXT_BASE_URL: '' });
     delete h.io.env.SPACECONTEXT_BASE_URL;
@@ -550,6 +608,16 @@ describe('spacecontext CLI, housekeeping', () => {
     expect(h.stderr()).toContain('larger than 2 MB');
     expect(h.calls).toEqual([]);
 
+    // A phone video in 4K: how to make it fit, not only that it does not.
+    const video = path.join(directory, 'IMG_0042.MOV');
+    await writeFile(video, '');
+    await truncate(video, 390 * 1024 * 1024);
+    expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('IMG_0042.MOV is 390.0 MB: a video can be up to 100 MB');
+    expect(h.stderr()).toContain('Record at 1080p (iPhone: Settings > Camera > Record Video > 1080p)');
+    expect(h.stderr()).toContain('`ffmpeg -i IMG_0042.MOV -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4`');
+    expect(h.calls).toEqual([]);
+
     const ok = path.join(directory, 'ok');
     await mkdir(ok);
     await writeFile(path.join(ok, 'frame-1.jpg'), new Uint8Array([0xff, 0xd8]));
@@ -566,8 +634,10 @@ describe('spacecontext CLI, housekeeping', () => {
 });
 
 describe('the published package', () => {
-  it('ships its licence, which npm does not take from the repository', async () => {
-    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { files: string[] };
+  it('ships its licence, which npm does not take from the repository, and is built (with the SDK first) when packed', async () => {
+    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { files: string[]; engines: { node: string }; scripts: Record<string, string> };
+    expect(manifest.scripts.prepack).toBe('npm run build --prefix ../sdk && npm run build');
+    expect(manifest.engines.node).toBe('>=22.12.0');
     expect(manifest.files).toContain('LICENSE');
     expect(await readFile(new URL('../LICENSE', import.meta.url), 'utf8')).toBe(await readFile(new URL('../../../LICENSE', import.meta.url), 'utf8'));
   });

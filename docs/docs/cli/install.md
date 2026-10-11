@@ -5,7 +5,7 @@ description: 'Install the spacecontext CLI and save an API key.'
 
 # Install the CLI
 
-The CLI needs **Node.js 22** or later. Run it without installing:
+The CLI needs **Node.js 22.12** or later. Run it without installing:
 
 ```bash
 npx spacecontext --help

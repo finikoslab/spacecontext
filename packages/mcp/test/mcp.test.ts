@@ -555,6 +555,31 @@ describe('authorization', () => {
     expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/keys/key_1')).toBe(true);
   });
 
+  it('says to revoke unused keys in the console when the account already holds as many as it may', async () => {
+    const refusedWith = (message: string) => () =>
+      new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message, request_id: 'r' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    backend = fakeBackend({ 'POST /keys': refusedWith('API key limit reached') });
+    const page = await openAuthorize(await registerClient());
+    await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    const refused = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com', code: CODE, action: 'approve' }, page.cookie);
+    expect(refused.status).toBe(409);
+    const html = await refused.text();
+    expect(html).toContain('Too many API keys');
+    expect(html).toContain('href="https://spacecontext.app/developers/console/keys/"');
+    expect(html).toContain('start again from your assistant');
+    // No key was created, so none is revoked; the console session is ended.
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path.startsWith('/keys/'))).toBe(false);
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session')).toBe(true);
+
+    // Any other refusal of the key stays the generic error.
+    backend = fakeBackend({ 'POST /keys': refusedWith('name must be between 1 and 60 characters') });
+    const other = await openAuthorize(await registerClient());
+    await post('/authorize/code', { handle: other.handle, oauth: other.oauth, email: 'owner@example.com' }, other.cookie);
+    const failed = await post('/authorize/approve', { handle: other.handle, oauth: other.oauth, email: 'owner@example.com', code: CODE, action: 'approve' }, other.cookie);
+    expect(failed.status).toBe(502);
+    expect(await failed.text()).toContain('Something went wrong');
+  });
+
   it('revokes the key of the grant it replaces when the same client connects again', async () => {
     const first = await connect();
     await connect({ clientId: first.clientId });
@@ -712,6 +737,23 @@ describe('MCP tools', () => {
     expect(result.content[0]!.text).toContain('Reconnect Space Context');
     const after = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Host: new URL(ORIGIN).host }, body: '{}' }));
     expect(after.status).toBe(401);
+  });
+
+  it('ends the grant from a resource read too, when its key was revoked in the console', async () => {
+    const revoked = () => new Response(JSON.stringify({ error: { code: 'INVALID_TOKEN', message: 'Invalid token', request_id: 'r' } }), { status: 401 });
+    for (const [uri, route] of [
+      ['spacecontext://spaces/app_p1', 'GET /spaces/app_p1/markdown'],
+      ['spacecontext://spaces', 'GET /spaces'],
+    ] as const) {
+      backend = fakeBackend();
+      const { accessToken } = await connect();
+      await initialize(accessToken);
+      backend = fakeBackend({ [route]: revoked });
+      const read = await rpc(accessToken, 'resources/read', { uri });
+      expect(read.error?.message, uri).toContain('Reconnect Space Context');
+      const after = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Host: new URL(ORIGIN).host }, body: '{}' }));
+      expect(after.status, uri).toBe(401);
+    }
   });
 
   it('keeps the grant on a 401 that is not about the key (an expired evidence link)', async () => {

@@ -17,7 +17,7 @@ The demo is real output, not a mock-up: a one-bedroom apartment in Brisbane scan
 
 ## 1. Sign in from the terminal
 
-You need Node.js 22 or later.
+You need Node.js 22.12 or later.
 
 ```bash
 npx spacecontext login --test

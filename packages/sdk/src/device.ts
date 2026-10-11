@@ -24,7 +24,7 @@ export type DeviceStart = Schemas['DeviceStart'];
 export type DeviceToken = Schemas['DeviceToken'];
 
 export interface DeviceSignInOptions {
-  /** What is asking, shown to the person: "CLI on MacBook". */
+  /** What is asking, shown to the person: "CLI on MacBook". Cut to 60 characters, the most the API takes. */
   name?: string;
   /**
    * The mode of the key asked for; the person can change it. Default live. A
@@ -48,6 +48,42 @@ function environment(name: string): string | undefined {
   return value && value.trim() ? value.trim() : undefined;
 }
 
+/** The longest name the API takes. */
+const MAX_NAME_LENGTH = 60;
+
+/**
+ * The name on one line, as the API stores it, cut to what the API takes: a long
+ * host name must not make the sign-in fail.
+ */
+function deviceName(name: string): string {
+  const line = name.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (line.length <= MAX_NAME_LENGTH) return line;
+  // One character is kept for the ellipsis, and a surrogate pair is never split.
+  let end = MAX_NAME_LENGTH - 1;
+  if (/[\ud800-\udbff]/.test(line[end - 1]!)) end -= 1;
+  return `${line.slice(0, end).trimEnd()}…`;
+}
+
+/**
+ * A request of the sign-in. No answer at all is a `NETWORK_ERROR`: every
+ * failure is a SpaceContextError, as with the client. The caller's abort is
+ * thrown as it is.
+ */
+async function post(fetcher: typeof fetch, url: string, body: unknown, signal: AbortSignal | undefined): Promise<Response> {
+  try {
+    return await fetcher(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      redirect: 'manual',
+      ...(signal ? { signal } : {}),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason;
+    throw new SpaceContextError(`The request failed: ${error instanceof Error ? error.message : String(error)}`, 0, 'NETWORK_ERROR', null);
+  }
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason);
@@ -67,13 +103,8 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 export async function startDeviceSignIn(options: Omit<DeviceSignInOptions, 'onCode' | 'onWaiting'> = {}): Promise<DeviceStart> {
   const base = resolveBase(options.baseUrl);
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
-  const response = await fetcher(`${base}/auth/device`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ ...(options.name ? { name: options.name } : {}), ...(options.mode ? { mode: options.mode } : {}) }),
-    redirect: 'manual',
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
+  const name = options.name ? deviceName(options.name) : '';
+  const response = await post(fetcher, `${base}/auth/device`, { ...(name ? { name } : {}), ...(options.mode ? { mode: options.mode } : {}) }, options.signal);
   if (!response.ok) throw await errorFromResponse(response);
   return (await response.json()) as DeviceStart;
 }
@@ -81,7 +112,8 @@ export async function startDeviceSignIn(options: Omit<DeviceSignInOptions, 'onCo
 /**
  * Polls a started sign-in until the person decides. Resolves with the key and
  * its account; rejects with `ACCESS_DENIED`, `DEVICE_CODE_EXPIRED` or
- * `DEVICE_CODE_INVALID` as the API answers them.
+ * `DEVICE_CODE_INVALID` as the API answers them. A poll that gets no answer is
+ * made again; `NETWORK_ERROR` only once the code has expired.
  */
 export async function waitForDeviceSignIn(
   started: Pick<DeviceStart, 'device_code' | 'interval' | 'expires_in'>,
@@ -93,13 +125,15 @@ export async function waitForDeviceSignIn(
   const deadline = Date.now() + Math.max(1, started.expires_in) * 1000;
   for (;;) {
     await sleep(interval * 1000, options.signal);
-    const response = await fetcher(`${base}/auth/device/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ device_code: started.device_code }),
-      redirect: 'manual',
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
+    let response: Response;
+    try {
+      response = await post(fetcher, `${base}/auth/device/token`, { device_code: started.device_code }, options.signal);
+    } catch (error) {
+      // No answer (a dropped connection, offline for a moment): asked again at the
+      // next interval, until the code expires. The person may be approving it now.
+      if (!(error instanceof SpaceContextError) || error.code !== 'NETWORK_ERROR' || Date.now() >= deadline) throw error;
+      continue;
+    }
     if (response.ok) return (await response.json()) as DeviceToken;
     const error = await errorFromResponse(response);
     if (error.code === 'AUTHORIZATION_PENDING' || error.code === 'SLOW_DOWN') {

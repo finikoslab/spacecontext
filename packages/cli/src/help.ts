@@ -89,7 +89,7 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
       ['--name <name>', 'Create a new space with this name'],
       ['--space <space-id>', 'Scan an existing space again; compared with its last scan'],
       ['--type <type>', 'With --name: the kind of space (types below)'],
-      ['--language en|it', 'Language of the narration and of the result (default en)'],
+      ['--language en|it', 'Language of the report (default en), whatever is spoken'],
       ['--format <format>', 'text (default), json, markdown or skill'],
       ['--out <path>', 'With --format skill: the folder; with markdown: the file'],
       ['--no-wait', 'Start the scan and return without following it'],

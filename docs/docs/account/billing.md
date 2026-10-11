@@ -33,9 +33,9 @@ In the console, open **Billing → Add a card** (a new account also finds it in 
 
 ## Add funds
 
-In the console, tick the billing terms (below), then **Billing → Add $10 / $25 / $50**, or type another amount under **Other amount** and press **Add**. You are taken to a **Stripe Checkout** page. Pay by card, and you come back to the console. The balance updates within a few seconds, when Stripe confirms the payment.
+In the console, tick the billing terms (below), then **Billing → Add $10 / $25 / $50 / $100**, or type another amount under **Other amount** and press **Add**. You are taken to a **Stripe Checkout** page. Pay by card, and you come back to the console. The balance updates within a few seconds, when Stripe confirms the payment.
 
-![Billing in the console: the balance with Add $10, $25 and $50 buttons, the automatic top-up settings and the spend of the last 30 days](/docs/console/billing.jpg)
+![Billing in the console: the balance with its top-up buttons, the automatic top-up settings and the spend of the last 30 days](/docs/console/billing.jpg)
 
 - Amounts from $10 to $500 per top-up, in dollars and cents, in the console as in the API.
 - Buying as a company? Add your [invoice details](#invoices-and-company-details) first, so the invoice has your company name and VAT number.

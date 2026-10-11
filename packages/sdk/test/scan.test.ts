@@ -444,6 +444,14 @@ describe('scan() in one call', () => {
     await expect(sc.scan({ video: new Uint8Array(4), contentType: 'video/mp4' }, { space: SPACE_ID, name: 'x' })).rejects.toThrow(/space.*name/);
     await expect(sc.scan(path.join(tmpdir(), 'sc-nope-' + crypto.randomUUID()), { name: 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(sc.scan({ frames: [new Blob([new Uint8Array([1])])] }, { name: 'x' })).rejects.toThrow(/Frame 0/);
+    // The API's limits, before a space is created for a scan it would refuse.
+    const frame = { data: new Uint8Array([0xff, 0xd8]), contentType: 'image/jpeg' as const };
+    await expect(sc.scan({ frames: Array.from({ length: 121 }, () => frame) }, { name: 'x' })).rejects.toThrow(/121 frames: at most 120/);
+    await expect(sc.scan({ frames: [frame, { ...frame, data: new Uint8Array(2 * 1024 * 1024 + 1) }] }, { name: 'x' })).rejects.toThrow(/Frame 1 is larger than 2 MB/);
+    await expect(sc.scan({ video: new ArrayBuffer(100 * 1024 * 1024 + 1), contentType: 'video/mp4' }, { name: 'x' })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining('larger than 100 MB: record at 1080p'),
+    });
     expect(calls).toHaveLength(0);
   });
 

@@ -5,7 +5,7 @@
   "description": "Space Context for developers and agents: TypeScript SDK, CLI and MCP server.",
   "license": "MIT",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.12.0"
   },
   "workspaces": [
     "packages/sdk",

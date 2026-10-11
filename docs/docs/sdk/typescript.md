@@ -5,7 +5,7 @@ description: 'The @spacecontext/sdk client for Node, Deno and Cloudflare Workers
 
 # TypeScript SDK
 
-`@spacecontext/sdk` is a client for the API, typed from its OpenAPI contract. No runtime dependencies; it runs in Node.js 22+, Deno and Cloudflare Workers.
+`@spacecontext/sdk` is a client for the API, typed from its OpenAPI contract. No runtime dependencies; it runs in Node.js 22.12+, Deno and Cloudflare Workers.
 
 ```bash
 npm install @spacecontext/sdk
@@ -35,7 +35,7 @@ console.log(document.items.length, 'items');
 console.log(markdown);                      // one readable page of the whole space
 ```
 
-`scan()` takes a path (a video, an image, or a folder of photos; Node only), a `Blob`/`File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts, streams the scan's events to `onProgress` (`space_created` with `name`, `uploading`, `uploaded`, `started`, one `scan` per change of status or stage with its `stage` and `label`, `complete`) and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` when asked. A scan that fails throws a `SpaceContextError` whose `code` is the scan's error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`; its charge is refunded.
+`scan()` takes a path (a video, an image, or a folder of photos; Node only), a `Blob`/`File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts, streams the scan's events to `onProgress` (`space_created` with `spaceId`, `uploading`, `uploaded`, `started`, one `scan` per change of status or stage with its `stage` and `label`, `complete`) and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` when asked. A scan that fails throws a `SpaceContextError` whose `code` is the scan's error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`; its charge is refunded.
 
 Other options: `externalId` (with `name`: the same id returns the same space), `language` (`en` or `it`, default `en`), `transcript` (with photos; videos are transcribed by the API), `recordedAt`, `device`, `timeoutMs` (default 20 minutes, then `TIMEOUT` while the scan goes on) and `signal`.
 
@@ -106,7 +106,7 @@ const { api_key, user } = await deviceSignIn({
 });
 ```
 
-It asks the API for a code, shows it, and polls until the person approves it in the console; the key arrives here, never through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves. A live key that can scan needs a card on file: without one, the console asks the person to add it (nothing is charged) or to approve a key without `scans:write`.
+It asks the API for a code, shows it, and polls until the person approves it in the console; the key arrives here, never through the browser, and the code is never put in a link. `startDeviceSignIn()` and `waitForDeviceSignIn()` are the two halves. A `name` longer than 60 characters is cut; a poll that gets no answer is made again until the code expires, and every failure is a `SpaceContextError` (`NETWORK_ERROR` when the API cannot be reached). A live key that can scan needs a card on file: without one, the console asks the person to add it (nothing is charged) or to approve a key without `scans:write`.
 
 ## Errors
 
@@ -137,7 +137,7 @@ See [all error codes](../api/errors.md).
 | `timeoutMs` | 60 000 | Per request; uploads have no timeout |
 | `fetch` | global `fetch` | A custom fetch, for tests or proxies |
 
-- `429` is retried after `Retry-After`; `502`–`504` and network errors only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry; `cancel` and `delete` are never repeated after a network error or a `5xx`.
+- `429 RATE_LIMIT_EXCEEDED` is retried after `Retry-After` (`SCANS_IN_PROGRESS`, ten scans running, is returned at once); `502`–`504` and network errors only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry; `cancel` and `delete` are never repeated after a network error or a `5xx`.
 - The API key is sent only to the API's own origin and path: never to a storage upload URL, an evidence URL or another host. Redirects are never followed.
 
 ## Types

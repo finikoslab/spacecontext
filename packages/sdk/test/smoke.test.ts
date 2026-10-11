@@ -36,8 +36,11 @@ describe.skipIf(!KEY || !BASE)('the API, through the SDK, on a real host', () =>
     expect(document.stats.items).toBeGreaterThan(30);
     expect(document.enrichment).toMatchObject({ level: 'deep', status: 'complete' });
     expect(document.frames.some((frame) => frame.url)).toBe(true);
-    // A key without spaces:sensitive never reads the Wi-Fi password of the demo.
-    expect(JSON.stringify(document).toLowerCase()).not.toContain('sunny balcony');
+    // The Wi-Fi password of the demo: read only with spaces:sensitive, never without.
+    const sensitive = (await api.me()).key.scopes.includes('spaces:sensitive');
+    const text = JSON.stringify(document).toLowerCase();
+    if (sensitive) expect(text).toContain('sunny balcony');
+    else expect(text).not.toContain('sunny balcony');
 
     const markdown = await api.spaces.markdown('spc_demo');
     expect(markdown.startsWith('# Brisbane apartment')).toBe(true);

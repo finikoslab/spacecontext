@@ -130,7 +130,7 @@ export interface paths {
         put?: never;
         /**
          * Create a scan of a space created through the API
-         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). Needs `scans:write`.
+         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). An account holds at most 20 scans created and not started (both modes): past that, 429 `SCANS_IN_PROGRESS` (`max_open_scans`) until some are started or cancelled. A test scan keeps only whether it had a transcript, never its text (its result is the demo). Needs `scans:write`.
          */
         post: operations["createScan"];
         delete?: never;
@@ -374,7 +374,7 @@ export interface paths {
         put?: never;
         /**
          * Charge the scan and start the analysis
-         * @description Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `PAYMENT_METHOD_REQUIRED` (a live scan needs a card on file: added in the console, nothing charged), `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`, 503 `PAYMENTS_UNAVAILABLE` (a live scan where payments are not configured). Test keys are never charged and get the demo result. Needs `scans:write`.
+         * @description Checks that every frame (or the video) is uploaded, uses the free scan or charges the wallet, and starts the analysis. Answers 202 when it started the scan and 200 when the scan had already started. A failed analysis is refunded. Errors: 402 `PAYMENT_METHOD_REQUIRED` (a live scan needs a card on file: added in the console, nothing charged), `INSUFFICIENT_FUNDS` or `SPENDING_CAP_REACHED`, 409 `UPLOAD_INCOMPLETE`, 429 `SCANS_IN_PROGRESS`, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` when 5 live scans of the account failed that day because of their footage (no usable frame, an unreadable or too long video, nothing recognisable: each refunded) until midnight UTC, 503 `PAYMENTS_UNAVAILABLE` (a live scan where payments are not configured). Test keys are never charged and get the demo result. Needs `scans:write`.
          */
         post: operations["startScan"];
         delete?: never;
@@ -1374,6 +1374,8 @@ export interface components {
                 daily_limit?: number;
                 /** @description On a 429 from `GET /scans/{id}/events`: the streams an account may hold open at once. */
                 max_streams?: number;
+                /** @description On a 429 from `POST /spaces/{id}/scans`: the scans an account may hold created and not started. */
+                max_open_scans?: number;
             } & {
                 [key: string]: unknown;
             };

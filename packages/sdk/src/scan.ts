@@ -75,7 +75,7 @@ export interface ScanOptions<Format extends ScanFormat = 'document'> {
   type?: SpaceType;
   /** With `name`: your own id for the space; the same id returns the same space. */
   externalId?: string;
-  /** Language of the narration and of the document. Default `en`. */
+  /** Language of the document; the narration can be in any language. Default `en`. */
   language?: 'en' | 'it';
   /** A transcript you already have (with frames: the API transcribes videos itself). */
   transcript?: ScanInput['transcript'];
@@ -98,6 +98,11 @@ export type ScanResult<Format extends ScanFormat = 'document'> = {
   /** The space's document after the scan. */
   document: SpaceDocument;
 } & (Format extends 'markdown' ? { markdown: string } : Format extends 'skill' ? { skill: SkillBundle } : Record<never, never>);
+
+/** The API's limits: checked before anything is created. */
+const MAX_FRAMES = 120;
+const MAX_FRAME_BYTES = 2 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 const VIDEO_TYPES: Record<string, VideoContentType> = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.m4v': 'video/x-m4v' };
 const IMAGE_TYPES: Record<string, FrameContentType> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
@@ -188,6 +193,19 @@ function byteLength(body: UploadBody): number {
   return body instanceof Blob ? body.size : body.byteLength;
 }
 
+/** What the API would refuse after the space is created: refused before, so that no space is left without a scan. */
+function checkLimits(resolved: Resolved): void {
+  if (resolved.kind === 'video') {
+    if (byteLength(resolved.data) > MAX_VIDEO_BYTES) {
+      throw invalid(`The video is larger than ${MAX_VIDEO_BYTES / 1_048_576} MB: record at 1080p, or compress it`);
+    }
+    return;
+  }
+  if (resolved.frames.length > MAX_FRAMES) throw invalid(`${resolved.frames.length} frames: at most ${MAX_FRAMES} are accepted`);
+  const oversized = resolved.frames.findIndex((frame) => byteLength(frame.data) > MAX_FRAME_BYTES);
+  if (oversized !== -1) throw invalid(`Frame ${oversized} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
+}
+
 /** Runs the whole flow. Called by `SpaceContext.scan`. */
 export async function runScan<Format extends ScanFormat = 'document'>(
   sc: SpaceContext,
@@ -196,6 +214,7 @@ export async function runScan<Format extends ScanFormat = 'document'>(
 ): Promise<ScanResult<Format>> {
   if (Boolean(options.space) === Boolean(options.name)) throw invalid('Pass either space (an existing space id) or name (a space to create)');
   const resolved = await resolveSource(source);
+  checkLimits(resolved);
   const report = options.onProgress ?? (() => undefined);
   const request = { signal: options.signal };
 

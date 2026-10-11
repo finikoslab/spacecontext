@@ -45,7 +45,7 @@ export interface SpaceContextOptions {
   baseUrl?: string;
   /** A custom `fetch`, for tests or proxies. */
   fetch?: typeof fetch;
-  /** Retries of a request the API rejected for load (429, 502–504) or that failed on the network. Default 2. */
+  /** Retries of a request the API rejected for load (429 `RATE_LIMIT_EXCEEDED`, 502–504) or that failed on the network. Default 2. */
   maxRetries?: number;
   /** Per request, uploads excluded. Default 60 s. */
   timeoutMs?: number;
@@ -776,11 +776,14 @@ export class SpaceContext {
 
       if (response.ok) return response;
       const error = await errorFromResponse(response);
-      // A 429 was refused before any work: always safe to retry, unless the wait is
-      // long (a daily limit). A 5xx only when the request is idempotent.
+      // A rate limit was refused before any work: always safe to retry, unless the
+      // wait is long (a daily limit). Another 429 (`SCANS_IN_PROGRESS`: ten scans
+      // running) lasts as long as the work behind it and is returned at once. A
+      // 5xx only when the request is idempotent.
       const wait = askedWait(error);
+      const rateLimited = response.status === 429 && error.code === 'RATE_LIMIT_EXCEEDED';
       const retryable =
-        (response.status === 429 && spec.retryRateLimit !== false && (wait === null || wait * 1000 <= this.maxRetryDelayMs)) ||
+        (rateLimited && spec.retryRateLimit !== false && (wait === null || wait * 1000 <= this.maxRetryDelayMs)) ||
         (spec.idempotent && RETRYABLE_STATUSES.has(response.status));
       if (retryable && attempt < this.maxRetries) {
         await sleep(this.backoff(attempt, wait), spec.signal);

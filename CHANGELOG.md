@@ -19,6 +19,12 @@ All packages of this repository share a version.
 - CLI: `scan --json` (and `--format json`) exits with `0` after printing the document; it used to end with a `TypeError` and exit code `1`. Output piped into `head` no longer ends with an `EPIPE` error.
 - Skill: `get_scan_status` and `follow_scan` are listed as reading tools (they work on every connection).
 - Docs: top-ups from US$10; one free scan per card (a card already used on another account brings none); the daily caps on new spaces (200) and scans (500) per mode and the 10 open event streams per account.
+- CLI: the saved key goes only to the API it was saved for. `login` (device sign-in or `--key`) saves the API it signed in to whenever it is not the default one, `SPACECONTEXT_BASE_URL` included; a `--base-url` or `SPACECONTEXT_BASE_URL` naming another API with the saved key is refused (exit `2`) and says to pass `--api-key` or sign in there. `setup` signs in again for the API asked instead of using a key saved for another one.
+- CLI: `space --transcript` prints the transcript, with the time of each segment; a video over 100 MB is refused with how to fix it (record at 1080p, or the `ffmpeg` line to compress it); `setup` says "Card on file" from the wallet's `card_on_file`; the browser is opened only for https links (http on localhost), and on Windows without `cmd`.
+- SDK: only a `429 RATE_LIMIT_EXCEEDED` is waited out: `SCANS_IN_PROGRESS` from `scans.start` is returned at once instead of after two minutes of retries. `scan()` checks the frame count (120), frame size (2 MB) and video size (100 MB) before creating the space. Device sign-in cuts the name to 60 characters, reports a network failure as `NETWORK_ERROR` and polls again after a poll that got no answer.
+- MCP: when the account already holds its 20 active keys, the consent page says to revoke unused keys in the console instead of "Something went wrong"; a revoked key ends the grant on a resource read too (`spacecontext://spaces`, `spacecontext://spaces/{id}`); the staging server uses the API origin the staging API builds its links on.
+- Packages: `prepack` builds them (the CLI builds the SDK first); Node 22.12 or later, the first Node 22 that loads ES modules with `require()`.
+- Docs: `space_created` carries `spaceId`; a video gives 36 to 120 frames and is transcribed in whatever language is spoken (`--language` sets the report's); recording tips for phone videos; top-up presets up to US$100; prices exclude applicable taxes.
 
 
 ### SDK (`@spacecontext/sdk`)

@@ -13,7 +13,15 @@ description: 'How to record a space so that the analysis finds everything, and w
 | Photos | Up to 120 JPEG, PNG or WebP, 2 MB each, in the order they were taken |
 | Transcript (API only, optional) | Up to 600 segments of 2 000 characters, with their times |
 
-From a video, the server takes 36 frames spread over its length and transcribes the audio (English or Italian, chosen with `--language`). Videos are deleted as soon as the frames are extracted; the frames are kept as evidence.
+From a video, the server takes 36 to 120 frames spread over its length (about one every 4 seconds) and transcribes the audio in whatever language is spoken. `--language` (`en` or `it`) sets the language of the report. Videos are deleted as soon as the frames are extracted; the frames are kept as evidence.
+
+### Recording tips
+
+Phones often record in 4K, and a minute of 4K is several hundred MB: well over the 100 MB limit. 1080p is plenty for a scan.
+
+- **Record at 1080p.** On an iPhone: Settings > Camera > Record Video > 1080p.
+- **Keep clips short.** A minute at 1080p is about 60–130 MB, depending on the codec.
+- **Or compress** a video you already have: `ffmpeg -i in.mov -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4`.
 
 ## Record well
 

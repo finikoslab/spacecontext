@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { main, type Io } from '../src/cli.js';
 import { BILLING_URL, bundledSkill, MCP_URL, SKILL_URL } from '../src/setup.js';
-import { findExecutable, needsShell, runProgram, writeFileAtomic, type RunOptions, type RunResult } from '../src/system.js';
+import { browserCommand, findExecutable, needsShell, runProgram, writeFileAtomic, type RunOptions, type RunResult } from '../src/system.js';
 
 const LIVE_KEY = 'sc_live_setupkey0123456789';
 const TEST_KEY = 'sc_test_setupkey0123456789';
@@ -47,13 +47,16 @@ function api(options: { wallet?: Record<string, unknown> | Response; device?: 'a
     (call) => {
       if (call.method !== 'GET' || call.path !== '/wallet') return undefined;
       if (options.wallet instanceof Response) return options.wallet;
+      // What GET /wallet gives a key: the card on file, and of automatic top-up only whether it is on.
       return json({
         object: 'wallet',
         currency: 'usd',
         balance_cents: 0,
         free_scans_remaining: 1,
         scan_price_cents: 100,
-        auto_recharge: { enabled: false, threshold_cents: null, amount_cents: null, payment_method_saved: false, last_error: null },
+        card_on_file: false,
+        tax_added: false,
+        auto_recharge: { enabled: false },
         ...options.wallet,
       });
     },
@@ -193,7 +196,7 @@ describe('spacecontext setup', () => {
     expect(h.stderr()).toContain('2. Enter  BCDF-2345');
     expect(h.opened).toEqual([]);
     const config = path.join(configDir, 'config.json');
-    expect(JSON.parse(await readFile(config, 'utf8'))).toEqual({ apiKey: LIVE_KEY });
+    expect(JSON.parse(await readFile(config, 'utf8'))).toEqual({ apiKey: LIVE_KEY, baseUrl: BASE });
     expect((await stat(config)).mode & 0o777).toBe(0o600);
     expect(h.stdout() + h.stderr()).not.toContain(LIVE_KEY);
     expect(JSON.stringify(h.ran)).not.toContain(LIVE_KEY);
@@ -216,7 +219,7 @@ describe('spacecontext setup', () => {
     expect(await readFile(skillFile(), 'utf8')).toBe(REMOTE_SKILL);
 
     // 4. No card on file: the link, never a card prompt, and no browser with --yes.
-    expect(result.next).toContain(`Live scans need a card on file (a saved card, or a top-up already paid) — add a card or funds in Billing: ${BILLING_URL}`);
+    expect(result.next).toContain(`Live scans need a card on file — add one in Billing (nothing is charged): ${BILLING_URL}`);
 
     // 5. What is left for the person, then the SDK and the docs.
     expect(result.next).toEqual(
@@ -240,7 +243,7 @@ describe('spacecontext setup', () => {
 
   it('finds an earlier setup in place and changes nothing', async () => {
     await mkdir(configDir, { recursive: true });
-    await writeFile(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: LIVE_KEY }));
+    await writeFile(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: LIVE_KEY, baseUrl: BASE }));
     await mkdir(path.join(home, '.cursor'));
     const cursorConfig = `${JSON.stringify({ mcpServers: { spacecontext: { url: MCP_URL } } })}\n`;
     await writeFile(cursorFile(), cursorConfig);
@@ -248,7 +251,7 @@ describe('spacecontext setup', () => {
     await writeFile(skillFile(), REMOTE_SKILL);
     const h = harness({
       programs: ALL_PROGRAMS,
-      routes: api({ wallet: { balance_cents: 1250, auto_recharge: { enabled: false, payment_method_saved: true } } }),
+      routes: api({ wallet: { balance_cents: 1250, card_on_file: true } }),
       respond: clients({
         'claude mcp add': { code: 1, output: 'MCP server spacecontext already exists in user config\n' },
         'claude mcp get': { output: claudeGet(MCP_URL) },
@@ -540,7 +543,7 @@ describe('spacecontext setup', () => {
 
   it('signs in again when the saved key is of the other mode or no longer accepted, and never replaces a key it was given', async () => {
     await mkdir(configDir, { recursive: true });
-    await writeFile(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: LIVE_KEY }));
+    await writeFile(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: LIVE_KEY, baseUrl: BASE }));
 
     // --test with a saved live key: a test key replaces it; a test key needs no card.
     let h = harness({ routes: api({ approvedKey: TEST_KEY }) });
@@ -548,24 +551,24 @@ describe('spacecontext setup', () => {
     expect(JSON.parse(String(h.calls.find((call) => call.path === '/auth/device')!.body))).toMatchObject({ mode: 'test' });
     expect(h.stderr()).toContain('The saved key is a live key: signing in for a test key.');
     expect(h.stderr()).not.toContain('card on file');
-    expect(JSON.parse(await readFile(path.join(configDir, 'config.json'), 'utf8'))).toEqual({ apiKey: TEST_KEY });
+    expect(JSON.parse(await readFile(path.join(configDir, 'config.json'), 'utf8'))).toEqual({ apiKey: TEST_KEY, baseUrl: BASE });
     expect(summary(h).steps.find((step) => step.id === 'card')).toEqual({ id: 'card', status: 'skipped', detail: 'Test key: no card needed' });
     expect(summary(h).next.find((item) => item.startsWith('Code:'))).toContain("sc.spaces.ask('spc_demo'");
     expect(h.opened).toEqual([]);
 
     // And back to live.
-    h = harness({ routes: api({ approvedKey: LIVE_KEY, wallet: { auto_recharge: { enabled: false, payment_method_saved: true } } }) });
+    h = harness({ routes: api({ approvedKey: LIVE_KEY, wallet: { card_on_file: true } }) });
     expect(await main(['setup', '--skip-mcp', '--skip-skill', '--json', '--no-browser'], h.io)).toBe(0);
     expect(h.stderr()).toContain('The saved key is a test key: signing in for a live key.');
-    expect(JSON.parse(await readFile(path.join(configDir, 'config.json'), 'utf8'))).toEqual({ apiKey: LIVE_KEY });
+    expect(JSON.parse(await readFile(path.join(configDir, 'config.json'), 'utf8'))).toEqual({ apiKey: LIVE_KEY, baseUrl: BASE });
 
     // A revoked saved key: sign in again (the browser opens without --yes or --no-browser).
-    h = harness({ routes: api({ revoked: [LIVE_KEY, 'sc_live_revoked'], approvedKey: 'sc_live_newkey0123456789', wallet: { auto_recharge: { enabled: false, payment_method_saved: true } } }) });
-    await writeFile(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: 'sc_live_revoked' }));
+    h = harness({ routes: api({ revoked: [LIVE_KEY, 'sc_live_revoked'], approvedKey: 'sc_live_newkey0123456789', wallet: { card_on_file: true } }) });
+    await writeFile(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: 'sc_live_revoked', baseUrl: BASE }));
     expect(await main(['setup', '--skip-mcp', '--skip-skill', '--json'], h.io)).toBe(0);
     expect(h.stderr()).toContain('The saved key is no longer accepted: signing in again.');
     expect(h.opened).toEqual(['https://spacecontext.example/developers/console/authorize/']);
-    expect(JSON.parse(await readFile(path.join(configDir, 'config.json'), 'utf8'))).toEqual({ apiKey: 'sc_live_newkey0123456789' });
+    expect(JSON.parse(await readFile(path.join(configDir, 'config.json'), 'utf8'))).toEqual({ apiKey: 'sc_live_newkey0123456789', baseUrl: BASE });
 
     // A key from the environment is used as it is: never replaced, and a wrong mode is said.
     h = harness({ env: { SPACECONTEXT_API_KEY: LIVE_KEY } });
@@ -575,6 +578,24 @@ describe('spacecontext setup', () => {
     h = harness({ env: { SPACECONTEXT_API_KEY: LIVE_KEY } });
     expect(await main(['setup', '--skip-mcp', '--skip-skill', '--json'], h.io)).toBe(0);
     expect(summary(h).steps[0]!.detail).toBe('Signed in as dev@example.com (SPACECONTEXT_API_KEY: live, spaces:read, scans:read)');
+  });
+
+  it('never sends the saved key to another API than its own: it signs in for the one asked', async () => {
+    await mkdir(configDir, { recursive: true });
+    // Saved for the default API; setup is run against another one.
+    await writeFile(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: 'sc_live_productionkey' }));
+
+    let h = harness();
+    expect(await main(['setup', '--skip-login', '--skip-mcp', '--skip-skill', '--json'], h.io)).toBe(0);
+    expect(summary(h).steps[0]).toEqual({ id: 'sign-in', status: 'skipped', detail: '--skip-login (the saved key is for https://api.spacecontext.app/v1)' });
+    expect(summary(h).steps.find((step) => step.id === 'card')).toMatchObject({ status: 'skipped', detail: 'No key to read the wallet with' });
+    expect(h.calls).toEqual([]);
+
+    h = harness({ routes: api({ wallet: { card_on_file: true } }) });
+    expect(await main(['setup', '--skip-mcp', '--skip-skill', '--json', '--no-browser'], h.io)).toBe(0);
+    expect(h.stderr()).toContain(`The saved key is for https://api.spacecontext.app/v1: signing in for ${BASE}.`);
+    expect(h.calls.some((call) => call.headers.get('authorization') === 'Bearer sc_live_productionkey')).toBe(false);
+    expect(JSON.parse(await readFile(path.join(configDir, 'config.json'), 'utf8'))).toEqual({ apiKey: LIVE_KEY, baseUrl: BASE });
   });
 
   it('keeps going when the sign-in is denied, and exits 1', async () => {
@@ -599,30 +620,28 @@ describe('spacecontext setup', () => {
       await main(['setup', '--skip-mcp', '--skip-skill', '--json', ...args], h.io);
       return { h, step: summary(h).steps.find((step) => step.id === 'card')! };
     };
-    const recharge = (extra: Record<string, unknown>) => ({ enabled: false, threshold_cents: null, amount_cents: null, payment_method_saved: false, last_error: null, ...extra });
-
     // The API says whether the account has a card on file (a saved card, or a top-up already paid).
-    let result = await live({ auto_recharge: recharge({ card_on_file: false }) });
+    let result = await live({ card_on_file: false });
     expect(result.step).toEqual({ id: 'card', status: 'skipped', detail: 'No card on file yet (1 free scan left)' });
     expect(summary(result.h).next).toContain(`Live scans need a card on file — add one in Billing (nothing is charged): ${BILLING_URL}`);
     expect(result.h.opened).toEqual([BILLING_URL]);
-    expect((await live({ auto_recharge: recharge({ card_on_file: false }) }, '--no-browser')).h.opened).toEqual([]);
+    expect((await live({ card_on_file: false }, '--no-browser')).h.opened).toEqual([]);
 
-    // A top-up paid without saving the card, spent down to nothing: a card on file all the same; only funds are missing.
-    result = await live({ balance_cents: 0, free_scans_remaining: 0, auto_recharge: recharge({ card_on_file: true }) });
-    expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Card on file (a paid top-up): US$0.00, 0 free scans left' });
+    // A saved card, or a top-up paid without saving it and spent down to nothing: a card on file all the same; only funds are missing.
+    result = await live({ balance_cents: 0, free_scans_remaining: 0, card_on_file: true });
+    expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Card on file: US$0.00, 0 free scans left' });
     expect(summary(result.h).next).toContain(`Add funds before your next live scan (US$1.00 each): ${BILLING_URL}`);
     expect(summary(result.h).next.some((item) => item.startsWith('Live scans need a card'))).toBe(false);
     expect(result.h.opened).toEqual([]);
 
     // An API without card_on_file: no saved card and no balance cannot be told apart from a top-up spent, so both are offered.
-    result = await live({});
+    result = await live({ card_on_file: undefined });
     expect(result.step).toEqual({ id: 'card', status: 'skipped', detail: 'No saved card and no balance (1 free scan left)' });
     expect(summary(result.h).next).toContain(`Live scans need a card on file (a saved card, or a top-up already paid) — add a card or funds in Billing: ${BILLING_URL}`);
     expect(result.h.opened).toEqual([BILLING_URL]);
 
-    // A balance stands for a paid top-up.
-    result = await live({ balance_cents: 1000, free_scans_remaining: 0 });
+    // There, a balance stands for a paid top-up.
+    result = await live({ balance_cents: 1000, free_scans_remaining: 0, card_on_file: undefined });
     expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Prepaid balance: US$10.00, 0 free scans left' });
     expect(summary(result.h).next.some((item) => item.startsWith('Add funds'))).toBe(false);
     expect(result.h.opened).toEqual([]);
@@ -650,6 +669,20 @@ describe('setup system helpers', () => {
     expect(await findExecutable('claude', { PATH: 'bin' }, 'linux')).toBeNull();
     expect(needsShell('C:\\x\\code.cmd')).toBe(true);
     expect(needsShell('/usr/bin/code')).toBe(false);
+  });
+
+  it('opens web pages only, and on Windows without cmd, whatever the URL holds', () => {
+    const page = 'https://spacecontext.app/developers/console/authorize/';
+    expect(browserCommand(page, 'darwin')).toEqual(['open', [page]]);
+    expect(browserCommand(page, 'linux')).toEqual(['xdg-open', [page]]);
+    expect(browserCommand(page, 'win32')).toEqual(['rundll32', ['url.dll,FileProtocolHandler', page]]);
+    // cmd would run what follows & in the URL; rundll32 receives it as one argument.
+    expect(browserCommand('https://example.com/?a=1&calc', 'win32')).toEqual(['rundll32', ['url.dll,FileProtocolHandler', 'https://example.com/?a=1&calc']]);
+    expect(browserCommand('http://localhost:8788/authorize', 'win32')![1][1]).toBe('http://localhost:8788/authorize');
+    expect(browserCommand('http://127.0.0.1:3000/', 'linux')).toEqual(['xdg-open', ['http://127.0.0.1:3000/']]);
+    for (const url of ['http://spacecontext.app/', 'file:///etc/passwd', 'javascript:alert(1)', 'ms-settings:', 'calc.exe', '\\\\server\\share', '-a Calculator']) {
+      expect(browserCommand(url, 'win32'), url).toBeNull();
+    }
   });
 
   it('runs a program with an argument array, never a shell, and stops it on time or on cue', async () => {

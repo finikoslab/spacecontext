@@ -4,12 +4,32 @@ import { constants } from 'node:fs';
 import { access, chmod, mkdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+/**
+ * The program that opens a URL in the browser, with its arguments; null when
+ * the URL is not a web page (https, or http on this computer). The URL may come
+ * from the API: on Windows it never goes through cmd, which reads `&`, `^` and
+ * `%` in it as commands and variables.
+ */
+export function browserCommand(url: string, platform: NodeJS.Platform = process.platform): [string, string[]] | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const local = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local)) return null;
+  if (platform === 'darwin') return ['open', [parsed.href]];
+  if (platform === 'win32') return ['rundll32', ['url.dll,FileProtocolHandler', parsed.href]];
+  return ['xdg-open', [parsed.href]];
+}
+
 /** Opens a URL in the person's browser, best effort: a failure only means they open it themselves. */
 export function openUrl(url: string): void {
-  const [command, args] =
-    process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
+  const command = browserCommand(url);
+  if (!command) return;
   try {
-    spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => undefined).unref();
+    spawn(command[0], command[1], { stdio: 'ignore', detached: true }).on('error', () => undefined).unref();
   } catch {
     // Nothing: the link is printed anyway.
   }

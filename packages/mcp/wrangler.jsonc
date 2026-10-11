@@ -50,7 +50,10 @@
       "preview_urls": false,
       "routes": [{ "pattern": "mcp-dev.spacecontext.app", "custom_domain": true }],
       "vars": {
-        "API_BASE_URL": "https://api-dev.spacecontext.app/v1",
+        // The origin the staging API builds its evidence and upload URLs on
+        // (its PUBLIC_API_BASE_URL): the SDK and create_scan tell the API's own
+        // URLs by it. Requests go through the BACKEND binding whatever the host.
+        "API_BASE_URL": "https://dev.spacecontext.app/v1",
         "PUBLIC_URL": "https://mcp-dev.spacecontext.app",
         "APPLE_SERVICES_ID": "it.spacecontext.ai.web",
         "GOOGLE_WEB_CLIENT_ID": "98828797984-8a9im4pl24nf7c7g80o4i92po2hhvf0g.apps.googleusercontent.com"

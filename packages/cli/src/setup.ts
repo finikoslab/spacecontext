@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { SpaceContext, SpaceContextError } from '@spacecontext/sdk';
 import type { Io } from './cli.js';
-import { configDirectory, readConfig, setting } from './config.js';
+import { apiUrl, configDirectory, readConfig, setting } from './config.js';
 import { UsageError } from './files.js';
 import { BILLING_URL, DOCS_URL, KEYS_URL } from './links.js';
 import { deviceLogin, openInBrowser } from './signin.js';
@@ -190,20 +190,24 @@ type KeyInUse = { key: string | null; baseUrl: string | undefined };
 /**
  * The key the CLI would use (`--api-key`, then SPACECONTEXT_API_KEY, then the
  * saved one), checked with the API. A device sign-in runs when there is none,
- * when the saved key is of the other mode, or when the API no longer accepts it.
+ * when the saved key is of the other mode or for another API, or when the API
+ * no longer accepts it.
  */
 async function signIn(run: Run): Promise<KeyInUse> {
   const { io, options } = run;
   const stored = await readConfig(configDirectory(io.env));
   const environmentKey = setting(io.env, 'SPACECONTEXT_API_KEY');
-  const source = options.apiKey ? '--api-key' : environmentKey ? 'SPACECONTEXT_API_KEY' : stored.apiKey ? 'saved' : null;
-  const key = options.apiKey ?? environmentKey ?? stored.apiKey ?? null;
-  // The base URL saved by `login` belongs to the key saved with it (as in every command).
-  const baseUrl = options.baseUrl ?? setting(io.env, 'SPACECONTEXT_BASE_URL') ?? (source === 'saved' ? stored.baseUrl : undefined);
+  const requested = options.baseUrl ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
+  // The saved key goes only to the API it was saved for, as in every command.
+  const savedElsewhere = stored.apiKey !== undefined && requested !== undefined && apiUrl(requested) !== apiUrl(stored.baseUrl);
+  const savedKey = savedElsewhere ? undefined : stored.apiKey;
+  const source = options.apiKey ? '--api-key' : environmentKey ? 'SPACECONTEXT_API_KEY' : savedKey ? 'saved' : null;
+  const key = options.apiKey ?? environmentKey ?? savedKey ?? null;
+  const baseUrl = source === 'saved' ? apiUrl(stored.baseUrl) : requested;
   const wanted = options.test ? 'test' : 'live';
 
   if (options.skipLogin) {
-    report(run, 'sign-in', 'skipped', key ? '--skip-login (the key in use is kept)' : '--skip-login (no key yet)');
+    report(run, 'sign-in', 'skipped', key ? '--skip-login (the key in use is kept)' : savedElsewhere ? `--skip-login (the saved key is for ${apiUrl(stored.baseUrl)})` : '--skip-login (no key yet)');
     if (!key) run.next.push(SIGN_IN);
     return { key, baseUrl };
   }
@@ -226,12 +230,14 @@ async function signIn(run: Run): Promise<KeyInUse> {
     return { key: null, baseUrl };
   } else if (key) {
     io.stderr(`The saved key is ${keyMode(key) ? `a ${keyMode(key)} key` : 'not a valid key'}: signing in for a ${wanted} key.\n`);
+  } else if (savedElsewhere) {
+    io.stderr(`The saved key is for ${apiUrl(stored.baseUrl)}: signing in for ${apiUrl(requested)}.\n`);
   }
 
   try {
     const { signedIn } = await deviceLogin(io, { mode: wanted, baseUrl: options.baseUrl, openBrowser: !options.noBrowser && !options.yes });
     report(run, 'sign-in', 'done', `Signed in as ${signedIn.user.email} (${signedIn.key.mode}, ${signedIn.key.scopes.join(', ')}); the key is saved for the CLI`);
-    return { key: signedIn.api_key, baseUrl: options.baseUrl ?? setting(io.env, 'SPACECONTEXT_BASE_URL') };
+    return { key: signedIn.api_key, baseUrl: requested };
   } catch (error) {
     report(run, 'sign-in', 'failed', describe(error));
     run.next.push(SIGN_IN);
@@ -554,7 +560,11 @@ async function skill(run: Run): Promise<void> {
 
 // ------------------------------------------------------------------ 4. card and balance
 
-/** `card_on_file`: the API's own answer (a saved card, or a top-up already paid). Absent from older API versions. */
+/**
+ * `card_on_file`: the API's own answer (a saved card, or a top-up already paid).
+ * Absent from older API versions. The wallet a key reads says nothing else of
+ * the card (`auto_recharge` has only `enabled`).
+ */
 type WalletCard = { card_on_file?: boolean };
 
 async function card(run: Run, use: KeyInUse): Promise<void> {
@@ -563,8 +573,7 @@ async function card(run: Run, use: KeyInUse): Promise<void> {
   try {
     const wallet = await api(run, use.key, use.baseUrl).wallet();
     const free = `${wallet.free_scans_remaining} free scan${wallet.free_scans_remaining === 1 ? '' : 's'} left`;
-    const saved = wallet.auto_recharge.payment_method_saved === true;
-    const onFile = (wallet.auto_recharge as WalletCard).card_on_file ?? (wallet as WalletCard).card_on_file;
+    const onFile = (wallet as WalletCard).card_on_file;
     const openBilling = () => {
       if (!run.options.noBrowser && !run.options.yes) openInBrowser(run.io, BILLING_URL);
     };
@@ -573,8 +582,8 @@ async function card(run: Run, use: KeyInUse): Promise<void> {
       openBilling();
       return report(run, 'card', 'skipped', `No card on file yet (${free})`);
     }
-    if (onFile === undefined && !saved && wallet.balance_cents <= 0) {
-      // An older API: no saved card and nothing on the balance, which may also be a top-up paid and spent.
+    if (onFile === undefined && wallet.balance_cents <= 0) {
+      // An older API: nothing on the balance, which may also be a top-up paid and spent.
       run.next.push(`Live scans need a card on file (a saved card, or a top-up already paid) — add a card or funds in Billing: ${BILLING_URL}`);
       openBilling();
       return report(run, 'card', 'skipped', `No saved card and no balance (${free})`);
@@ -582,7 +591,7 @@ async function card(run: Run, use: KeyInUse): Promise<void> {
     if (wallet.free_scans_remaining <= 0 && wallet.balance_cents < wallet.scan_price_cents) {
       run.next.push(`Add funds before your next live scan (${dollars(wallet.scan_price_cents)} each): ${BILLING_URL}`);
     }
-    const holder = saved ? 'Card on file' : onFile ? 'Card on file (a paid top-up)' : 'Prepaid balance';
+    const holder = onFile ? 'Card on file' : 'Prepaid balance';
     report(run, 'card', 'done', `${holder}: ${dollars(wallet.balance_cents)}, ${free}`);
   } catch (error) {
     if (error instanceof SpaceContextError && error.code === 'INSUFFICIENT_SCOPE') {

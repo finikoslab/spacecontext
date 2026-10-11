@@ -1,7 +1,7 @@
 import { hostname } from 'node:os';
 import { deviceSignIn, type DeviceToken } from '@spacecontext/sdk';
 import type { Io } from './cli.js';
-import { configDirectory, setting, writeConfig } from './config.js';
+import { configDirectory, setting, signedInConfig, writeConfig } from './config.js';
 import { openUrl } from './system.js';
 import { Status, styleFor } from './ui.js';
 
@@ -20,7 +20,7 @@ export async function deviceLogin(
   io: Io,
   options: { mode: 'live' | 'test'; baseUrl?: string | undefined; openBrowser: boolean }
 ): Promise<{ signedIn: DeviceToken; file: string }> {
-  // Only a base URL given explicitly is saved with the key (see `client` in cli.ts).
+  // The API signed in to is saved with the key, which goes to no other (see `keyInUse` in cli.ts).
   const requestBase = options.baseUrl ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
   const s = styleFor(io, 'stderr');
   const status = new Status(io);
@@ -53,6 +53,6 @@ export async function deviceLogin(
     throw error;
   }
   status.complete('Approved in the console');
-  const file = await writeConfig(configDirectory(io.env), { apiKey: signedIn.api_key, ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}) });
+  const file = await writeConfig(configDirectory(io.env), signedInConfig(signedIn.api_key, requestBase));
   return { signedIn, file };
 }

@@ -65,6 +65,43 @@ describe('device sign-in', () => {
     }
   });
 
+  it('cuts a long name to what the API takes, on one line', async () => {
+    const { fetch, calls } = fakeFetch(() => json(started, 201));
+    await startDeviceSignIn({ baseUrl: BASE, fetch, name: `CLI on ${'build-agent-'.repeat(8)}local` });
+    const name = (calls[0]!.body as { name: string }).name;
+    expect(name).toHaveLength(60);
+    expect(name).toMatch(/^CLI on build-agent-build-agent-.*…$/);
+
+    // An emoji across the cut is left out whole, never halved.
+    await startDeviceSignIn({ baseUrl: BASE, fetch, name: `CLI on\n  ${'x'.repeat(51)}😀yz` });
+    expect((calls[1]!.body as { name: string }).name).toBe(`CLI on ${'x'.repeat(51)}…`);
+    await startDeviceSignIn({ baseUrl: BASE, fetch, name: 'CLI\ton  MacBook' });
+    expect((calls[2]!.body as { name: string }).name).toBe('CLI on MacBook');
+  });
+
+  it('says NETWORK_ERROR when the API cannot be reached, and polls again after a poll that got no answer', async () => {
+    const down = fakeFetch(() => {
+      throw new TypeError('fetch failed');
+    });
+    const error = await startDeviceSignIn({ baseUrl: BASE, fetch: down.fetch }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SpaceContextError);
+    expect(error).toMatchObject({ status: 0, code: 'NETWORK_ERROR' });
+
+    const flaky = fakeFetch((call, index) => {
+      if (call.url.endsWith('/auth/device')) return json(started, 201);
+      if (index === 1) throw new TypeError('fetch failed');
+      return index === 2 ? apiError(400, 'AUTHORIZATION_PENDING') : json(token);
+    });
+    expect(await deviceSignIn({ baseUrl: BASE, fetch: flaky.fetch, onCode: () => undefined })).toEqual(token);
+    expect(flaky.calls).toHaveLength(4);
+
+    // Still no answer when the code expires: the network error, not a hang.
+    const gone = fakeFetch(() => {
+      throw new TypeError('fetch failed');
+    });
+    await expect(waitForDeviceSignIn({ ...started, expires_in: 0 }, { baseUrl: BASE, fetch: gone.fetch })).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+  });
+
   it('gives up when the code outlives its time, and refuses a plain-http API', async () => {
     const { fetch } = fakeFetch(() => apiError(400, 'AUTHORIZATION_PENDING'));
     await expect(waitForDeviceSignIn({ ...started, expires_in: 0 }, { baseUrl: BASE, fetch })).rejects.toMatchObject({ code: 'DEVICE_CODE_EXPIRED' });

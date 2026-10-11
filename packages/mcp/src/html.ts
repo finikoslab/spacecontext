@@ -199,6 +199,24 @@ ${hidden({ handle: input.handle, oauth: input.oauth, ticket: input.ticket, ...(i
   );
 }
 
+/** Where keys are revoked: the console's API keys page, on the production site like Billing. */
+export const CONSOLE_KEYS_URL = 'https://spacecontext.app/developers/console/keys/';
+
+/**
+ * The account already holds as many API keys as it may, so the key of this
+ * connection could not be created: one has to go first.
+ */
+export function keyLimitPage(headers?: Headers): Response {
+  return page(
+    'Too many API keys',
+    `<h1>Too many API keys</h1>
+<p>Your Space Context account already has 20 active API keys, the most it can hold, and each connected assistant needs a key of its own.</p>
+<p><a href="${CONSOLE_KEYS_URL}" target="_blank" rel="noopener noreferrer">Revoke the keys you no longer use in the console</a> (API keys), then start again from your assistant.</p>`,
+    409,
+    headers
+  );
+}
+
 export function errorPage(title: string, message: string, status: number, headers?: Headers): Response {
   return page(title, `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>`, status, headers);
 }

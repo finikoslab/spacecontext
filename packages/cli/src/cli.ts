@@ -2,7 +2,7 @@ import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 import { describeScan, SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
 import { writeFile } from 'node:fs/promises';
-import { clearConfig, configDirectory, readConfig, setting, writeConfig } from './config.js';
+import { apiUrl, clearConfig, configDirectory, readConfig, setting, signedInConfig, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
 import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
 import { COMMAND_HELP, commandHelp, GLOBAL_OPTIONS, mainHelp, SPACE_TYPES, usageOf } from './help.js';
@@ -152,10 +152,20 @@ async function keyInUse(context: Context): Promise<KeyInUse> {
     ]);
   }
   const source = values['api-key'] !== undefined ? 'flag' : environmentKey !== undefined ? 'env' : 'saved';
-  // The base URL saved by `login` belongs to the key saved with it: a key from
-  // the flag or the environment never goes to it.
-  const baseUrl = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL') ?? (source === 'saved' ? stored.baseUrl : undefined);
-  return { apiKey, source, baseUrl, file: path.join(directory, 'config.json') };
+  const file = path.join(directory, 'config.json');
+  const requested = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
+  if (source !== 'saved') return { apiKey, source, baseUrl: requested, file };
+  // The saved key goes only to the API it was saved for (the default one when
+  // `login` saved none): never to another one a flag or the environment names.
+  const saved = apiUrl(stored.baseUrl);
+  if (requested !== undefined && apiUrl(requested) !== saved) {
+    const other = apiUrl(requested);
+    throw new UsageError(`The saved key is for ${saved}: it is not sent to ${other}`, [
+      `Pass a key for ${other} with --api-key (or SPACECONTEXT_API_KEY),\nor sign in there: \`spacecontext login --base-url ${other}\``,
+      `Or ${values['base-url'] !== undefined ? 'drop --base-url' : 'unset SPACECONTEXT_BASE_URL'} to use the saved key`,
+    ]);
+  }
+  return { apiKey, source, baseUrl: saved, file };
 }
 
 const SOURCE_NAMES = { flag: '--api-key', env: 'SPACECONTEXT_API_KEY', saved: 'the saved key' } as const;
@@ -168,7 +178,7 @@ async function client(context: Context): Promise<SpaceContext> {
   }
   context.failure.keySource = source;
   context.failure.keyMode = apiKey.startsWith('sc_test_') ? 'test' : 'live';
-  if (baseUrl) context.failure.baseUrl = baseUrl;
+  if (baseUrl && apiUrl(baseUrl) !== DEFAULT_API_URL) context.failure.baseUrl = baseUrl;
   return new SpaceContext({
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
@@ -227,6 +237,12 @@ function severity(s: Style, value: string | null | undefined): string {
   return s.dim(label);
 }
 
+/** `1:05` from milliseconds into the recording. */
+function clock(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 function documentSummary(s: Style, document: SpaceDocument, width: number | undefined): string {
   const stats = document.stats;
   const lines = [
@@ -275,6 +291,17 @@ function documentSummary(s: Style, document: SpaceDocument, width: number | unde
     if (unseen.length > 0) lines.push(`Not filmed: ${unseen.join(', ')}`);
   }
   for (const warning of document.coverage.warnings) lines.push('', `${s.warn} ${warning}`);
+
+  // Only with --transcript (and a key with spaces:sensitive): what was said, when.
+  const transcript = document.transcript;
+  if (transcript) {
+    lines.push('', s.bold('Transcript'));
+    if (transcript.segments.length > 0) {
+      for (const segment of transcript.segments) lines.push(wrap(`${s.dim(clock(segment.start_ms))} ${segment.text}`, width, '  '));
+    } else {
+      lines.push(transcript.text ? wrap(transcript.text, width, '  ') : s.dim('  Nothing was said.'));
+    }
+  }
   return `${lines.join('\n')}\n`;
 }
 
@@ -343,7 +370,7 @@ async function typedKey(io: Io): Promise<string> {
   return key;
 }
 
-function loggedIn(context: Context, email: string, mode: string, scopes: string[], file: string): string {
+function loggedIn(context: Context, email: string, mode: string, scopes: string[], file: string, otherApi: string | undefined): string {
   const { io, out: s } = context;
   const next =
     mode === 'test'
@@ -351,7 +378,7 @@ function loggedIn(context: Context, email: string, mode: string, scopes: string[
       : ['Your spaces: `spacecontext spaces`', ...(scopes.includes('scans:write') ? ['Scan one: `spacecontext scan ./video.mp4 --name "My place"`'] : [])];
   const lines = [
     `${s.ok} Logged in as ${s.bold(email)} with a ${mode} key (${scopes.join(', ')}).\n`,
-    `  ${s.dim(`Saved in ${tildePath(io, file)}`)}\n`,
+    `  ${s.dim(`Saved in ${tildePath(io, file)}${otherApi ? `, for ${otherApi}` : ''}`)}\n`,
   ];
   if (setting(io.env, 'SPACECONTEXT_API_KEY')) {
     lines.push(`${s.warn} SPACECONTEXT_API_KEY is set: commands use it, not the key just saved. Unset it to use this one.\n`);
@@ -361,14 +388,16 @@ function loggedIn(context: Context, email: string, mode: string, scopes: string[
 
 async function login(context: Context): Promise<void> {
   const { io, values } = context;
-  // Only a base URL given explicitly is saved with the key (see `client`).
-  const baseUrl = values['base-url'];
+  // The API signed in to, saved with the key unless it is the default one (see `keyInUse`).
+  const baseUrl = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
+  const otherApi = baseUrl && apiUrl(baseUrl) !== DEFAULT_API_URL ? apiUrl(baseUrl) : undefined;
+  if (otherApi) context.failure.baseUrl = otherApi;
   let key = values.key ?? values['api-key'];
   if (key === '-') key = await typedKey(io);
   if (!key) {
     // Device sign-in: a code to approve in the console; the key comes back here, never through the browser.
     const { signedIn, file } = await deviceLogin(io, { mode: values.test ? 'test' : 'live', baseUrl, openBrowser: !values['no-browser'] });
-    print(io, values, { user: signedIn.user, key: signedIn.key }, () => loggedIn(context, signedIn.user.email, signedIn.key.mode, signedIn.key.scopes, file));
+    print(io, values, { user: signedIn.user, key: signedIn.key }, () => loggedIn(context, signedIn.user.email, signedIn.key.mode, signedIn.key.scopes, file, otherApi));
     return;
   }
   if (!/^sc_(live|test)_[A-Za-z0-9_-]+$/.test(key)) {
@@ -377,8 +406,8 @@ async function login(context: Context): Promise<void> {
   context.failure.keySource = 'flag';
   const sc = new SpaceContext({ apiKey: key, ...(baseUrl ? { baseUrl } : {}), ...(io.fetch ? { fetch: io.fetch } : {}) });
   const me = await busy(context, 'Checking the key', () => sc.me());
-  const file = await writeConfig(configDirectory(io.env), { apiKey: key, ...(baseUrl ? { baseUrl } : {}) });
-  print(io, values, me, () => loggedIn(context, me.user.email, me.key.mode, me.key.scopes, file));
+  const file = await writeConfig(configDirectory(io.env), signedInConfig(key, baseUrl));
+  print(io, values, me, () => loggedIn(context, me.user.email, me.key.mode, me.key.scopes, file, otherApi));
 }
 
 async function logout(context: Context): Promise<void> {
@@ -404,7 +433,7 @@ async function whoami(context: Context): Promise<void> {
       ['Scopes', me.key.scopes.join(', ')],
       ['From', from],
     ];
-    if (use.baseUrl && use.baseUrl.replace(/\/+$/, '') !== DEFAULT_API_URL) rows.push(['API', use.baseUrl]);
+    if (apiUrl(use.baseUrl) !== DEFAULT_API_URL) rows.push(['API', apiUrl(use.baseUrl)]);
     return rows.map(([label, value]) => `${s.dim(label.padEnd(9))}${value}\n`).join('');
   });
 }
@@ -685,7 +714,12 @@ async function scan(context: Context): Promise<void> {
   const source = await scanSource(input);
   // Checked before anything is created: the API limits, from the same source as the SDK.
   if (source.kind === 'video' && source.size > MAX_VIDEO_BYTES) {
-    throw new UsageError(`${path.basename(source.file)} is larger than ${MAX_VIDEO_BYTES / 1_048_576} MB`, ['Trim or compress the video, or scan photos instead']);
+    // Phones often record in 4K: hundreds of MB a minute, where 1080p is plenty.
+    const name = path.basename(source.file);
+    throw new UsageError(`${name} is ${size(source.size)}: a video can be up to ${MAX_VIDEO_BYTES / 1_048_576} MB`, [
+      'Record at 1080p (iPhone: Settings > Camera > Record Video > 1080p) and keep it short',
+      `Or compress it: \`ffmpeg -i ${/^[\w.-]+$/.test(name) ? name : 'in.mov'} -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4\``,
+    ]);
   }
   let totalBytes = source.kind === 'video' ? source.size : 0;
   if (source.kind === 'frames') {

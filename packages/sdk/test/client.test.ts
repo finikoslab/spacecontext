@@ -142,6 +142,11 @@ describe('SpaceContext client', () => {
     await expect(client(daily.fetch).search('oven')).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
     expect(daily.calls).toHaveLength(1);
 
+    // Ten scans running: not a rate limit, waiting a minute would not help either.
+    const busy = fakeFetch(() => apiError(429, 'SCANS_IN_PROGRESS', { retry_after: 60 }));
+    await expect(client(busy.fetch).scans.start('scn_1')).rejects.toMatchObject({ status: 429, code: 'SCANS_IN_PROGRESS' });
+    expect(busy.calls).toHaveLength(1);
+
     // maxRetries bounds the attempts.
     const always = fakeFetch(() => apiError(429, 'RATE_LIMIT_EXCEEDED', {}, { 'Retry-After': '0' }));
     await expect(client(always.fetch, { maxRetries: 1 }).search('oven')).rejects.toMatchObject({ status: 429 });

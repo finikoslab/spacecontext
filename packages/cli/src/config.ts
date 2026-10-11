@@ -1,8 +1,20 @@
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { DEFAULT_API_URL } from './links.js';
 
 export type StoredConfig = { apiKey?: string; baseUrl?: string };
+
+/** The API a base URL names, to compare two: the default one when unset, without a trailing slash. */
+export function apiUrl(baseUrl: string | undefined): string {
+  return (baseUrl ?? DEFAULT_API_URL).replace(/\/+$/, '');
+}
+
+/** What a sign-in saves: the key, and the API it is for unless that is the default one. */
+export function signedInConfig(apiKey: string, baseUrl: string | undefined): StoredConfig {
+  const api = apiUrl(baseUrl);
+  return api === DEFAULT_API_URL ? { apiKey } : { apiKey, baseUrl: api };
+}
 
 /** A variable of the environment; empty or blank counts as unset (`SPACECONTEXT_API_KEY=` must not hide the saved key). */
 export function setting(env: Record<string, string | undefined>, name: string): string | undefined {

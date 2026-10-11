@@ -61,11 +61,13 @@ The answer is the scan, with upload instructions:
 
 ## 3. Upload
 
-**Video**: `PUT` the bytes to `upload.url` with `upload.headers`. When the URL points to storage (a signed link, valid for an hour), do not send your API key. When it points to the API (`…/v1/scans/{id}/video`, up to 95 MB), send the `Authorization` header as usual.
+**Video**: `PUT` the bytes to `upload.url` with `upload.headers`. When the URL points to storage (a signed link, valid for an hour), do not send your API key. When it points to the API (`…/v1/scans/{id}/video`, up to 95 MB), send the `Authorization` header as usual. A video can be up to 100 MB and 10 minutes.
 
 ```bash
 curl -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @flat.mp4
 ```
+
+**Recording tips.** Phones often record in 4K (several hundred MB a minute); 1080p is plenty. Record at 1080p (iPhone: Settings > Camera > Record Video > 1080p) and keep clips short: a minute at 1080p is about 60–130 MB depending on the codec. Or compress first: `ffmpeg -i in.mov -vf scale=-2:1080 -c:v libx264 -crf 26 -c:a aac out.mp4`.
 
 **Photos**: one `PUT` per photo to `upload.url_template` with `{index}` replaced, starting at 0:
 
