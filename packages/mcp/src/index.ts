@@ -1,4 +1,5 @@
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
+import { iconResponse } from './brand.js';
 import { createMcpHandler } from 'agents/mcp/server';
 import { authHandler, REQUIRED_SCOPES, SCOPES_SUPPORTED } from './authorize.js';
 import { apiClient } from './backend.js';
@@ -15,7 +16,7 @@ const mcpHandler = {
     const props = (ctx as ExecutionContext & { props: GrantProps }).props;
     const api = apiClient(env, props.apiKey, request.headers.get('CF-Connecting-IP'));
     const hooks = { onUnauthorized: () => revokeGrantOfKey(env, props) };
-    return createMcpHandler(() => createServer(api, hooks), { route: '/mcp', allowedHostnames: [new URL(env.PUBLIC_URL).hostname] })(request, env, ctx);
+    return createMcpHandler(() => createServer(api, hooks, new URL(env.PUBLIC_URL).origin), { route: '/mcp', allowedHostnames: [new URL(env.PUBLIC_URL).hostname] })(request, env, ctx);
   },
 };
 
@@ -61,6 +62,11 @@ const SERVER_CARD_PATH = '/.well-known/mcp/server-card.json';
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // The Space Context mark, for clients and browsers that show the server's icon.
+    if (request.method === 'GET') {
+      const icon = iconResponse(new URL(request.url).pathname);
+      if (icon) return Promise.resolve(icon);
+    }
     // The MCP Server Card: public discovery, before any sign-in.
     if (request.method === 'GET' && new URL(request.url).pathname === SERVER_CARD_PATH) {
       return Promise.resolve(

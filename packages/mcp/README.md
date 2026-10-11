@@ -1,3 +1,5 @@
+<p align="center"><img src="https://spacecontext.app/icon/icon-512.png" width="64" height="64" alt="Space Context"></p>
+
 # Space Context MCP server
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/finikoslab/spacecontext/blob/HEAD/LICENSE)

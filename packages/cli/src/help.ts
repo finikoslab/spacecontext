@@ -1,6 +1,6 @@
 import type { ReportLanguage } from '@spacecontext/sdk';
 import { CLI_DOCS_URL, DEFAULT_API_URL } from './links.js';
-import { brandLine, type Style } from './ui.js';
+import { brandHeader, brandLine, type Style } from './ui.js';
 
 /**
  * Every command's help, and the options it takes: `spacecontext --help` lists
@@ -269,8 +269,7 @@ function rows(s: Style, entries: Array<[string, string]>, width: number): string
 /** `spacecontext`, `spacecontext --help`. */
 export function mainHelp(s: Style, version: string): string {
   const lines = [
-    brandLine(s, 'Space Context', `CLI ${version}`),
-    `  ${s.dim('The context layer for the physical world')}`,
+    ...brandHeader(s, [brandLine(s, 'Space Context', `CLI ${version}`), `  ${s.dim('The context layer for the physical world')}`]),
     '',
     `${s.bold('Usage')}  spacecontext <command> [options]`,
   ];

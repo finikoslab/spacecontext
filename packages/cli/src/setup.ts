@@ -10,7 +10,7 @@ import { UsageError } from './files.js';
 import { BILLING_URL, DOCS_URL, KEYS_URL } from './links.js';
 import { deviceLogin, openInBrowser } from './signin.js';
 import { findExecutable, needsShell, runProgram, writeFileAtomic, type RunResult, type Runner } from './system.js';
-import { brandLine, styleFor, type Style } from './ui.js';
+import { brandHeader, brandLine, styleFor, type Style } from './ui.js';
 
 /**
  * `spacecontext setup`: sign in, connect the assistants found on this machine
@@ -658,7 +658,7 @@ export async function setup(io: Io, options: SetupOptions): Promise<number> {
     next: [],
   };
 
-  run.say(`${brandLine(run.style, 'Space Context', 'setup')}\n\n`);
+  run.say(`${brandHeader(run.style, [brandLine(run.style, 'Space Context', 'setup'), `  ${run.style.dim('The context layer for the physical world')}`]).join('\n')}\n\n`);
   const use = await signIn(run);
   await connect(run, wanted);
   await skill(run);

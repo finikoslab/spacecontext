@@ -1,4 +1,4 @@
-import { SERVER_NAME, SERVER_VERSION } from './tools.js';
+import { serverIdentity } from './tools.js';
 
 /**
  * The MCP Server Card (SEP-1649) at `/.well-known/mcp/server-card.json`: what a
@@ -26,7 +26,7 @@ export const CARD_TOOLS: ReadonlyArray<{ name: string; title: string; descriptio
 
 export function serverCard(origin: string): Record<string, unknown> {
   return {
-    serverInfo: { name: SERVER_NAME, title: 'Space Context', version: SERVER_VERSION },
+    serverInfo: serverIdentity(origin),
     description:
       "The user's physical spaces (homes, rentals, offices, vehicles, appliances), each filmed once and turned into structured records with photo evidence. Read-only by default; scanning only when the user allows it at sign-in.",
     websiteUrl: 'https://spacecontext.app/developers/',

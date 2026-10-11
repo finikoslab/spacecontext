@@ -1,3 +1,5 @@
+<p align="center"><img src="https://spacecontext.app/icon/icon-512.png" width="64" height="64" alt="Space Context"></p>
+
 # spacecontext
 
 [![npm](https://img.shields.io/npm/v/spacecontext?logo=npm)](https://www.npmjs.com/package/spacecontext)

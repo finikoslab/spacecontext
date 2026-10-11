@@ -35,6 +35,8 @@ export type Style = {
   yellow: Paint;
   cyan: Paint;
   brand: Paint;
+  /** 24-bit colour (COLORTERM=truecolor or 24bit); otherwise the 256-colour palette. */
+  truecolor: boolean;
   /** ✓ done */
   ok: string;
   /** ✗ failed */
@@ -61,7 +63,82 @@ export function styleFor(io: Io, stream: Stream): Style {
     cyan: paint(color, '36', '39'),
     brand: paint(color, '35', '39'),
   };
-  return { ...s, ok: s.green('✓'), fail: s.red('✗'), warn: s.yellow('!'), next: s.brand('›') };
+  const truecolor = color && /^(truecolor|24bit)$/i.test(io.env.COLORTERM ?? '');
+  return { ...s, truecolor, ok: s.green('✓'), fail: s.red('✗'), warn: s.yellow('!'), next: s.brand('›') };
+}
+
+/**
+ * The Space Context mark (the Cubo: a cube with the S taken out of it), 18 × 20
+ * pixels, two pixels per character with half blocks. Same geometry as the logo
+ * (spacecontext.app/icon/mark.svg), sampled on a grid.
+ */
+const MARK = [
+  '........##........',
+  '......######......',
+  '....#########.....',
+  '...############...',
+  '.################.',
+  '##################',
+  '##################',
+  '#####.............',
+  '#####.............',
+  '##################',
+  '##################',
+  '.............#####',
+  '.............#####',
+  '##################',
+  '##################',
+  '.################.',
+  '...############...',
+  '....#########.....',
+  '......######......',
+  '........##........',
+];
+
+/** Brand violet, light at the top (#A855F7) to deep at the bottom (#5B21B6), as on the logo. */
+function markColor(s: Style, row: number, layer: 'fg' | 'bg'): string {
+  const t = row / (MARK.length - 1);
+  if (s.truecolor) {
+    const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+    return `${layer === 'fg' ? 38 : 48};2;${mix(168, 91)};${mix(85, 33)};${mix(247, 182)}`;
+  }
+  const palette = [171, 135, 98, 92, 55];
+  return `${layer === 'fg' ? 38 : 48};5;${palette[Math.min(palette.length - 1, Math.floor(t * palette.length))]}`;
+}
+
+/** The mark as terminal lines; empty without colours (piped, NO_COLOR, CI), where it would only be noise. */
+export function brandMark(s: Style): string[] {
+  if (!s.color) return [];
+  const lines: string[] = [];
+  for (let row = 0; row < MARK.length; row += 2) {
+    const upper = MARK[row] ?? '';
+    const lower = MARK[row + 1] ?? '';
+    let line = '';
+    for (let col = 0; col < upper.length; col++) {
+      const top = upper[col] === '#';
+      const bottom = lower[col] === '#';
+      if (top && bottom) line += `\u001b[${markColor(s, row, 'fg')};${markColor(s, row + 1, 'bg')}m▀\u001b[0m`;
+      else if (top) line += `\u001b[${markColor(s, row, 'fg')}m▀\u001b[0m`;
+      else if (bottom) line += `\u001b[${markColor(s, row + 1, 'fg')}m▄\u001b[0m`;
+      else line += ' ';
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+/**
+ * The branded header: the mark with the given lines beside it at a terminal
+ * that shows colours, and just the lines everywhere else.
+ */
+export function brandHeader(s: Style, lines: string[]): string[] {
+  const mark = brandMark(s);
+  if (mark.length === 0) return lines;
+  const offset = Math.max(0, Math.floor((mark.length - lines.length) / 2));
+  return mark.map((art, i) => {
+    const text = lines[i - offset];
+    return text === undefined ? art.trimEnd() : `${art}   ${text.trimStart()}`;
+  });
 }
 
 /** `◆ Space Context  subtitle`: the one branded line. */

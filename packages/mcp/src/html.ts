@@ -1,4 +1,5 @@
 import type { ConsentDescription } from '@cloudflare/workers-oauth-provider';
+import { ICON_SVG } from './brand.js';
 
 /** Escapes text for HTML content and attribute values. Every client-supplied string goes through it. */
 export function escapeHtml(value: string): string {
@@ -9,7 +10,7 @@ const STYLE = `
 :root{color-scheme:light dark;--bg:#f7f7f5;--card:#fff;--text:#1b1b1a;--muted:#6b6b66;--line:#e3e3df;--accent:#7c3aed;--on-accent:#fff;--error:#b3261e}
 @media (prefers-color-scheme:dark){:root{--bg:#121211;--card:#1c1c1b;--text:#ececea;--muted:#a3a39e;--line:#2e2e2c;--accent:#a78bfa;--on-accent:#160a2e;--error:#f2b8b5}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:440px;margin:48px auto;padding:0 16px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px}
+main{max-width:440px;margin:48px auto;padding:0 16px}.brand{display:flex;align-items:center;justify-content:center;gap:12px;margin:0 0 20px;font-weight:700;font-size:1.15rem;letter-spacing:-.01em}.brand svg{display:block;border-radius:10px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px}
 h1{font-size:1.25rem;margin:0 0 8px}p{margin:8px 0}.muted{color:var(--muted);font-size:.9rem}.error{color:var(--error)}
 label{display:block;margin:16px 0 6px;font-weight:600}input[type=email],input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit}
 .check{display:flex;gap:10px;align-items:flex-start;margin:14px 0;font-weight:400}.check input{margin-top:4px}
@@ -46,7 +47,7 @@ export function redirectSource(redirectUri: string): string | null {
 }
 
 export function page(title: string, body: string, status = 200, headers?: Headers, formTargets: string[] = []): Response {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Space Context</title><style>${STYLE}</style></head><body><main><div class="card">${body}</div><p class="muted" style="text-align:center">Space Context · <a href="https://spacecontext.app/privacy/">Privacy</a></p></main><script>${SUBMIT_ONCE_SCRIPT}</script></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Space Context</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><style>${STYLE}</style></head><body><main><div class="brand">${ICON_SVG.replace('<svg ', '<svg width="44" height="44" aria-hidden="true" ')}<span>Space Context</span></div><div class="card">${body}</div><p class="muted" style="text-align:center">Space Context · <a href="https://spacecontext.app/privacy/">Privacy</a></p></main><script>${SUBMIT_ONCE_SCRIPT}</script></body></html>`;
   const responseHeaders = new Headers(headers);
   responseHeaders.set('Content-Type', 'text/html; charset=utf-8');
   responseHeaders.set('Cache-Control', 'no-store');

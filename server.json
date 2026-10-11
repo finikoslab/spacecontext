@@ -5,6 +5,22 @@
   "description": "The context layer for the physical world: filmed spaces as cited context for agents.",
   "version": "0.2.0",
   "websiteUrl": "https://spacecontext.app/developers/",
+  "icons": [
+    {
+      "src": "https://mcp.spacecontext.app/icon.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    },
+    {
+      "src": "https://mcp.spacecontext.app/icon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    }
+  ],
   "repository": {
     "url": "https://github.com/finikoslab/spacecontext",
     "source": "github",

@@ -678,6 +678,26 @@ describe('MCP tools', () => {
     expect(card.tools).toContainEqual({ name: 'create_scan', title: 'Create a scan', description: 'Declares a scan and returns the upload instructions. Needs a connection allowed to scan.' });
   });
 
+  it('shows the Space Context mark to clients and browsers', async () => {
+    const card = (await (await call(new Request(`${ORIGIN}/.well-known/mcp/server-card.json`))).json()) as { serverInfo: { title: string; icons: Array<{ src: string; mimeType: string }> } };
+    expect(card.serverInfo.title).toBe('Space Context');
+    expect(card.serverInfo.icons).toEqual([
+      { src: `${ORIGIN}/icon.png`, mimeType: 'image/png', sizes: ['512x512'] },
+      { src: `${ORIGIN}/icon.svg`, mimeType: 'image/svg+xml', sizes: ['any'] },
+    ]);
+    for (const [path, type] of [['/icon.png', 'image/png'], ['/favicon.ico', 'image/png'], ['/apple-touch-icon.png', 'image/png'], ['/icon.svg', 'image/svg+xml'], ['/favicon.svg', 'image/svg+xml']] as const) {
+      const response = await call(new Request(`${ORIGIN}${path}`));
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get('Content-Type'), path).toBe(type);
+      const body = new Uint8Array(await response.arrayBuffer());
+      if (type === 'image/png') expect([...body.slice(1, 4)], path).toEqual([0x50, 0x4e, 0x47]);
+      else expect(new TextDecoder().decode(body), path).toContain('<svg');
+    }
+    const { accessToken } = await connect();
+    const init = await initialize(accessToken);
+    expect(init?.serverInfo).toMatchObject({ title: 'Space Context', icons: card.serverInfo.icons });
+  });
+
   it('answers with the API key of the grant and the caller IP', async () => {
     const { accessToken } = await connect();
     await initialize(accessToken);

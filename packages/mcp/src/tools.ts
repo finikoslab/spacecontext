@@ -1,4 +1,5 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
+import { serverIcons } from './brand.js';
 import { REPORT_LANGUAGES, SpaceContextError, type Scan, type ScanInput, type SpaceContext } from '@spacecontext/sdk';
 import * as z from 'zod';
 import { compact, compactDocument, compactScan, DATA_NOTE, SECTIONS } from './views.js';
@@ -111,9 +112,20 @@ async function read<T>(hooks: ServerHooks, action: () => Promise<T>): Promise<T>
   }
 }
 
+/** How the server presents itself to clients: name, title, website and the Space Context mark. */
+export function serverIdentity(origin: string) {
+  return {
+    name: SERVER_NAME,
+    title: 'Space Context',
+    version: SERVER_VERSION,
+    websiteUrl: 'https://spacecontext.app/developers/',
+    icons: serverIcons(origin),
+  };
+}
+
 /** The MCP server for one request, acting with the API key of the caller's grant. */
-export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpServer {
-  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: INSTRUCTIONS });
+export function createServer(api: SpaceContext, hooks: ServerHooks = {}, origin = 'https://mcp.spacecontext.app'): McpServer {
+  const server = new McpServer(serverIdentity(origin), { instructions: INSTRUCTIONS });
 
   server.registerTool(
     'list_spaces',
