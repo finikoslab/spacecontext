@@ -23,7 +23,7 @@ You need Node.js 22.12 or later.
 npx spacecontext login --test
 ```
 
-The terminal shows a code and opens the [console](https://spacecontext.app/developers/console/): sign in with Apple, Google, GitHub or your email (the same account as the iPhone app), type the code, approve. The terminal receives a **test** key: free, unlimited, the demo space. → [Console and sign-in](account/console-and-login.md)
+The terminal shows a code and opens the [console](https://spacecontext.app/developers/console/): sign in with Apple, Google, GitHub or your email (the same account as the iPhone app), type the code, approve. The terminal receives a **test** key: free, never charged, and it reads the demo space. → [Console and sign-in](account/console-and-login.md)
 
 ## 2. Use it
 

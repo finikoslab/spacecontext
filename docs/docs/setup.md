@@ -41,7 +41,7 @@ The same command, run by you: it opens the browser for the sign-in, and for Code
 
 ### 1. Get a key
 
-Open the [console](https://spacecontext.app/developers/console/keys/) and create a key. A **test key** (`sc_test_…`) is free and unlimited on the demo space. From a terminal, `npx spacecontext login` does the same: it shows a code, you approve it in the console, and the key is saved for the CLI. → [API keys](account/api-keys.md)
+Open the [console](https://spacecontext.app/developers/console/keys/) and create a key. A **test key** (`sc_test_…`) is free and never charged: it runs every flow on the demo space. From a terminal, `npx spacecontext login` does the same: it shows a code, you approve it in the console, and the key is saved for the CLI. → [API keys](account/api-keys.md)
 
 ### 2. Connect your assistant
 

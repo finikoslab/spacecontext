@@ -128,6 +128,7 @@ Use the server URL with the client's "remote MCP server" or "custom connector" o
 | Spaces created with the API or the CLI (live) | Yes |
 | Spaces scanned with the iPhone app | Yes (same account) |
 | Spaces scanned with the app, not yet screened | Only after screening, unless you granted sensitive values: the first read starts it, and it takes a minute or two |
+| The demo space (`spc_demo`) | No: a connection reads your live spaces. Read the demo with a free test key through the API, the CLI or the SDK |
 
 ## Good to know
 
