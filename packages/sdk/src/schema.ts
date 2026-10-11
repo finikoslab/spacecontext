@@ -130,7 +130,7 @@ export interface paths {
         put?: never;
         /**
          * Create a scan of a space created through the API
-         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). An account holds at most 20 scans created and not started (both modes): past that, 429 `SCANS_IN_PROGRESS` (`max_open_scans`) until some are started or cancelled. A test scan keeps only whether it had a transcript, never its text (its result is the demo). Needs `scans:write`.
+         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language of the report (`en`, `it`, `es`, `fr`, `de`, `pt`, `nl`; the narration can be in any language) and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). An account holds at most 20 scans created and not started (both modes): past that, 429 `SCANS_IN_PROGRESS` (`max_open_scans`) until some are started or cancelled. A test scan keeps only whether it had a transcript, never its text (its result is the demo). Needs `scans:write`.
          */
         post: operations["createScan"];
         delete?: never;
@@ -533,6 +533,7 @@ export interface components {
         };
         SpaceCondition: {
             code: components["schemas"]["ConditionCode"];
+            /** @description The label as written in the language of the report ("Good", "Buono", "Bueno", "Gut"...); `code` is the same in every language. */
             label: string | null;
             notes: string | null;
         };
@@ -1115,7 +1116,7 @@ export interface components {
                 /** @enum {string} */
                 kind: "frames" | "video";
                 /**
-                 * @description The language of the report: en, it, es, fr, de, pt or nl. The narration can be in any language.
+                 * @description The language the report is written in: area and item names, descriptions, issues, instructions, facts, questions and answers (`en` English, `it` Italian, `es` Spanish, `fr` French, `de` German, `pt` Portuguese, `nl` Dutch). Portuguese is written as in Brazil. The narration can be in any language. Spaces scanned with the iPhone app are in `en` or `it`.
                  * @default en
                  * @enum {string}
                  */
@@ -1156,7 +1157,7 @@ export interface components {
                 /** @enum {string} */
                 kind: "frames" | "video";
                 /**
-                 * @description The language of the report.
+                 * @description The language the report is written in.
                  * @enum {string}
                  */
                 language: "en" | "it" | "es" | "fr" | "de" | "pt" | "nl";
