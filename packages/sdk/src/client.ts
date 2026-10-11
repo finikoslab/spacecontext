@@ -24,6 +24,15 @@ export type MeResponse = Schemas['MeResponse'];
 export type FrameCheck = Schemas['FrameCheck'];
 export type SpaceCoverageCheck = Schemas['SpaceCoverageCheck'];
 export type SpaceType = NonNullable<SpaceCreateRequest['space_type']>;
+/** The language a scan's report is written in; the narration can be in any language. */
+export type ReportLanguage = NonNullable<ScanInput['language']>;
+
+/**
+ * The languages a report can be written in, with their own names: English,
+ * Italiano, Español, Français, Deutsch, Português, Nederlands. The narration
+ * can be in any language. Default `en`.
+ */
+export const REPORT_LANGUAGES = ['en', 'it', 'es', 'fr', 'de', 'pt', 'nl'] as const satisfies readonly ReportLanguage[];
 
 export const DEFAULT_BASE_URL = 'https://api.spacecontext.app/v1';
 
@@ -390,7 +399,7 @@ export class SpaceContext {
     /** Creates, uploads and starts a video scan; cancels it if the upload fails. Does not wait for the result. */
     fromVideo: (
       spaceId: string,
-      video: { data: UploadBody; contentType: VideoContentType; language?: 'en' | 'it'; recordedAt?: string; device?: string },
+      video: { data: UploadBody; contentType: VideoContentType; language?: ReportLanguage; recordedAt?: string; device?: string },
       options: RequestOptions = {}
     ) => this.scanFromVideo(spaceId, video, options),
 
@@ -398,7 +407,7 @@ export class SpaceContext {
     fromFrames: (
       spaceId: string,
       frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
-      params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void } = {},
+      params: { language?: ReportLanguage; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void } = {},
       options: RequestOptions = {}
     ) => this.scanFromFrames(spaceId, frames, params, options),
   };
@@ -627,7 +636,7 @@ export class SpaceContext {
 
   private async scanFromVideo(
     spaceId: string,
-    video: { data: UploadBody; contentType: VideoContentType; language?: 'en' | 'it'; recordedAt?: string; device?: string },
+    video: { data: UploadBody; contentType: VideoContentType; language?: ReportLanguage; recordedAt?: string; device?: string },
     options: RequestOptions
   ): Promise<Scan> {
     const scan = await this.scans.create(
@@ -673,7 +682,7 @@ export class SpaceContext {
   private async scanFromFrames(
     spaceId: string,
     frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
-    params: { language?: 'en' | 'it'; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void },
+    params: { language?: ReportLanguage; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void },
     options: RequestOptions
   ): Promise<Scan> {
     if (frames.length === 0) throw new SpaceContextError('At least one frame is required', 0, 'VALIDATION_ERROR', null);

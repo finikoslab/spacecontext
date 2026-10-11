@@ -1115,10 +1115,11 @@ export interface components {
                 /** @enum {string} */
                 kind: "frames" | "video";
                 /**
+                 * @description The language of the report: en, it, es, fr, de, pt or nl. The narration can be in any language.
                  * @default en
                  * @enum {string}
                  */
-                language?: "en" | "it";
+                language?: "en" | "it" | "es" | "fr" | "de" | "pt" | "nl";
                 frames?: {
                     timestamp_ms?: number | null;
                 }[];
@@ -1154,8 +1155,11 @@ export interface components {
             input: {
                 /** @enum {string} */
                 kind: "frames" | "video";
-                /** @enum {string} */
-                language: "en" | "it";
+                /**
+                 * @description The language of the report.
+                 * @enum {string}
+                 */
+                language: "en" | "it" | "es" | "fr" | "de" | "pt" | "nl";
                 frame_count: number | null;
                 video: {
                     content_type?: string;

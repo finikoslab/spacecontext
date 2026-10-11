@@ -44,6 +44,20 @@ For photos, list them in order, with their time in milliseconds when you know it
 { "input": { "kind": "frames", "language": "it", "frames": [{ "timestamp_ms": 0 }, { "timestamp_ms": 2000 }] } }
 ```
 
+`language` is the language the report is written in, `en` by default:
+
+| Code | Language |
+| --- | --- |
+| `en` | English |
+| `it` | Italiano |
+| `es` | Español |
+| `fr` | Français |
+| `de` | Deutsch |
+| `pt` | Português |
+| `nl` | Nederlands |
+
+The narration can be in any language: a video narrated in Spanish can have its report in English.
+
 Either can carry a `transcript` (`{ "text": "…", "segments": [{ "start_ms": 0, "end_ms": 1500, "text": "This is the kitchen." }] }`) when you already have one; for videos without it, the audio is transcribed for you.
 
 The answer is the scan, with upload instructions:

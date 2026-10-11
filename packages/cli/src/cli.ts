@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { describeScan, SpaceContext, SpaceContextError, type FrameCheck, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import { describeScan, REPORT_LANGUAGES, SpaceContext, SpaceContextError, type FrameCheck, type ReportLanguage, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
 import { writeFile } from 'node:fs/promises';
 import { apiUrl, clearConfig, configDirectory, readConfig, setting, signedInConfig, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
@@ -704,8 +704,10 @@ async function scan(context: Context): Promise<void> {
   if (Boolean(values.space) === Boolean(values.name)) {
     throw new UsageError(values.space ? 'Pass --space or --name, not both' : 'Say where the scan goes: --name <name> for a new space, or --space <space-id>', [], true);
   }
-  const language = values.language ?? 'en';
-  if (language !== 'en' && language !== 'it') throw new UsageError('--language must be en or it');
+  const language = (values.language ?? 'en') as ReportLanguage;
+  if (!REPORT_LANGUAGES.includes(language)) {
+    throw new UsageError(`--language must be one of ${REPORT_LANGUAGES.join(', ')} (the language of the report; the narration can be in any language)`);
+  }
   const spaceType = values.type;
   if (spaceType !== undefined && !SPACE_TYPES.includes(spaceType as SpaceType)) {
     throw new UsageError(`--type must be one of ${SPACE_TYPES.join(', ')}`);

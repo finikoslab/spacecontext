@@ -50,6 +50,8 @@ console.log(document.stats.items, 'items');
 
 `scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one. `onProgress` receives, in order, `space_created` (with `spaceId`), `uploading`, `uploaded`, `started`, a `scan` event at every change of status or stage (with `stage` and `label`), then `complete`.
 
+`language` is the language the report is written in: `en` (the default), `it`, `es`, `fr`, `de`, `pt` or `nl`, exported as `REPORT_LANGUAGES`. The narration can be in any language.
+
 A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`, and its charge is refunded. After `timeoutMs` (default 20 minutes) it throws `TIMEOUT`, and the scan goes on. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, the account's free scan is used first (a new account has one, one free scan per card) and each scan after that costs US$1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
 
 ## Methods

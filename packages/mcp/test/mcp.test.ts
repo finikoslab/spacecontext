@@ -864,11 +864,11 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     await initialize(accessToken);
 
     const created = JSON.parse(
-      (await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house', space_type: 'house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 1234 }, language: 'it' })).content[0]!.text!
+      (await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house', space_type: 'house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 1234 }, language: 'de' })).content[0]!.text!
     );
     expect(backend.calls.find((entry) => entry.path === '/spaces' && entry.method === 'POST')!.body).toEqual({ name: 'Lake house', space_type: 'house' });
     const declared = backend.calls.find((entry) => entry.path === '/spaces/spc_new/scans')!;
-    expect(declared.body).toEqual({ input: { kind: 'video', language: 'it', video: { content_type: 'video/mp4', content_length: 1234 } } });
+    expect(declared.body).toEqual({ input: { kind: 'video', language: 'de', video: { content_type: 'video/mp4', content_length: 1234 } } });
     expect(declared.headers.get('Idempotency-Key')).toBeTruthy();
     expect(created).toMatchObject({ id: 'scn_2', space_id: 'spc_new', status: 'awaiting_upload', final: false });
     expect(created.upload).toEqual({ kind: 'video', method: 'PUT', url: 'https://api.example.test/v1/scans/scn_2/video', headers: { 'Content-Type': 'video/mp4', 'Content-Length': '1234' }, max_bytes: 99_614_720 });
@@ -920,8 +920,15 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     const createScan = listed.find((entry) => entry.name === 'create_scan')!;
     expect(createScan.description).toContain('up to 100 MB and 10 minutes');
     expect(createScan.inputSchema.properties.video.properties.content_length.maximum).toBe(100 * MB);
+    // The languages a report can be written in, as the API takes them.
+    expect(createScan.inputSchema.properties.language.enum).toEqual(['en', 'it', 'es', 'fr', 'de', 'pt', 'nl']);
+    expect(createScan.inputSchema.properties.language.description).toContain('en (default), it, es, fr, de, pt or nl');
 
-    const tooBig = await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 100 * MB + 1 } } });
+    const unknownLanguage = await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 1234 }, language: 'ja' } });
+    expect(unknownLanguage.error ?? unknownLanguage.result?.isError).toBeTruthy();
+    expect(backend.calls.some((entry) => entry.method === 'POST' && entry.path === '/spaces')).toBe(false);
+
+    const tooBig =await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 100 * MB + 1 } } });
     expect(tooBig.error ?? tooBig.result?.isError).toBeTruthy();
     expect(backend.calls.some((entry) => entry.method === 'POST' && entry.path === '/spaces')).toBe(false);
 

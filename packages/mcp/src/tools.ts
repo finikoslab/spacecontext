@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
-import { SpaceContextError, type Scan, type ScanInput, type SpaceContext } from '@spacecontext/sdk';
+import { REPORT_LANGUAGES, SpaceContextError, type Scan, type ScanInput, type SpaceContext } from '@spacecontext/sdk';
 import * as z from 'zod';
 import { compact, compactDocument, compactScan, DATA_NOTE, SECTIONS } from './views.js';
 
@@ -21,7 +21,6 @@ const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_FRAMES = 120;
 /** The largest video a scan accepts (the API's limit, with 10 minutes at most). */
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-const LANGUAGES = ['en', 'it'] as const;
 const SPACE_TYPES = ['apartment', 'house', 'office', 'warehouse', 'vehicle', 'boat', 'camper', 'shop', 'garage', 'appliance', 'other'] as const;
 const FRAME_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const VIDEO_CONTENT_TYPES = ['video/mp4', 'video/quicktime', 'video/x-m4v'] as const;
@@ -343,7 +342,10 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}): McpSer
           .optional()
           .describe('With source video: up to 100 MB and 10 minutes.'),
         frames: z.object({ count: z.number().int().min(1).max(MAX_FRAMES) }).optional().describe('With source frames: how many images will be uploaded.'),
-        language: z.enum(LANGUAGES).optional().describe('Language of the document (default en); the narration can be in any language.'),
+        language: z
+          .enum(REPORT_LANGUAGES)
+          .optional()
+          .describe('The language the report is written in: en (default), it, es, fr, de, pt or nl. The narration can be in any language.'),
       }),
       annotations: { title: 'Create a scan', ...WRITES },
     },

@@ -479,21 +479,22 @@ describe('spacecontext CLI', () => {
       (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}/events` ? stream([failed]) : undefined),
     ], { SPACECONTEXT_API_KEY: KEY });
 
-    expect(await main(['scan', 'tour.mov', '--space', SPACE_ID], h.io)).toBe(1);
+    expect(await main(['scan', 'tour.mov', '--space', SPACE_ID, '--language', 'nl'], h.io)).toBe(1);
     // Not a live scan: nothing is charged, whatever the price.
     expect(h.stderr()).toContain(' · test mode, no charge');
-    expect(JSON.parse(String(h.calls[0]!.body)).input).toMatchObject({ kind: 'video', video: { content_type: 'video/quicktime', content_length: 4 } });
+    expect(JSON.parse(String(h.calls[0]!.body)).input).toMatchObject({ kind: 'video', language: 'nl', video: { content_type: 'video/quicktime', content_length: 4 } });
     expect(h.stderr()).toContain('Error [ANALYSIS_EMPTY]: Scan failed: No space recognised (refunded)');
 
     for (const args of [
       ['scan', 'tour.mov'],
       ['scan', 'tour.mov', '--space', SPACE_ID, '--name', 'Flat'],
       ['scan', 'missing.mp4', '--space', SPACE_ID],
-      ['scan', 'tour.mov', '--space', SPACE_ID, '--language', 'fr'],
+      ['scan', 'tour.mov', '--space', SPACE_ID, '--language', 'ja'],
       ['scan', 'tour.mov', '--name', 'Flat', '--type', 'castle'],
     ]) {
       expect(await main(args, h.io), args.join(' ')).toBe(2);
     }
+    expect(h.stderr()).toContain('--language must be one of en, it, es, fr, de, pt, nl');
     await writeFile(path.join(directory, 'notes.txt'), 'x');
     expect(await main(['scan', 'notes.txt', '--space', SPACE_ID], h.io)).toBe(2);
   });

@@ -1,5 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SpaceContext, SpaceContextError, type Scan } from '../src/index.js';
+import { REPORT_LANGUAGES, SpaceContext, SpaceContextError, type Scan } from '../src/index.js';
 
 const LIVE = 'sc_live_abcdefghijklmnop';
 const TEST = 'sc_test_abcdefghijklmnop';
@@ -259,6 +260,19 @@ describe('SpaceContext client', () => {
     await client(fetch).scans.fromVideo('spc_1', { data: new Uint8Array(4), contentType: 'video/mp4' });
     expect(JSON.parse(String(calls[0]!.body)).input).toEqual({ kind: 'video', language: 'en', video: { content_type: 'video/mp4', content_length: 4 } });
     expect(calls.map((call) => call.method)).toEqual(['POST', 'PUT', 'POST']);
+  });
+
+  it('lists the report languages of the contract, and sends the one asked for', async () => {
+    const contract = JSON.parse(await readFile(new URL('../../../openapi/openapi.json', import.meta.url), 'utf8')) as {
+      components: { schemas: Record<string, { properties: { input: { properties: { language: { enum: string[] } } } } }> };
+    };
+    expect([...REPORT_LANGUAGES]).toEqual(['en', 'it', 'es', 'fr', 'de', 'pt', 'nl']);
+    expect(contract.components.schemas.ScanCreateRequest!.properties.input.properties.language.enum).toEqual([...REPORT_LANGUAGES]);
+    expect(contract.components.schemas.Scan!.properties.input.properties.language.enum).toEqual([...REPORT_LANGUAGES]);
+
+    const { fetch, calls } = fakeFetch((call) => (call.url.endsWith('/start') ? json(scan({ status: 'queued', upload: null }), 202) : call.method === 'PUT' ? json({}) : json(scan(), 201)));
+    await client(fetch).scans.fromVideo('spc_1', { data: new Uint8Array(4), contentType: 'video/mp4', language: 'pt' });
+    expect(JSON.parse(String(calls[0]!.body)).input).toMatchObject({ kind: 'video', language: 'pt' });
   });
 
   it('cancels a scan whose upload fails, and refuses oversized frames before sending them', async () => {

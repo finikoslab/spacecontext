@@ -121,6 +121,7 @@ describe('help', () => {
     expect(await main(['help', 'scan'], topic.io)).toBe(0);
     expect(topic.stdout()).toContain('--no-wait');
     expect(topic.stdout()).toContain('Video: .mp4 .mov .m4v, up to 100 MB and 10 minutes');
+    expect(topic.stdout()).toContain('Languages: en English, it Italiano, es Español, fr Français, de Deutsch,\n             pt Português, nl Nederlands\n');
     expect(await main(['help', 'teleport'], topic.io)).toBe(2);
     expect(topic.stderr()).toContain('No command "teleport"');
   });

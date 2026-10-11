@@ -68,7 +68,7 @@ npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 | `markdown <space-id> [--out <file>] [--transcript]` | The space as one Markdown page |
 | `scans <space-id>` | The scan history of a space |
 | `diff <space-id> --from <scan-id> [--to <scan-id>]` | What changed between two scans, with confirmed changes kept apart from what wasn't filmed |
-| `scan <video\|frames-dir> (--space <id> \| --name <name>)` | Upload, start and follow a scan. Options: `--type`, `--language en\|it`, `--format text\|json\|markdown\|skill`, `--out`, `--no-wait` |
+| `scan <video\|frames-dir> (--space <id> \| --name <name>)` | Upload, start and follow a scan. Options: `--type`, `--language en\|it\|es\|fr\|de\|pt\|nl`, `--format text\|json\|markdown\|skill`, `--out`, `--no-wait` |
 | `check <image\|frames-dir>` | Before a scan: which frames are usable, and which key locations (fuse box, stopcock, boiler…) they show. Free |
 | `scan-status <scan-id> [--follow]` | Where a scan is; `--follow` prints every change until it ends |
 | `cancel <scan-id>` | Cancel a scan that hasn't started; nothing is charged |

@@ -5000,9 +5000,15 @@
                 "type": "string",
                 "enum": [
                   "en",
-                  "it"
+                  "it",
+                  "es",
+                  "fr",
+                  "de",
+                  "pt",
+                  "nl"
                 ],
-                "default": "en"
+                "default": "en",
+                "description": "The language of the report: en, it, es, fr, de, pt or nl. The narration can be in any language."
               },
               "frames": {
                 "type": "array",
@@ -5182,8 +5188,14 @@
                 "type": "string",
                 "enum": [
                   "en",
-                  "it"
-                ]
+                  "it",
+                  "es",
+                  "fr",
+                  "de",
+                  "pt",
+                  "nl"
+                ],
+                "description": "The language of the report."
               },
               "frame_count": {
                 "type": [

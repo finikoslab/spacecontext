@@ -1,4 +1,4 @@
-import type { FrameContentType, Scan, ScanInput, SkillBundle, SpaceContext, SpaceDocument, SpaceType, UploadBody, VideoContentType } from './client.js';
+import type { FrameContentType, ReportLanguage, Scan, ScanInput, SkillBundle, SpaceContext, SpaceDocument, SpaceType, UploadBody, VideoContentType } from './client.js';
 import { SpaceContextError } from './errors.js';
 
 /**
@@ -75,8 +75,8 @@ export interface ScanOptions<Format extends ScanFormat = 'document'> {
   type?: SpaceType;
   /** With `name`: your own id for the space; the same id returns the same space. */
   externalId?: string;
-  /** Language of the document; the narration can be in any language. Default `en`. */
-  language?: 'en' | 'it';
+  /** Language of the report, one of `REPORT_LANGUAGES` (en, it, es, fr, de, pt, nl); the narration can be in any language. Default `en`. */
+  language?: ReportLanguage;
   /** A transcript you already have (with frames: the API transcribes videos itself). */
   transcript?: ScanInput['transcript'];
   /** When the video was recorded (ISO 8601). */

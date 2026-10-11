@@ -14,7 +14,7 @@ description: 'How to record a space so the analysis finds everything: video and 
 | Photos | Up to 120 JPEG, PNG or WebP, 2 MB each, in the order they were taken |
 | Transcript (API only, optional) | Up to 600 segments of 2 000 characters, with their times |
 
-From a video, the server takes 36 to 120 frames spread over its length (about one every 4 seconds) and transcribes the audio in whatever language is spoken. `--language` (`en` or `it`) sets the language of the report. Videos are deleted as soon as the frames are extracted; the frames are kept as evidence.
+From a video, the server takes 36 to 120 frames spread over its length (about one every 4 seconds) and transcribes the audio in whatever language is spoken. `--language` sets the language of the report: `en` (default), `it`, `es`, `fr`, `de`, `pt` or `nl`. Videos are deleted as soon as the frames are extracted; the frames are kept as evidence.
 
 ### Recording tips
 

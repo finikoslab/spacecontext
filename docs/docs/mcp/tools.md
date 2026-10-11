@@ -128,7 +128,7 @@ Declares a new scan and returns `upload`, exactly as the API gives it, and a `ne
 | `source` | `"video"` \| `"frames"` | |
 | `video` | `{ content_type, content_length }` | With `source: "video"`: `video/mp4`, `video/quicktime` or `video/x-m4v`, and the exact size in bytes. Up to 100 MB and 10 minutes. |
 | `frames` | `{ count }` | With `source: "frames"`: how many images (1–120). |
-| `language` | `"en"` \| `"it"` | Optional, default `en`: the language of the document. The narration can be in any language. |
+| `language` | `"en"` \| `"it"` \| `"es"` \| `"fr"` \| `"de"` \| `"pt"` \| `"nl"` | Optional, default `en`: the language the report is written in (English, Italiano, Español, Français, Deutsch, Português, Nederlands). The narration can be in any language. |
 
 ## `upload_frame`
 

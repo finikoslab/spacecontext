@@ -1,3 +1,4 @@
+import type { ReportLanguage } from '@spacecontext/sdk';
 import { CLI_DOCS_URL, DEFAULT_API_URL } from './links.js';
 import { brandLine, type Style } from './ui.js';
 
@@ -28,6 +29,18 @@ export type CommandHelp = {
 export const GLOBAL_OPTIONS = ['json', 'api-key', 'base-url', 'help', 'version'];
 
 export const SPACE_TYPES = ['apartment', 'house', 'office', 'warehouse', 'vehicle', 'boat', 'camper', 'shop', 'garage', 'appliance', 'other'] as const;
+
+/** The languages a report can be written in (the SDK's `REPORT_LANGUAGES`), with their own names. */
+export const LANGUAGE_NAMES: Record<ReportLanguage, string> = {
+  en: 'English',
+  it: 'Italiano',
+  es: 'Español',
+  fr: 'Français',
+  de: 'Deutsch',
+  pt: 'Português',
+  nl: 'Nederlands',
+};
+const LANGUAGES = Object.entries(LANGUAGE_NAMES).map(([code, name]) => `${code} ${name}`);
 
 export const COMMAND_HELP: Record<string, CommandHelp> = {
   setup: {
@@ -84,12 +97,14 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
       '',
       `Types: ${SPACE_TYPES.slice(0, 6).join(', ')},`,
       `       ${SPACE_TYPES.slice(6).join(', ')}`,
+      `Languages: ${LANGUAGES.slice(0, 5).join(', ')},`,
+      `           ${LANGUAGES.slice(5).join(', ')}`,
     ],
     options: [
       ['--name <name>', 'Create a new space with this name'],
       ['--space <space-id>', 'Scan an existing space again; compared with its last scan'],
       ['--type <type>', 'With --name: the kind of space (types below)'],
-      ['--language en|it', 'Language of the report (default en), whatever is spoken'],
+      ['--language <code>', 'Report language (below; default en), whatever is spoken'],
       ['--format <format>', 'text (default), json, markdown or skill'],
       ['--out <path>', 'With --format skill: the folder; with markdown: the file'],
       ['--no-wait', 'Start the scan and return without following it'],
