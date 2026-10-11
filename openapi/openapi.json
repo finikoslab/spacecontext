@@ -2072,6 +2072,68 @@
           "other"
         ]
       },
+      "PlacementRelation": {
+        "type": "string",
+        "enum": [
+          "on",
+          "inside",
+          "under",
+          "above",
+          "below",
+          "left_of",
+          "right_of",
+          "in_front_of",
+          "behind",
+          "opposite",
+          "beside",
+          "unknown"
+        ],
+        "description": "How a thing sits against its anchor. `left_of`, `right_of`, `in_front_of`, `behind` and `opposite` hold only from the placement's `viewpoint`; the others hold from anywhere. `unknown`: the recording does not show where it is."
+      },
+      "SpacePlacement": {
+        "type": "object",
+        "description": "Where a thing is, as anchor + relation + viewpoint, so that a person or an agent can orient themselves (\"on the wall left of the entrance door, facing the door from inside\"). `location` on the same record is this placement written as one sentence in the report language.",
+        "required": [
+          "anchor",
+          "anchor_item_id",
+          "relation",
+          "viewpoint",
+          "detail"
+        ],
+        "properties": {
+          "anchor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A fixed landmark the thing is placed against: a door, a window, the hob, a radiator. Never the thing itself."
+          },
+          "anchor_item_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The id of the item in this document that is the anchor, when the anchor is one of its items."
+          },
+          "relation": {
+            "$ref": "#/components/schemas/PlacementRelation"
+          },
+          "viewpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where a person stands and what they face for the relation to hold (\"inside the flat, facing the entrance door\"). Always set for a lateral relation. One canonical viewpoint per area: facing the entrance door from inside for an entrance or hallway, standing in the doorway one enters it from and looking in for any other area. An agent describing the place to someone mirrors left and right only when it knows that person's own viewpoint; otherwise it repeats this one."
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Height, the part of the anchor, or a second anchor: \"at chest height, above the shoe rack\"."
+          }
+        }
+      },
       "SpaceType": {
         "type": [
           "string",
@@ -2184,6 +2246,7 @@
           "condition",
           "description",
           "layout",
+          "orientation",
           "features",
           "access_from",
           "item_ids",
@@ -2228,6 +2291,13 @@
               "string",
               "null"
             ]
+          },
+          "orientation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One sentence that places the main fixed things of the area from its canonical viewpoint (facing the entrance door from inside for an entrance or hallway; standing in the doorway one enters it from, looking in, for any other area): \"Coming in from the hallway: window ahead, bed on the left, desk on the right.\" Null when the recording does not show enough, and always null at the base level."
           },
           "features": {
             "type": "array",
@@ -2276,10 +2346,12 @@
           "area_id",
           "name",
           "canonical_name",
+          "description",
           "category",
           "subcategory",
           "quantity",
           "location",
+          "placement",
           "condition",
           "brand",
           "model",
@@ -2308,6 +2380,13 @@
               "null"
             ]
           },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What it is, where it is with the viewpoint, what was said about it (use, settings, quirks, what to watch out for), its condition when notable, in one paragraph of 1-3 sentences in the report language. Never a sensitive value. Null at the base level and on app spaces."
+          },
           "category": {
             "anyOf": [
               {
@@ -2335,7 +2414,19 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Where it is inside the area, as one sentence that carries the viewpoint when left and right matter: \"on the wall left of the entrance door, facing the door from inside; on your right as you enter\"."
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpacePlacement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The same place as anchor + relation + viewpoint. Null at the base level and on app spaces."
           },
           "condition": {
             "anyOf": [
@@ -2507,8 +2598,10 @@
           "id",
           "kind",
           "label",
+          "description",
           "area_id",
           "location",
+          "placement",
           "notes",
           "evidence",
           "confidence"
@@ -2523,6 +2616,13 @@
           "label": {
             "type": "string"
           },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What it is, where it is with the viewpoint, what was said about it (how to reach or operate it, what to watch out for), its condition when notable, in one paragraph. Never a code or a password. Null at the base level and on app spaces."
+          },
           "area_id": {
             "type": [
               "string",
@@ -2533,7 +2633,19 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Specific enough to walk straight to it, with the viewpoint when left and right matter."
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpacePlacement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The same place as anchor + relation + viewpoint. Null at the base level and on app spaces."
           },
           "notes": {
             "type": [

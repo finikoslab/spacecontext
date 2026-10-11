@@ -516,6 +516,23 @@ export interface components {
         KeyLocationKind: "electrical_panel" | "water_shutoff" | "gas_shutoff" | "water_heater" | "heating_control" | "air_conditioning_control" | "router" | "fire_extinguisher" | "smoke_detector" | "first_aid" | "emergency_exit" | "keys" | "waste_recycling" | "electricity_meter" | "gas_meter" | "water_meter" | "alarm_panel" | "spare_supplies" | "other";
         /** @enum {string} */
         FactKind: "access" | "wifi" | "rule" | "contact" | "schedule" | "quirk" | "measurement" | "history" | "other";
+        /**
+         * @description How a thing sits against its anchor. `left_of`, `right_of`, `in_front_of`, `behind` and `opposite` hold only from the placement's `viewpoint`; the others hold from anywhere. `unknown`: the recording does not show where it is.
+         * @enum {string}
+         */
+        PlacementRelation: "on" | "inside" | "under" | "above" | "below" | "left_of" | "right_of" | "in_front_of" | "behind" | "opposite" | "beside" | "unknown";
+        /** @description Where a thing is, as anchor + relation + viewpoint, so that a person or an agent can orient themselves ("on the wall left of the entrance door, facing the door from inside"). `location` on the same record is this placement written as one sentence in the report language. */
+        SpacePlacement: {
+            /** @description A fixed landmark the thing is placed against: a door, a window, the hob, a radiator. Never the thing itself. */
+            anchor: string | null;
+            /** @description The id of the item in this document that is the anchor, when the anchor is one of its items. */
+            anchor_item_id: string | null;
+            relation: components["schemas"]["PlacementRelation"];
+            /** @description Where a person stands and what they face for the relation to hold ("inside the flat, facing the entrance door"). Always set for a lateral relation. One canonical viewpoint per area: facing the entrance door from inside for an entrance or hallway, standing in the doorway one enters it from and looking in for any other area. An agent describing the place to someone mirrors left and right only when it knows that person's own viewpoint; otherwise it repeats this one. */
+            viewpoint: string | null;
+            /** @description Height, the part of the anchor, or a second anchor: "at chest height, above the shoe rack". */
+            detail: string | null;
+        };
         /** @enum {string|null} */
         SpaceType: "apartment" | "house" | "office" | "warehouse" | "vehicle" | "boat" | "camper" | "shop" | "garage" | "appliance" | "other" | null;
         SpaceEvidenceRef: {
@@ -545,6 +562,8 @@ export interface components {
             condition: components["schemas"]["SpaceCondition"];
             description: string | null;
             layout: string | null;
+            /** @description One sentence that places the main fixed things of the area from its canonical viewpoint (facing the entrance door from inside for an entrance or hallway; standing in the doorway one enters it from, looking in, for any other area): "Coming in from the hallway: window ahead, bed on the left, desk on the right." Null when the recording does not show enough, and always null at the base level. */
+            orientation: string | null;
             features: string[];
             access_from: string[];
             item_ids: string[];
@@ -557,10 +576,15 @@ export interface components {
             area_id: string;
             name: string;
             canonical_name: string | null;
+            /** @description What it is, where it is with the viewpoint, what was said about it (use, settings, quirks, what to watch out for), its condition when notable, in one paragraph of 1-3 sentences in the report language. Never a sensitive value. Null at the base level and on app spaces. */
+            description: string | null;
             category: components["schemas"]["ItemCategory"] | null;
             subcategory: string | null;
             quantity: number | null;
+            /** @description Where it is inside the area, as one sentence that carries the viewpoint when left and right matter: "on the wall left of the entrance door, facing the door from inside; on your right as you enter". */
             location: string | null;
+            /** @description The same place as anchor + relation + viewpoint. Null at the base level and on app spaces. */
+            placement: components["schemas"]["SpacePlacement"] | null;
             condition: components["schemas"]["SpaceCondition"] | null;
             brand: string | null;
             model: string | null;
@@ -592,8 +616,13 @@ export interface components {
             id: string;
             kind: components["schemas"]["KeyLocationKind"];
             label: string;
+            /** @description What it is, where it is with the viewpoint, what was said about it (how to reach or operate it, what to watch out for), its condition when notable, in one paragraph. Never a code or a password. Null at the base level and on app spaces. */
+            description: string | null;
             area_id: string | null;
+            /** @description Specific enough to walk straight to it, with the viewpoint when left and right matter. */
             location: string | null;
+            /** @description The same place as anchor + relation + viewpoint. Null at the base level and on app spaces. */
+            placement: components["schemas"]["SpacePlacement"] | null;
             notes: string | null;
             evidence: components["schemas"]["SpaceEvidenceRef"][];
             confidence: number | null;

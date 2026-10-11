@@ -28,10 +28,10 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 
 | Record | Main fields |
 | --- | --- |
-| **Area** | `id`, `name`, `type` (`kitchen`, `bathroom`, `bedroom`, …), `level`, `condition` (`code`, `notes`), `description`, `features`, `access_from`, `item_ids`, `issue_ids` |
-| **Item** | `id`, `area_id`, `name`, `canonical_name`, `category`, `subcategory`, `quantity`, `location` (where in the area), `condition`, `brand`, `model`, `attributes`, `visible_text`, `aliases`, `note`, `issue_ids` (its issues), `previous_item_id` (the same object in the previous scan) |
+| **Area** | `id`, `name`, `type` (`kitchen`, `bathroom`, `bedroom`, …), `level`, `condition` (`code`, `notes`), `description`, `orientation` (one sentence from where one comes in: "Coming in from the hallway: window ahead, bed on the left"), `features`, `access_from`, `item_ids`, `issue_ids` |
+| **Item** | `id`, `area_id`, `name`, `canonical_name`, `category`, `subcategory`, `quantity`, `description` (one paragraph: what it is, where it is, what was said about it, its condition), `location` (where in the area, as a sentence), `placement` (see below), `condition`, `brand`, `model`, `attributes`, `visible_text`, `aliases`, `note`, `issue_ids` (its issues), `previous_item_id` (the same object in the previous scan) |
 | **Issue** | `id`, `area_id`, `item_id`, `title`, `description`, `category`, `severity` (`low`, `medium`, `high`, `critical`), `suggested_action`, `previous_issue_id` |
-| **Key location** | `id`, `kind` (`water_shutoff`, `electrical_panel`, `gas_shutoff`, `water_heater`, `heating_control`, `router`, `fire_extinguisher`, `smoke_detector`, `emergency_exit`, `keys`, meters, `alarm_panel`, …), `label`, `area_id`, `location`, `notes` |
+| **Key location** | `id`, `kind` (`water_shutoff`, `electrical_panel`, `gas_shutoff`, `water_heater`, `heating_control`, `router`, `fire_extinguisher`, `smoke_detector`, `emergency_exit`, `keys`, meters, `alarm_panel`, …), `label`, `area_id`, `description`, `location`, `placement`, `notes` |
 | **Instruction** | `id`, `title`, `area_id`, `item_id`, `steps`, `source_quote` (what was said) |
 | **Fact** | `id`, `kind` (`access`, `wifi`, `rule`, `contact`, `schedule`, `quirk`, `measurement`, `history`, `other`), `statement`, `value`, `sensitive`, `redacted` |
 | **Q&A** | `question`, `answer`, `source` (`owner` or `generated`) |
@@ -41,6 +41,26 @@ Every record that comes from the video carries `evidence`: a list of `{ frame_id
 ## Evidence frames
 
 Each entry of `frames` has `id`, `index`, `timestamp_ms` (its time in the video) and a signed `url` with its `url_expires_at`. The URL serves the original frame, unaltered. It expires: read the document again for a fresh one. `url` is `null` for frames a redacted document does not cite, and for past scans of spaces scanned with the app (a later recording replaced their images).
+
+## Placements
+
+Items and key locations say where they are as structured data, so an agent can reason about it instead of parsing a sentence:
+
+```json
+"placement": {
+  "anchor": "entrance door",
+  "anchor_item_id": "itm_1",
+  "relation": "left_of",
+  "viewpoint": "facing the entrance door from inside",
+  "detail": "on the wooden panel, at chest height"
+}
+```
+
+- `relation` is one of `on`, `inside`, `under`, `above`, `below`, `beside`, `left_of`, `right_of`, `in_front_of`, `behind`, `opposite`, `unknown`. The first six hold from anywhere; the others are meant from `viewpoint`, which is always present with them.
+- A side comes from a frame that shows both the thing and its anchor. When no frame does, the relation is `beside`, never a guessed side.
+- Someone coming in through a door has it behind them: a side given facing that door from inside is the other side for them. `location` and `description` say both when the anchor is a door ("left of the entrance door, facing it from inside; on your right as you come in").
+- `anchor_item_id` is the item that is the anchor, when it is one of the space's items.
+- `placement` is `null` for spaces scanned with the iPhone app and for documents produced before placements existed.
 
 ## Redacted documents
 

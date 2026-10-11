@@ -11,6 +11,16 @@ type Json = Record<string, unknown>;
 type EvidenceRef = { frame_id: string; timestamp_ms: number | null };
 
 /** The object without null, undefined, empty strings and empty arrays: fewer tokens, same meaning. */
+/**
+ * Where a record is, for an assistant: anchor, relation and the viewpoint that
+ * left and right are meant from. Mirror left and right only for someone whose
+ * own viewpoint is known. Null when the place is not documented.
+ */
+function placement(value: { anchor: string | null; anchor_item_id: string | null; relation: string; viewpoint: string | null; detail: string | null } | null | undefined) {
+  if (!value || (value.relation === 'unknown' && !value.anchor)) return null;
+  return compact({ relation: value.relation, anchor: value.anchor, anchor_item_id: value.anchor_item_id, viewpoint: value.viewpoint, detail: value.detail });
+}
+
 export function compact<T extends Json>(value: T): Json {
   const out: Json = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -54,6 +64,7 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
         level: entry.level,
         condition: entry.condition.code === 'unknown' ? null : compact({ code: entry.condition.code, notes: entry.condition.notes }),
         description: entry.description,
+        orientation: entry.orientation,
         features: entry.features,
         access_from: entry.access_from,
         evidence: evidence(entry.evidence),
@@ -66,7 +77,9 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
         id: item.id,
         name: item.name,
         area: area(item.area_id),
+        description: item.description,
         location: item.location,
+        placement: placement(item.placement),
         category: item.category,
         quantity: item.quantity,
         condition: item.condition && item.condition.code !== 'unknown' ? compact({ code: item.condition.code, notes: item.condition.notes }) : null,
@@ -101,7 +114,9 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
         kind: location.kind,
         label: location.label,
         area: area(location.area_id),
+        description: location.description,
         location: location.location,
+        placement: placement(location.placement),
         notes: location.notes,
         evidence: evidence(location.evidence),
       })
