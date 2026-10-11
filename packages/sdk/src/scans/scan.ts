@@ -1,4 +1,18 @@
-import { VIDEO_CONTENT_TYPES, type FrameContentType, type ReportLanguage, type Scan, type ScanInput, type SkillBundle, type SpaceContext, type SpaceDocument, type SpaceType, type UploadBody, type VideoContentType } from '../client/client.js';
+import {
+  VIDEO_CONTENT_TYPES,
+  type FrameContentType,
+  type ReportLanguage,
+  type Scan,
+  type ScanInput,
+  type ScanLimits,
+  type SkillBundle,
+  type SpaceContext,
+  type SpaceDocument,
+  type SpaceType,
+  type UploadBody,
+  type VideoContentType,
+} from '../client/client.js';
+import { byteLength, fileBody, formatSize, nodeFs, type NodeFs } from '../client/body.js';
 import { SpaceContextError } from '../errors.js';
 
 /**
@@ -99,10 +113,8 @@ export type ScanResult<Format extends ScanFormat = 'document'> = {
   document: SpaceDocument;
 } & (Format extends 'markdown' ? { markdown: string } : Format extends 'skill' ? { skill: SkillBundle } : Record<never, never>);
 
-/** The API's limits: checked before anything is created. */
-const MAX_FRAMES = 120;
+/** The largest photo the API takes; the other limits are the deployment's own (`sc.limits()`). */
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 /** The type of a video file from its extension: the containers the API takes. */
 const VIDEO_TYPES: Record<string, VideoContentType> = {
@@ -167,25 +179,18 @@ async function resolveSource(source: ScanSource): Promise<Resolved> {
   return { kind: 'frames', frames: source.frames.map(frameOf) };
 }
 
-/** The slice of Node's file system this uses; typed here so the SDK builds without Node's types. */
-type NodeFs = {
-  promises: { stat(target: string): Promise<{ isDirectory(): boolean }>; readdir(target: string): Promise<string[]> };
-  openAsBlob(target: string): Promise<Blob>;
-};
 type NodePath = { join(...parts: string[]): string };
 
+/**
+ * A path as a video or frames. Files are read from disk while they are
+ * uploaded, never into memory (`fileBody`): a video can be gigabytes.
+ */
 async function resolvePath(target: string): Promise<Resolved> {
-  // Loaded only here, by name, so that bundlers for browsers leave it alone.
-  const fsName = 'node:fs';
+  // Loaded only here, by name, so that bundlers for browsers leave them alone.
+  const fs: NodeFs | null = await nodeFs();
   const pathName = 'node:path';
-  let fs: NodeFs;
-  let path: NodePath;
-  try {
-    fs = (await import(fsName)) as NodeFs;
-    path = (await import(pathName)) as NodePath;
-  } catch {
-    throw invalid('A path can only be scanned in Node.js: pass a Blob, { video, contentType } or { frames } here');
-  }
+  const path = fs ? ((await import(pathName).catch(() => null)) as NodePath | null) : null;
+  if (!fs || !path) throw invalid('A path can only be scanned in Node.js: pass a Blob, { video, contentType } or { frames } here');
   let info: { isDirectory(): boolean };
   try {
     info = await fs.promises.stat(target);
@@ -199,33 +204,33 @@ async function resolvePath(target: string): Promise<Resolved> {
     if (names.length === 0) throw invalid(`${target}: no .jpg, .png or .webp image in the folder`);
     const frames: ScanFrame[] = [];
     for (const name of names) {
-      frames.push({ data: await fs.openAsBlob(path.join(target, name)), contentType: IMAGE_TYPES[extension(name)]!, timestampMs: null });
+      frames.push({ data: await fileBody(path.join(target, name)), contentType: IMAGE_TYPES[extension(name)]!, timestampMs: null });
     }
     return { kind: 'frames', frames };
   }
   const video = VIDEO_TYPES[extension(target)];
-  if (video) return { kind: 'video', data: await fs.openAsBlob(target), contentType: video };
+  if (video) return { kind: 'video', data: await fileBody(target), contentType: video };
   const image = IMAGE_TYPES[extension(target)];
-  if (image) return { kind: 'frames', frames: [{ data: await fs.openAsBlob(target), contentType: image, timestampMs: null }] };
+  if (image) return { kind: 'frames', frames: [{ data: await fileBody(target), contentType: image, timestampMs: null }] };
   throw invalid(`${target}: expected a video (${VIDEO_EXTENSIONS}), an image, or a folder of images`);
 }
 
-function byteLength(body: UploadBody): number {
-  return body instanceof Blob ? body.size : body.byteLength;
-}
-
-/** What the API would refuse after the space is created: refused before, so that no space is left without a scan. */
-function checkLimits(resolved: Resolved): void {
+/**
+ * What the API would refuse after the space is created, against this
+ * deployment's limits: refused before, so that no space is left without a scan.
+ */
+function checkLimits(resolved: Resolved, limits: ScanLimits): void {
   if (resolved.kind === 'video') {
-    if (byteLength(resolved.data) > MAX_VIDEO_BYTES) {
-      // A phone at 1080p fills 100 MB in about a minute; 10 minutes fit at about 1.4 Mbps.
+    const size = byteLength(resolved.data);
+    if (size > limits.maxVideoBytes) {
       throw invalid(
-        `The video is larger than ${MAX_VIDEO_BYTES / 1_048_576} MB: record at 720p or trim it, or compress it (the spacecontext CLI does it when ffmpeg is installed)`
+        `The video is ${formatSize(size)}, over the ${formatSize(limits.maxVideoBytes, true)} this API takes (${limits.maxVideoBytes} bytes): ` +
+          'trim it, or compress it (the spacecontext CLI does it when ffmpeg is installed)'
       );
     }
     return;
   }
-  if (resolved.frames.length > MAX_FRAMES) throw invalid(`${resolved.frames.length} frames: at most ${MAX_FRAMES} are accepted`);
+  if (resolved.frames.length > limits.maxPhotos) throw invalid(`${resolved.frames.length} frames: at most ${limits.maxPhotos} are accepted`);
   const oversized = resolved.frames.findIndex((frame) => byteLength(frame.data) > MAX_FRAME_BYTES);
   if (oversized !== -1) throw invalid(`Frame ${oversized} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
 }
@@ -238,9 +243,10 @@ export async function runScan<Format extends ScanFormat = 'document'>(
 ): Promise<ScanResult<Format>> {
   if (Boolean(options.space) === Boolean(options.name)) throw invalid('Pass either space (an existing space id) or name (a space to create)');
   const resolved = await resolveSource(source);
-  checkLimits(resolved);
-  const report = options.onProgress ?? (() => undefined);
   const request = { signal: options.signal };
+  // Read once per client; when it cannot be read, the limits of a deployment that does not say them.
+  checkLimits(resolved, await sc.limits(request));
+  const report = options.onProgress ?? (() => undefined);
 
   let spaceId = options.space!;
   if (options.name) {

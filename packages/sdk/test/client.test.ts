@@ -222,6 +222,34 @@ describe('SpaceContext client', () => {
     expect(calls[2]!.headers.authorization).toBeUndefined();
   });
 
+  it('sends a stream with its length, opening it again for a retry', async () => {
+    let opened = 0;
+    const body = {
+      size: 4,
+      stream: () => {
+        opened += 1;
+        return new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+            controller.close();
+          },
+        });
+      },
+    };
+    const { fetch, calls } = fakeFetch((_call, index) => {
+      if (index === 0) throw new TypeError('fetch failed');
+      return new Response(null, { status: 200 });
+    });
+    const direct = scan({ upload: { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=1', headers: { 'Content-Type': 'video/mp4', 'Content-Length': '4' } } as Scan['upload'] });
+    await client(fetch, { maxRetries: 1 }).scans.uploadVideo(direct, body);
+    expect(opened).toBe(2);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.body).toBeInstanceOf(ReadableStream);
+    expect(calls[0]!.body).not.toBe(calls[1]!.body);
+    expect(calls[1]!.headers['content-length']).toBe('4');
+    expect(calls[1]!.headers.authorization).toBeUndefined();
+  });
+
   it('checks the video against what the scan declared before sending it', async () => {
     const { fetch, calls } = fakeFetch(() => json({}));
     await expect(client(fetch).scans.uploadVideo(scan(), new Uint8Array(5))).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });

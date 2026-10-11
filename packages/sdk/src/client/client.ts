@@ -1,6 +1,7 @@
 import type { components } from '../generated/schema.js';
 import { errorFromResponse, SpaceContextError } from '../errors.js';
 import { parseServerSentEvents, type ServerSentEvent } from './sse.js';
+import { byteLength, formatSize, isUploadStream } from './body.js';
 import { runScan, type ScanFormat, type ScanOptions, type ScanResult, type ScanSource } from '../scans/scan.js';
 
 type Schemas = components['schemas'];
@@ -58,10 +59,51 @@ export const VIDEO_CONTENT_TYPES = [
   'video/matroska',
 ] as const satisfies readonly VideoContentType[];
 /**
- * Bytes to upload. A `Blob` is read lazily: in Node, `fs.openAsBlob(path)`
- * uploads a 100 MB video without loading it in memory.
+ * Bytes read as a stream, with their exact length (sent as `Content-Length`,
+ * which storage requires). `stream()` is called again for each attempt, so a
+ * retry starts from the first byte. `fileBody(path)` returns one for a file of
+ * 4 GiB or more. Node.js only: a browser does not let a streamed upload say
+ * its length.
  */
-export type UploadBody = Blob | ArrayBuffer | Uint8Array;
+export interface UploadStream {
+  readonly size: number;
+  stream(): ReadableStream<Uint8Array>;
+}
+/**
+ * Bytes to upload. A `Blob` is read lazily: in Node, `fileBody(path)` uploads a
+ * video of gigabytes from disk without loading it in memory.
+ */
+export type UploadBody = Blob | ArrayBuffer | Uint8Array | UploadStream;
+
+/** What a scan may be on this deployment of the API (`limits` of `GET /v1`). */
+export interface ScanLimits {
+  /** The largest video, in bytes: 4 GiB where the API reads videos with its own ffmpeg, 100 MiB elsewhere. */
+  maxVideoBytes: number;
+  /** The longest video, in seconds. */
+  maxVideoSeconds: number;
+  /** The most photos one scan takes. */
+  maxPhotos: number;
+}
+
+/**
+ * The limits of a deployment that does not say its own (the API before the
+ * `limits` field): videos up to 100 MiB and 10 minutes, 120 photos.
+ */
+export const DEFAULT_SCAN_LIMITS: Readonly<ScanLimits> = Object.freeze({ maxVideoBytes: 100 * 1024 * 1024, maxVideoSeconds: 600, maxPhotos: 120 });
+
+/** The limits in the API's descriptor; a field missing or malformed keeps its default. */
+function scanLimits(descriptor: unknown): ScanLimits {
+  const limits =
+    typeof descriptor === 'object' && descriptor !== null && 'limits' in descriptor && typeof descriptor.limits === 'object' && descriptor.limits !== null
+      ? (descriptor.limits as Record<string, unknown>)
+      : {};
+  const read = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : fallback);
+  return {
+    maxVideoBytes: read(limits.max_video_bytes, DEFAULT_SCAN_LIMITS.maxVideoBytes),
+    maxVideoSeconds: read(limits.max_video_seconds, DEFAULT_SCAN_LIMITS.maxVideoSeconds),
+    maxPhotos: read(limits.max_photos, DEFAULT_SCAN_LIMITS.maxPhotos),
+  };
+}
 
 export interface SpaceContextOptions {
   /** `sc_live_…` or `sc_test_…`. Defaults to the `SPACECONTEXT_API_KEY` environment variable. */
@@ -96,8 +138,10 @@ type RequestSpec = {
   headers?: Record<string, string>;
   /** Safe to send twice: a retry after a network error or a 5xx cannot do the work twice. */
   idempotent: boolean;
-  /** Uploads can take minutes: no client timeout. */
+  /** Uploads can take minutes, or hours for gigabytes: no client timeout. */
   noTimeout?: boolean;
+  /** This request's own timeout, instead of the client's. */
+  timeoutMs?: number;
   /** False: a 429 is thrown at once, never waited out (the caller has another way). */
   retryRateLimit?: boolean;
   signal?: AbortSignal | undefined;
@@ -143,10 +187,6 @@ function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
 }
 
-function byteLength(body: UploadBody): number {
-  return body instanceof Blob ? body.size : body.byteLength;
-}
-
 /**
  * The events of one stream, ending quietly when the connection drops mid-stream
  * (the read rejects): the caller opens the stream again. The caller's own abort
@@ -178,6 +218,8 @@ export class SpaceContext {
   private readonly maxRetries: number;
   private readonly timeoutMs: number;
   private readonly maxRetryDelayMs: number;
+  /** The deployment's limits once read: they do not change while a client lives. */
+  private knownLimits: ScanLimits | null = null;
 
   constructor(options: SpaceContextOptions = {}) {
     const apiKey = options.apiKey ?? environment('SPACECONTEXT_API_KEY');
@@ -376,7 +418,9 @@ export class SpaceContext {
     /**
      * Uploads the video of a scan, following the scan's `upload` instructions:
      * straight to storage when the API offers a signed URL, otherwise through the
-     * API. The API key is only ever sent to the API itself.
+     * API, which takes at most `upload.max_bytes` (95 MiB): a bigger video is
+     * refused before anything is sent. The API key is only ever sent to the API
+     * itself. No timeout: a video of gigabytes takes as long as the connection needs.
      */
     uploadVideo: (scan: Scan, data: UploadBody, options: RequestOptions = {}) => this.uploadVideo(scan, data, options),
 
@@ -443,6 +487,37 @@ export class SpaceContext {
     return runScan(this, source, options);
   }
 
+  /**
+   * What a scan may be on this deployment, from the API's descriptor (`GET /v1`,
+   * public): the largest video (4 GiB where the API reads videos with its own
+   * ffmpeg, 100 MiB elsewhere), the longest, and the most photos. Read once per
+   * client. It never fails because of the descriptor: when it cannot be read
+   * (no answer, an error, a deployment that does not say), the result is
+   * `DEFAULT_SCAN_LIMITS`, and a read that failed is tried again next time.
+   * `scan()` checks a source against it before creating anything.
+   */
+  async limits(options: RequestOptions = {}): Promise<ScanLimits> {
+    if (!this.knownLimits) {
+      let descriptor: unknown;
+      try {
+        // `/v1`, not `/v1/`: the API redirects the latter, and redirects are never followed.
+        descriptor = await this.json<unknown>({
+          method: 'GET',
+          path: '',
+          idempotent: true,
+          retryRateLimit: false,
+          timeoutMs: Math.min(this.timeoutMs, 15_000),
+          signal: options.signal,
+        });
+      } catch {
+        if (options.signal?.aborted) throw options.signal.reason;
+        return { ...DEFAULT_SCAN_LIMITS };
+      }
+      this.knownLimits = scanLimits(descriptor);
+    }
+    return { ...this.knownLimits };
+  }
+
   // ---------------------------------------------------------------- account
 
   /** The key in use: its user, mode and scopes. */
@@ -489,25 +564,27 @@ export class SpaceContext {
     if (!upload || upload.kind !== 'video' || !upload.url) {
       throw new SpaceContextError('This scan is not waiting for a video', 0, 'INVALID_STATE', null);
     }
+    const size = byteLength(data);
     const declared = scan.input.video?.content_length;
-    if (declared !== undefined && byteLength(data) !== declared) {
-      throw new SpaceContextError(
-        `The video is ${byteLength(data)} bytes but the scan declared ${declared}`,
-        0,
-        'VALIDATION_ERROR',
-        null
-      );
+    if (declared !== undefined && size !== declared) {
+      throw new SpaceContextError(`The video is ${size} bytes but the scan declared ${declared}`, 0, 'VALIDATION_ERROR', null);
     }
-    if (typeof upload.max_bytes === 'number' && byteLength(data) > upload.max_bytes) {
+    const toApi = this.isApiUrl(upload.url);
+    if (typeof upload.max_bytes === 'number' && size > upload.max_bytes) {
+      // Through the API a request is bounded (95 MiB): a bigger video needs the
+      // signed link to storage, which this deployment did not give.
       throw new SpaceContextError(
-        `The video is larger than this upload accepts (${upload.max_bytes} bytes)`,
+        toApi
+          ? `The video is ${formatSize(size)}, and this API takes at most ${formatSize(upload.max_bytes, true)} (${upload.max_bytes} bytes) through itself: ` +
+              'it offers no direct upload link to storage, which a bigger video needs. Compress or trim the video'
+          : `The video is larger than this upload accepts (${upload.max_bytes} bytes)`,
         413,
         'PAYLOAD_TOO_LARGE',
-        null
+        null,
+        { max_bytes: upload.max_bytes }
       );
     }
     const contentType = (upload.headers as Record<string, string> | undefined)?.['Content-Type'] ?? scan.input.video?.content_type;
-    const toApi = this.isApiUrl(upload.url);
     const headers: Record<string, string> = contentType ? { 'Content-Type': contentType } : {};
     const response = await this.send(upload.url, {
       method: 'PUT',
@@ -763,28 +840,37 @@ export class SpaceContext {
     const headers: Record<string, string> = { Accept: 'application/json', ...spec.headers };
     if (spec.withAuth !== false && this.isApiUrl(url)) headers.Authorization = `Bearer ${this.apiKey}`;
     let body: BodyInit | undefined;
+    // A stream is opened anew for each attempt, with its length said: storage
+    // refuses an upload without one.
+    const stream = spec.body !== undefined && isUploadStream(spec.body) ? spec.body : null;
     if (spec.json !== undefined) {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(spec.json);
+    } else if (stream) {
+      headers['Content-Length'] = String(stream.size);
     } else if (spec.body !== undefined) {
       body = spec.body as BodyInit;
     }
 
     for (let attempt = 0; ; attempt++) {
-      const signals = [spec.signal, spec.noTimeout ? undefined : AbortSignal.timeout(this.timeoutMs)].filter(
+      const signals = [spec.signal, spec.noTimeout ? undefined : AbortSignal.timeout(spec.timeoutMs ?? this.timeoutMs)].filter(
         (signal): signal is AbortSignal => signal !== undefined
       );
+      const sent = stream ? stream.stream() : body;
       let response: Response;
       try {
         response = await this.fetcher(url, {
           method: spec.method,
           headers,
-          ...(body !== undefined ? { body } : {}),
+          ...(sent !== undefined ? { body: sent } : {}),
+          // Node's fetch sends a stream only when told it is sent while being read.
+          ...(stream ? { duplex: 'half' } : {}),
           ...(signals.length > 0 ? { signal: AbortSignal.any(signals) } : {}),
           // Never followed: a redirect is answered as an error. ('error' is not supported by Workers.)
           redirect: 'manual',
-        });
+        } as RequestInit);
       } catch (error) {
+        if (sent instanceof ReadableStream) await sent.cancel().catch(() => undefined);
         if (spec.signal?.aborted) throw spec.signal.reason;
         const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
         if (spec.idempotent && attempt < this.maxRetries) {

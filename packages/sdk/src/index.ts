@@ -1,5 +1,6 @@
 export * from './client/client.js';
 export { SpaceContextError } from './errors.js';
+export { fileBody } from './client/body.js';
 export { describeScan } from './scans/scan.js';
 export type { ScanFormat, ScanFrame, ScanOptions, ScanProgress, ScanResult, ScanSource, ScanStage } from './scans/scan.js';
 export { parseServerSentEvents } from './client/sse.js';

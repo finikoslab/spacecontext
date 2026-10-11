@@ -1,8 +1,8 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { describeScan, parseServerSentEvents, SpaceContext, SpaceContextError, type Scan, type ScanProgress } from '../src/index.js';
+import { DEFAULT_SCAN_LIMITS, describeScan, fileBody, parseServerSentEvents, SpaceContext, SpaceContextError, type Scan, type ScanProgress } from '../src/index.js';
 
 // `sc.scan()` in one call, the event stream under it, and the Markdown export.
 
@@ -11,16 +11,42 @@ const BASE = 'https://api.example.test/v1';
 const SCAN_ID = `scn_${'a'.repeat(32)}`;
 const SPACE_ID = `spc_${'b'.repeat(32)}`;
 
-type Call = { url: string; method: string; headers: Record<string, string>; body: unknown };
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
+type Call = { url: string; method: string; headers: Record<string, string>; body: unknown; duplex: unknown };
 
 function fakeFetch(handler: (call: Call, index: number) => Response | Promise<Response>) {
   const calls: Call[] = [];
   const fetch = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const call: Call = { url: String(input), method: init.method ?? 'GET', headers: Object.fromEntries(new Headers(init.headers).entries()), body: init.body };
+    const call: Call = {
+      url: String(input),
+      method: init.method ?? 'GET',
+      headers: Object.fromEntries(new Headers(init.headers).entries()),
+      body: init.body,
+      duplex: (init as { duplex?: unknown }).duplex,
+    };
     calls.push(call);
+    // A stream is never read here: closed, as a server that answers would.
+    if (init.body instanceof ReadableStream) await init.body.cancel();
     return handler(call, calls.length - 1);
   });
   return { fetch: fetch as unknown as typeof globalThis.fetch, calls };
+}
+
+/** `GET /v1`, the API's descriptor; `limits` as a deployment with the server-side ingest says them. */
+const descriptor = (limits: Record<string, unknown> | null = { max_video_bytes: 4 * GB, max_video_seconds: 600, max_photos: 120 }) =>
+  json({ name: 'space-context-api', version: 'v1', openapi: '/v1/openapi.json', ...(limits ? { limits } : {}) });
+
+/** A video of `size` bytes that is never in memory. */
+const sizedVideo = (size: number) => ({ video: { size, stream: () => new ReadableStream<Uint8Array>() }, contentType: 'video/mp4' as const });
+
+/** A file of `size` bytes that takes no room on disk (sparse). */
+async function sparseFile(directory: string, name: string, size: number): Promise<string> {
+  const file = path.join(directory, name);
+  await writeFile(file, '');
+  await truncate(file, size);
+  return file;
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -307,16 +333,39 @@ describe('scans.events and scans.wait', () => {
   });
 });
 
+/** `GET /spaces`, `GET ` for the descriptor (`GET /v1`), `PUT storage` for a signed storage link. */
+const routeOf = (call: Call) => (call.url.startsWith(BASE) ? `${call.method} ${call.url.slice(BASE.length).split('?')[0]}` : `${call.method} storage`);
+
 describe('scan() in one call', () => {
-  function flow(options: { fail?: boolean; markdown?: string; streamsBusy?: boolean } = {}) {
+  function flow(
+    options: {
+      fail?: boolean;
+      markdown?: string;
+      streamsBusy?: boolean;
+      /** What `GET /v1` answers: the descriptor (default: one without `limits`, as before the field), or a failure. */
+      descriptor?: () => Response;
+      /** The upload instructions of the scan created. */
+      upload?: Scan['upload'];
+    } = {}
+  ) {
     let polls = 0;
     return fakeFetch((call) => {
-      const route = `${call.method} ${call.url.split('/v1')[1]!.split('?')[0]}`;
+      const route = routeOf(call);
       switch (route) {
+        case 'GET ':
+          return options.descriptor ? options.descriptor() : descriptor(null);
         case 'POST /spaces':
           return json({ object: 'space', id: SPACE_ID, name: 'Flat' }, 201);
-        case `POST /spaces/${SPACE_ID}/scans`:
-          return json(scan(), 201);
+        case `POST /spaces/${SPACE_ID}/scans`: {
+          // The scan as declared: a video's own type and length.
+          const input = JSON.parse(call.body as string).input as { kind: string; video?: { content_type: string; content_length: number } };
+          const declared = input.kind === 'video' ? scan({ input: { ...scan().input, video: input.video! } }) : scan();
+          return json(options.upload !== undefined ? { ...declared, upload: options.upload } : declared, 201);
+        }
+        case `DELETE /scans/${SCAN_ID}`:
+          return new Response(null, { status: 204 });
+        case 'PUT storage':
+          return new Response(null, { status: 200 });
         case `PUT /scans/${SCAN_ID}/video`:
           return json({ object: 'scan_upload' });
         case `PUT /scans/${SCAN_ID}/frames/0`:
@@ -370,7 +419,9 @@ describe('scan() in one call', () => {
     ]);
     const labels = progress.flatMap((event) => (event.type === 'scan' ? [event.label] : []));
     expect(labels).toEqual(['Queued', 'Looking at the frames', 'Complete']);
-    expect(calls.map((call) => `${call.method} ${call.url.split('/v1')[1]!.split('?')[0]}`)).toEqual([
+    expect(calls.map(routeOf)).toEqual([
+      // The deployment's limits first: `/v1` itself (the API redirects `/v1/`), without the key.
+      'GET ',
       'POST /spaces',
       `POST /spaces/${SPACE_ID}/scans`,
       `PUT /scans/${SCAN_ID}/video`,
@@ -379,8 +430,10 @@ describe('scan() in one call', () => {
       `GET /spaces/${SPACE_ID}`,
       `GET /spaces/${SPACE_ID}/markdown`,
     ]);
-    expect(JSON.parse(calls[0]!.body as string)).toEqual({ name: 'Flat', space_type: 'apartment' });
-    expect(calls[6]!.headers.accept).toBe('text/markdown');
+    expect(calls[0]!.url).toBe(BASE);
+    expect(calls[0]!.headers.authorization).toBeUndefined();
+    expect(JSON.parse(calls[1]!.body as string)).toEqual({ name: 'Flat', space_type: 'apartment' });
+    expect(calls[7]!.headers.accept).toBe('text/markdown');
   });
 
   it('scans a folder of photos into an existing space, one frame per file in name order, and returns the Skill', async () => {
@@ -414,7 +467,7 @@ describe('scan() in one call', () => {
       const declared = async (source: Parameters<SpaceContext['scan']>[0]) => {
         const { fetch, calls } = flow();
         await client(fetch).scan(source, { space: SPACE_ID });
-        return JSON.parse(calls[0]!.body as string).input.video;
+        return JSON.parse(calls.find((call) => call.url.endsWith('/scans'))!.body as string).input.video;
       };
       for (const [name, type] of [
         ['tour.mp4', 'video/mp4'],
@@ -476,7 +529,7 @@ describe('scan() in one call', () => {
     expect((error as SpaceContextError).details.scan).toMatchObject({ status: 'failed' });
   });
 
-  it('refuses what it cannot scan before touching the API', async () => {
+  it('refuses what it cannot scan before creating anything', async () => {
     const { fetch, calls } = flow();
     const sc = client(fetch);
     await expect(sc.scan(new Blob([new Uint8Array([1])]), { name: 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
@@ -485,21 +538,155 @@ describe('scan() in one call', () => {
     await expect(sc.scan({ video: new Uint8Array(4), contentType: 'video/mp4' }, { space: SPACE_ID, name: 'x' })).rejects.toThrow(/space.*name/);
     await expect(sc.scan(path.join(tmpdir(), 'sc-nope-' + crypto.randomUUID()), { name: 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(sc.scan({ frames: [new Blob([new Uint8Array([1])])] }, { name: 'x' })).rejects.toThrow(/Frame 0/);
-    // The API's limits, before a space is created for a scan it would refuse.
+    expect(calls).toHaveLength(0);
+    // The API's limits, before a space is created for a scan it would refuse: a
+    // deployment that does not say its own takes 120 photos and 100 MB.
     const frame = { data: new Uint8Array([0xff, 0xd8]), contentType: 'image/jpeg' as const };
     await expect(sc.scan({ frames: Array.from({ length: 121 }, () => frame) }, { name: 'x' })).rejects.toThrow(/121 frames: at most 120/);
     await expect(sc.scan({ frames: [frame, { ...frame, data: new Uint8Array(2 * 1024 * 1024 + 1) }] }, { name: 'x' })).rejects.toThrow(/Frame 1 is larger than 2 MB/);
-    await expect(sc.scan({ video: new ArrayBuffer(100 * 1024 * 1024 + 1), contentType: 'video/mp4' }, { name: 'x' })).rejects.toMatchObject({
+    await expect(sc.scan(sizedVideo(100 * MB + 1), { name: 'x' })).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('larger than 100 MB: record at 720p or trim it, or compress it (the spacecontext CLI does it when ffmpeg is installed)'),
+      message: 'The video is 100.0 MB, over the 100 MB this API takes (104857600 bytes): trim it, or compress it (the spacecontext CLI does it when ffmpeg is installed)',
     });
-    expect(calls).toHaveLength(0);
+    // Only the descriptor was read, once for the client.
+    expect(calls.map(routeOf)).toEqual(['GET ']);
+  });
+
+  it("takes a video up to the deployment's limit: 150 MB where the API says 4 GB, read from disk and sent to the storage link", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'sc-big-'));
+    try {
+      const storage = { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=1', headers: { 'Content-Type': 'video/mp4' } } as Scan['upload'];
+      const { fetch, calls } = flow({ descriptor: () => descriptor(), upload: storage });
+      const file = await sparseFile(directory, 'tour.mp4', 150 * MB);
+      const result = await client(fetch).scan(file, { space: SPACE_ID });
+      expect(result.scan.status).toBe('complete');
+      expect(JSON.parse(calls.find((call) => call.url.endsWith('/scans'))!.body as string).input.video).toEqual({ content_type: 'video/mp4', content_length: 150 * MB });
+      const put = calls.find((call) => call.method === 'PUT')!;
+      expect(put.url).toBe('https://bucket.r2.example/key?X-Amz-Signature=1');
+      expect(put.headers.authorization).toBeUndefined();
+      // Read from disk while it is sent, never into memory.
+      expect(put.body).toBeInstanceOf(Blob);
+      expect((put.body as Blob).size).toBe(150 * MB);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a video over 100 MB before creating anything when the API does not say its limits (an older deployment)', async () => {
+    const { fetch, calls } = flow();
+    const error = await client(fetch).scan(sizedVideo(150 * MB), { name: 'Flat' }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: 'VALIDATION_ERROR', message: expect.stringContaining('The video is 150.0 MB, over the 100 MB this API takes (104857600 bytes)') });
+    expect(calls.map(routeOf)).toEqual(['GET ']);
+  });
+
+  it('never fails a scan because the descriptor cannot be read: the limits of a deployment that does not say them', async () => {
+    for (const failing of [() => apiError(500, 'INTERNAL_ERROR'), () => new Response('<html>gateway</html>', { status: 200 }), () => Promise.reject(new TypeError('fetch failed'))]) {
+      const { fetch, calls } = flow({ descriptor: failing as () => Response });
+      const sc = client(fetch);
+      expect((await sc.scan(sizedVideo(4), { space: SPACE_ID })).scan.status).toBe('complete');
+      await expect(sc.scan(sizedVideo(150 * MB), { space: SPACE_ID })).rejects.toThrow('over the 100 MB this API takes');
+      // A read that failed is tried again by the next scan.
+      expect(calls.filter((call) => routeOf(call) === 'GET ')).toHaveLength(2);
+    }
+  });
+
+  it('refuses a video over upload.max_bytes before sending it to the API, which offers no storage link here, and cancels the scan', async () => {
+    const throughApi = { kind: 'video', method: 'PUT', url: `${BASE}/scans/${SCAN_ID}/video`, headers: { 'Content-Type': 'video/mp4' }, max_bytes: 95 * MB } as Scan['upload'];
+    const { fetch, calls } = flow({ descriptor: () => descriptor(), upload: throughApi });
+    const error = await client(fetch).scan(sizedVideo(150 * MB), { space: SPACE_ID }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({
+      code: 'PAYLOAD_TOO_LARGE',
+      message:
+        'The video is 150.0 MB, and this API takes at most 95 MB (99614720 bytes) through itself: it offers no direct upload link to storage, which a bigger video needs. Compress or trim the video',
+      details: { max_bytes: 95 * MB },
+    });
+    expect(calls.map(routeOf)).toEqual(['GET ', `POST /spaces/${SPACE_ID}/scans`, `DELETE /scans/${SCAN_ID}`]);
+  });
+
+  it.skipIf(process.platform === 'win32')('sends a file of 4 GiB, whose size fs.openAsBlob gets wrong, as a stream of its exact length; refuses a bigger one by its real size', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'sc-4g-'));
+    try {
+      const storage = { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=1', headers: { 'Content-Type': 'video/mp4' } } as Scan['upload'];
+      const { fetch, calls } = flow({ descriptor: () => descriptor(), upload: storage });
+      const sc = client(fetch);
+      const exact = await sparseFile(directory, 'exact.mp4', 4 * GB);
+      await sc.scan(exact, { space: SPACE_ID });
+      expect(JSON.parse(calls.find((call) => call.url.endsWith('/scans'))!.body as string).input.video.content_length).toBe(4 * GB);
+      const put = calls.find((call) => call.method === 'PUT')!;
+      expect(put.body).toBeInstanceOf(ReadableStream);
+      expect(put.headers['content-length']).toBe(String(4 * GB));
+      expect(put.duplex).toBe('half');
+      expect(put.headers.authorization).toBeUndefined();
+
+      // One byte more: 1 byte for fs.openAsBlob, refused here by its real size.
+      const over = await sparseFile(directory, 'over.mp4', 4 * GB + 1);
+      await expect(sc.scan(over, { space: SPACE_ID })).rejects.toThrow('The video is 4.0 GB, over the 4 GB this API takes (4294967296 bytes)');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('describes every stage in words', () => {
     expect(describeScan({ status: 'processing', stage: 'enriching' })).toEqual({ stage: 'enriching', label: 'Extracting the context' });
     expect(describeScan({ status: 'processing', stage: null })).toEqual({ stage: 'processing', label: 'Processing' });
     expect(describeScan({ status: 'failed', stage: null })).toEqual({ stage: 'failed', label: 'Failed' });
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('fileBody', () => {
+  it('reads a file of 4 GiB a megabyte at a time from disk, and fails rather than send less than announced', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'sc-body-'));
+    try {
+      const small = path.join(directory, 'small.mp4');
+      await writeFile(small, new Uint8Array([1, 2, 3]));
+      const blob = await fileBody(small);
+      expect(blob).toBeInstanceOf(Blob);
+      expect(new Uint8Array(await (blob as Blob).arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+
+      const file = await sparseFile(directory, 'big.mp4', 4 * GB);
+      const body = await fileBody(file);
+      expect(body).not.toBeInstanceOf(Blob);
+      expect(body.size).toBe(4 * GB);
+      const reader = body.stream().getReader();
+      const first = await reader.read();
+      expect(first.value!.byteLength).toBe(MB);
+      await reader.cancel();
+
+      // Each attempt reads from the first byte; a file cut short fails the upload.
+      await truncate(file, MB);
+      const again = body.stream().getReader();
+      expect((await again.read()).value!.byteLength).toBe(MB);
+      await expect(again.read()).rejects.toThrow('got shorter while it was being uploaded');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('limits()', () => {
+  it('reads the descriptor once, without the key, and keeps the default of a field missing or malformed', async () => {
+    const { fetch, calls } = fakeFetch(() => descriptor({ max_video_bytes: 4 * GB, max_video_seconds: '600', max_photos: 0 }));
+    const sc = client(fetch);
+    expect(await sc.limits()).toEqual({ maxVideoBytes: 4 * GB, maxVideoSeconds: 600, maxPhotos: 120 });
+    expect(await sc.limits()).toEqual({ maxVideoBytes: 4 * GB, maxVideoSeconds: 600, maxPhotos: 120 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ url: BASE, method: 'GET' });
+    expect(calls[0]!.headers.authorization).toBeUndefined();
+
+    const older = fakeFetch(() => descriptor(null));
+    expect(await client(older.fetch).limits()).toEqual({ ...DEFAULT_SCAN_LIMITS });
+    expect(DEFAULT_SCAN_LIMITS).toEqual({ maxVideoBytes: 100 * MB, maxVideoSeconds: 600, maxPhotos: 120 });
+  });
+
+  it('answers the defaults when the descriptor cannot be read, and throws only for the caller\'s own abort', async () => {
+    const down = fakeFetch(() => Promise.reject(new TypeError('fetch failed')));
+    expect(await client(down.fetch).limits()).toEqual({ ...DEFAULT_SCAN_LIMITS });
+    const redirected = fakeFetch(() => new Response(null, { status: 308, headers: { Location: '/v1' } }));
+    expect(await client(redirected.fetch).limits()).toEqual({ ...DEFAULT_SCAN_LIMITS });
+
+    const controller = new AbortController();
+    controller.abort(new Error('stopped'));
+    await expect(client(down.fetch).limits({ signal: controller.signal })).rejects.toThrow('stopped');
   });
 });
 
