@@ -4807,7 +4807,7 @@
           },
           "tax_added": {
             "type": "boolean",
-            "description": "Whether tax is added on top of top-ups and automatic recharges: VAT where it applies (Italy, and individuals elsewhere in the EU; not EU businesses with a valid VAT number, reverse charge, nor customers outside the EU), shown on the payment page and the invoice. The balance always receives the amount before tax."
+            "description": "Whether tax is added on top of top-ups and automatic recharges where it applies (such as VAT), from the billing address and tax ID, and shown on the payment page and the invoice. A business with a valid VAT number in another EU country is invoiced under the reverse charge. The balance always receives the amount before tax."
           },
           "auto_recharge": {
             "type": "object",

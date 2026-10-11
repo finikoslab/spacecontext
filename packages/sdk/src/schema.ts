@@ -1071,7 +1071,7 @@ export interface components {
             scan_price_cents: number;
             /** @description A real card stands behind the account: a card saved in the console, a paid top-up, or a settled x402 payment on mainnet. Starting a live scan, and creating a live key that can scan, need it: without it they answer 402 `PAYMENT_METHOD_REQUIRED`. Adding a card charges nothing. */
             card_on_file: boolean;
-            /** @description Whether tax is added on top of top-ups and automatic recharges: VAT where it applies (Italy, and individuals elsewhere in the EU; not EU businesses with a valid VAT number, reverse charge, nor customers outside the EU), shown on the payment page and the invoice. The balance always receives the amount before tax. */
+            /** @description Whether tax is added on top of top-ups and automatic recharges where it applies (such as VAT), from the billing address and tax ID, and shown on the payment page and the invoice. A business with a valid VAT number in another EU country is invoiced under the reverse charge. The balance always receives the amount before tax. */
             tax_added?: boolean;
             auto_recharge: {
                 enabled: boolean;
