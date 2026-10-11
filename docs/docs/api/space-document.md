@@ -48,8 +48,9 @@ A key without `spaces:sensitive` reads the same structure with:
 
 - sensitive facts' `statement` replaced and `value` set to `null` (`redacted: true`);
 - the location of keys and other sensitive key locations hidden;
-- the same values removed from every other text;
+- the same values removed from every other text, together with values that look like credentials, email addresses or international phone numbers even when no fact marks them;
 - no transcript, no owner answers, no `source_quote`;
-- frames that show sensitive content without a URL.
+- `space.description`, `summary`, the top-level `features`, area `layout` and the stored `coverage.warnings` left out: they were never screened (the warning about text addressed to an AI stays);
+- frames that show sensitive content without a URL, and frames no record cites without one either.
 
 Spaces scanned with the app are readable by such a key only after the deep pass has screened them. Until then the document keeps its shape and counts, without content, and says so in `coverage.warnings`.

@@ -18,7 +18,7 @@ Errors share one envelope: `{ "error": { "code", "message", "request_id", … } 
 | `INSUFFICIENT_SCOPE` | 403 | The key lacks a scope; `required_scopes` lists it. |
 | `PRO_REQUIRED` | 403 | Spaces scanned with the app need Space Context Pro (only when the service turns this rule on; today every account reads its app spaces). |
 | `NOT_FOUND` | 404 | No such space, scan or record for this key (test and live data are separate). |
-| `RATE_LIMIT_EXCEEDED` | 429 | Wait `retry_after` seconds (also in `Retry-After`, except for the daily limits of search, questions and frame checks). `daily_limit` comes with the daily allowance of new spaces or scans; `max_streams` when the account already holds its open event streams (poll `GET /scans/{id}` instead). See [Limits](../limits.md). |
+| `RATE_LIMIT_EXCEEDED` | 429 | Wait `retry_after` seconds (also in `Retry-After`, except for the daily limits of search, questions and frame checks). `daily_limit` comes with the daily allowance of new spaces or scans; `max_streams` when the account already holds its open event streams (poll `GET /scans/{id}` instead). On a live `POST /scans/{id}/start` it also means five scans of the account already failed today because of their footage (refunded): live scans resume at midnight UTC; check frames first with `POST /frames/check`. See [Limits](../limits.md). |
 | `INTERNAL_ERROR` | 500 | Retry later; if it persists, contact support with the request id. |
 
 ## Spaces, search and questions
@@ -39,7 +39,7 @@ When the deep pass of a space scanned with the app could not finish, the documen
 | `INVALID_CONTENT_TYPE` | 415 | Not a JPEG, PNG or WebP frame, or not an MP4, MOV or M4V video. |
 | `FILE_TOO_LARGE` | 413 | Over 2 MB per frame, or over the video size of the upload. |
 | `EMPTY_FILE` | 400 | The upload has no bytes. |
-| `SCANS_IN_PROGRESS` | 429 | Ten scans of the account are already processing; start again when one finishes. |
+| `SCANS_IN_PROGRESS` | 429 | On start: ten scans of the account are already processing; start again when one finishes. On create: twenty scans are waiting for their upload (`max_open_scans`); upload and start them, or cancel some with `DELETE /scans/{id}`. |
 | `INSUFFICIENT_FUNDS` | 402 | The balance does not cover the scan; `balance_cents` and `price_cents` say by how much. |
 | `SPENDING_CAP_REACHED` | 402 | The key's monthly cap is reached. |
 | `FRAME_CHECK_UNAVAILABLE` | 503 | `POST /frames/check` cannot run right now; try again shortly. |
@@ -65,6 +65,19 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 | `DEVICE_CODE_EXPIRED` | 400 | The code lived its ten minutes; start again. |
 | `DEVICE_CODE_INVALID` | 400 | Unknown device code, or the key was already handed out. |
 | `ACCESS_DENIED` | 403 | Denied in the console. |
+
+## Agents that pay (`POST /agent/credits`)
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `PAYMENT_REQUIRED` | 402 | No payment yet: the options are in the `PAYMENT-REQUIRED` header (and in `error.payment_required`). |
+| `PAYMENT_INVALID` | 400 | `PAYMENT-SIGNATURE` is malformed or does not match what was asked (amount, network, asset, recipient, fee payer, signature); `reason` says which. |
+| `PAYMENT_FAILED` | 402 | The facilitator refused or could not settle the payment (for example not enough USDC); nothing was charged. |
+| `PAYMENT_FAILED` | 502 | The settlement could not be confirmed: it may have gone through. Write to support with `nonce` (Base) or `signature` (Solana). |
+| `AGENT_KEY_REQUIRED` | 403 | `rotate_key`, or the first key of the other mode, without one of the account's current keys; nothing was charged. |
+| `PAYMENTS_UNAVAILABLE` | 503 | The chosen network cannot be served right now; try later or pay on the other one. |
+
+Details and examples: [Agents that pay (x402)](../account/agent-payments.md#errors).
 
 ## Evidence frames
 
