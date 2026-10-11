@@ -12,7 +12,7 @@ Reading, searching and asking spaces are included. **Live scans** are paid from 
 | Test keys | Free, within the [limits](../limits.md) |
 | First live scan of a new account | Free, one free scan per card (see [Add a card](#add-a-card)) |
 | Each live scan after that | **$1.00**, charged when the scan starts |
-| VAT | Added on top of top-ups where it applies (see [VAT](#vat)); the balance receives the amount before VAT |
+| Taxes | Prices exclude applicable taxes, added at checkout where they apply (see [Taxes](#taxes)) |
 | Failed scans | Refunded automatically |
 | Live scans, and live keys that can scan | Need a card on file: saved in the console without a charge, or a top-up already paid |
 
@@ -40,19 +40,13 @@ In the console, tick the billing terms (below), then **Billing → Add $10 / $25
 - The balance never expires and is used only for API scans.
 - Tick **Save the card for automatic top-ups** to allow automatic top-up later; that card is also the card on file that live keys that can scan need. The card is stored by Stripe, never by us. Saving another card later replaces it, and the previous one is removed from Stripe.
 
-## VAT
+## Taxes
 
-Space Context is sold by Finikos S.r.l., an Italian company. Amounts are **before VAT**: where VAT applies, Stripe's payment page adds it on top and the invoice shows it, while your balance receives the amount you chose ($25 of credit is $25 on the balance).
+Prices and top-up amounts are in US dollars and **exclude applicable taxes**. Where a tax such as VAT, GST or sales tax applies, Stripe's payment page adds it on top, from your billing address and, for a business, your tax ID, and the invoice shows it. Your balance always receives the amount you chose: $25 of credit is $25 on the balance.
 
-| You are | VAT |
-| --- | --- |
-| In Italy, an individual or a business | 22% |
-| An individual elsewhere in the EU | At the rate that applies, today Italy's 22% |
-| A business elsewhere in the EU, with a valid VAT number | None: reverse charge, stated on the invoice |
-| Outside the EU | None |
-
-- VAT depends on your billing address and, for a business, your VAT number: set your [invoice details](#invoices-and-company-details) before you pay. Automatic top-up needs them, since it is charged without you on the page.
-- A refund to your card includes its VAT; your balance gives back the credit it bought.
+- A business with a valid VAT number in another EU country is invoiced under the **reverse charge**, with no VAT added.
+- Set your [invoice details](#invoices-and-company-details) before you pay. Automatic top-up needs them, since it is charged without you on the page.
+- A refund to your card includes the tax on the refunded amount; your balance gives back the credit it bought.
 
 ## What you accept when you add funds
 
@@ -63,7 +57,7 @@ You do not have to tick the box every time: once you have accepted the current v
 - **The credit is supplied at once.** It is added to your balance as soon as the payment succeeds, and the scans you start use it: you ask for it to be supplied now.
 - **Credit already used cannot be refunded.** A scan that fails is refunded to your balance automatically (see below). Money goes back to a card only if you ask: write to support about unused credit. Statutory rights, where they apply, are not affected.
 - **Unused credit never expires.**
-- **Amounts exclude VAT.** Where it applies, VAT is added on top and shown on the invoice (see [VAT](#vat)); the balance receives the amount before VAT.
+- **Amounts exclude applicable taxes.** Where tax applies, it is added on top and shown on the invoice (see [Taxes](#taxes)); the balance receives the amount before tax.
 - Payments ask your bank for **3-D Secure** when your card supports it, and show on your statement as **FINIKOS\* SPACECONTEXT**.
 - The console records the time you accepted, the version of these terms and your IP address. That record, the ledger and your usage are what we show Stripe if a payment is disputed.
 
@@ -72,7 +66,7 @@ You do not have to tick the box every time: once you have accepted the current v
 With a saved card, the console can top up for you:
 
 - **When the balance is below**: the threshold, in dollars.
-- **Add**: the credit to add, from $10 to $500. Where VAT applies, the card is charged this amount plus VAT, and the balance receives the amount.
+- **Add**: the credit to add, from $10 to $500. Where tax applies, the card is charged this amount plus the tax, and the balance receives the amount.
 
 A top-up is attempted right after a paid scan starts and leaves the balance below the threshold. It is also attempted when the balance cannot pay for the next scan, and when a scan is refused for insufficient funds; in that last case the next attempt to start can succeed. Two attempts are at least 10 minutes apart, with at most 3 per day.
 
@@ -99,8 +93,8 @@ Payments are processed by Stripe on behalf of Finikos S.r.l. (Italy). **Every to
 In the console, open **Billing → Invoice details**, choose **Individual** or **Company**, and save:
 
 - **Name**, or the **company name**; the **billing email** that receives the invoices (your account's email to start with); the **billing address** and its country.
-- **VAT number**, for a company. It is required for a company in the EU, the United Kingdom, Switzerland or Norway. Type it with its country prefix, as in `IT12345678901` (in the EU and the UK the console adds the prefix if you leave it out). After you save, Stripe checks it with the tax authority, and the card shows **Verified**, **Pending check** or **Not verified**.
-- **Italian customers.** A company gives its **Codice destinatario SDI** (7 characters) or its **PEC** address for the electronic invoice: either is enough, and without either the invoice goes to its tax drawer (*cassetto fiscale*). An individual can add their **codice fiscale**.
+- **VAT number**, for a company. It is required for a company in the EU (a business in another EU country pays no VAT: reverse charge) and optional elsewhere. Type it with its country prefix, as in `IT12345678901` (in the EU and the UK the console adds the prefix if you leave it out). After you save, Stripe checks it with the tax authority, and the card shows **Verified**, **Pending check** or **Not verified**.
+- **Italian customers.** A company gives its **Codice destinatario SDI** (7 characters, 6 for a public administration) or its **PEC** address for the electronic invoice: either is enough, and without either the invoice goes to its tax drawer (*cassetto fiscale*). An individual can add their **codice fiscale**.
 
 Set them **before you pay**: invoices already issued do not change. If you have not set them in the console, Stripe's payment page lets you give them while paying: tick the box for purchasing as a business and enter the company name and VAT number there. Once your details are on file, the payment page no longer asks for them, and the name and address of the card you pay with never replace them: a company paying with a card in someone's name still gets its own invoice. The details are kept by Stripe with your customer record; the [privacy policy](https://spacecontext.app/privacy/) says how they are used.
 

@@ -34,7 +34,7 @@ Approve only a code you are looking at in your own terminal: the name shown in t
 Already have a key? `spacecontext login --key -` asks for it without echoing it, checks it with the API and saves it. Prefer it, or the code above, to `--key sc_…`: that works too, but leaves the key in your shell history.
 
 ```bash
-spacecontext whoami      # account, mode and scopes of the saved key
+spacecontext whoami      # account, the key in use (masked), its mode and scopes
 spacecontext logout      # forget it
 ```
 
@@ -53,8 +53,13 @@ The CLI uses the first of:
 Every command accepts `--json` and prints the API's JSON on standard output; progress goes to standard error. Exit codes: `0` success, `1` the request failed, `2` wrong usage. Errors print the API's code and request id:
 
 ```text
-Error [INSUFFICIENT_FUNDS]: The wallet does not cover this scan (request 8f0c2b9e-…)
-Top up your wallet in the console: https://spacecontext.app/developers/console/
+✗ Error [INSUFFICIENT_FUNDS]: The wallet does not cover this scan (request 8f0c2b9e-…)
+  › Top up the balance in the console: https://spacecontext.app/developers/console/billing/
+  › `spacecontext wallet` shows the balance and the price of a scan
 ```
+
+Every error ends with what to do next: the console page to open, the command to run, or the variable to fix.
+
+At a terminal the CLI uses colours and a live status line. When the output is piped or redirected it prints plain lines, and `NO_COLOR=1` (or `TERM=dumb`) turns colours off. `--json` output is never styled, and with `--json` standard error carries only errors (and the sign-in code of `login`).
 
 Next: [the commands](commands.md).

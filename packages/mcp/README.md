@@ -6,7 +6,7 @@
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Docs](https://img.shields.io/badge/docs-spacecontext.app-7C3AED)](https://spacecontext.app/developers/docs/mcp/tools/)
 
-A remote MCP server that gives Claude, ChatGPT, Cursor, VS Code or any MCP client access to your [Space Context](https://spacecontext.app/developers/) spaces. The assistant can list spaces, search them, read them by section or as one page, ask them questions, compare scans and show the photo evidence. If you allow it, it can also scan spaces for you.
+A remote MCP server that gives Claude, ChatGPT, Codex, Cursor, VS Code or any MCP client access to your [Space Context](https://spacecontext.app/developers/) spaces. The assistant can list spaces, search them, read them by section or as one page, ask them questions, compare scans and show the photo evidence. If you allow it, it can also scan spaces for you.
 
 ```text
 https://mcp.spacecontext.app/mcp
@@ -19,10 +19,11 @@ It speaks MCP over Streamable HTTP and authorizes with OAuth 2.1 (dynamic client
 | Client | How |
 | --- | --- |
 | Claude (claude.ai, Desktop) | **Settings → Connectors → Add custom connector**, paste the URL, **Connect** |
-| Claude Code | `claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → **Authenticate** |
+| Claude Code | `claude mcp add --transport http --scope user spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → **Authenticate** |
+| Codex | `codex mcp add spacecontext --url https://mcp.spacecontext.app/mcp`, then `codex mcp login spacecontext` |
 | ChatGPT | **Settings → Apps & Connectors → Advanced → Developer mode**, then create a connector with the URL and **OAuth** |
-| Cursor | `"spacecontext": { "url": "https://mcp.spacecontext.app/mcp" }` under `mcpServers` in `~/.cursor/mcp.json` |
-| VS Code | `"spacecontext": { "type": "http", "url": "https://mcp.spacecontext.app/mcp" }` under `servers` in `.vscode/mcp.json` |
+| Cursor | `"spacecontext": { "url": "https://mcp.spacecontext.app/mcp" }` under `mcpServers` in `~/.cursor/mcp.json`, then **Login** in Cursor's MCP settings |
+| VS Code | `code --add-mcp '{"name":"spacecontext","type":"http","url":"https://mcp.spacecontext.app/mcp"}'` (or `servers` in a workspace's `.vscode/mcp.json`), then **MCP: List Servers** → start it and sign in |
 
 You never paste a key. Connecting works like this:
 

@@ -14,7 +14,8 @@ Space Context turns a phone video of a space into a **Space Document**: an inven
 - `search_spaces`: the records that best answer a question across all spaces, in any language.
 - `list_scans`, `compare_scans`: what changed between two scans, with photos of both.
 - `get_evidence_photo`: the original frame behind a record.
-- `wallet`, and, only on a connection allowed to scan: `check_frame`, `create_scan`, `upload_frame`, `start_scan`, `cancel_scan`, `get_scan_status`, `follow_scan`.
+- `get_scan_status`, `follow_scan`: where a scan is, and its progress until it ends.
+- `wallet`, and, only on a connection allowed to scan: `check_frame`, `create_scan`, `upload_frame`, `start_scan`, `cancel_scan`.
 
 ## Rules
 

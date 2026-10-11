@@ -1,6 +1,6 @@
 ---
 title: 'Connect an assistant'
-description: 'Add the Space Context MCP server to Claude, Claude Code, Cursor, VS Code or any MCP client that supports OAuth.'
+description: 'Add the Space Context MCP server to Claude, Claude Code, Codex, ChatGPT, Cursor, VS Code or any MCP client that supports OAuth.'
 ---
 
 # Connect an assistant (MCP)
@@ -48,10 +48,10 @@ On Team and Enterprise plans, an owner may need to add the connector for the org
 ## Claude Code
 
 ```bash
-claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp
+claude mcp add --transport http --scope user spacecontext https://mcp.spacecontext.app/mcp
 ```
 
-Then run `/mcp` in Claude Code and choose **Authenticate** for `spacecontext`. To give Claude Code a space without a connection, you can also export it as a [skill](../guides/claude-code-skill.md).
+`--scope user` makes it available in every project. Then run `/mcp` in Claude Code and choose **Authenticate** for `spacecontext`. To give Claude Code a space without a connection, you can also export it as a [skill](../guides/claude-code-skill.md).
 
 Or install the **Space Context plugin**, which adds the same server and a skill that tells Claude how to use it:
 
@@ -67,7 +67,7 @@ codex mcp add spacecontext --url https://mcp.spacecontext.app/mcp
 codex mcp login spacecontext
 ```
 
-The login opens the browser to sign in and approve. The same in `~/.codex/config.toml` (or a project's `.codex/config.toml`):
+`codex mcp add` may start the sign-in itself; otherwise `codex mcp login` opens the browser to sign in and approve. The same in `~/.codex/config.toml` (or a project's `.codex/config.toml`):
 
 ```toml
 [mcp_servers.spacecontext]
@@ -96,7 +96,13 @@ Cursor shows a **Login** button for the server in its MCP settings.
 
 ## VS Code
 
-Add to `.vscode/mcp.json`:
+Add the server to your user profile:
+
+```bash
+code --add-mcp '{"name":"spacecontext","type":"http","url":"https://mcp.spacecontext.app/mcp"}'
+```
+
+Or, for one workspace, add it to `.vscode/mcp.json`:
 
 ```json
 {
@@ -105,6 +111,8 @@ Add to `.vscode/mcp.json`:
   }
 }
 ```
+
+Then run **MCP: List Servers** from the Command Palette, start `spacecontext` and sign in when asked.
 
 ## Other clients
 

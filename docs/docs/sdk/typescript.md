@@ -5,7 +5,7 @@ description: 'The @spacecontext/sdk client for Node, Deno and Cloudflare Workers
 
 # TypeScript SDK
 
-`@spacecontext/sdk` is a typed client for the API, generated from its OpenAPI contract. No runtime dependencies; it runs in Node.js 22+, Deno and Cloudflare Workers.
+`@spacecontext/sdk` is a client for the API, typed from its OpenAPI contract. No runtime dependencies; it runs in Node.js 22+, Deno and Cloudflare Workers.
 
 ```bash
 npm install @spacecontext/sdk
@@ -35,7 +35,9 @@ console.log(document.items.length, 'items');
 console.log(markdown);                      // one readable page of the whole space
 ```
 
-`scan()` takes a path (a video, an image, or a folder of photos; Node only), a `Blob`/`File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts, streams the scan's events (`space_created`, `uploading`, `started`, one `scan` per stage with a label, `complete`) and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` when asked. A scan that fails throws a `SpaceContextError` whose `code` is the scan's error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`; nothing is charged.
+`scan()` takes a path (a video, an image, or a folder of photos; Node only), a `Blob`/`File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts, streams the scan's events to `onProgress` (`space_created` with `name`, `uploading`, `uploaded`, `started`, one `scan` per change of status or stage with its `stage` and `label`, `complete`) and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` when asked. A scan that fails throws a `SpaceContextError` whose `code` is the scan's error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`; its charge is refunded.
+
+Other options: `externalId` (with `name`: the same id returns the same space), `language` (`en` or `it`, default `en`), `transcript` (with photos; videos are transcribed by the API), `recordedAt`, `device`, `timeoutMs` (default 20 minutes, then `TIMEOUT` while the scan goes on) and `signal`.
 
 ## Reading
 
@@ -59,6 +61,7 @@ const check = await sc.frames.check(bytes, 'image/jpeg');          // usable? wh
 
 ```ts
 import { openAsBlob } from 'node:fs';
+import { describeScan } from '@spacecontext/sdk';
 
 const space = await sc.spaces.create({ name: 'Seaside flat', space_type: 'apartment' });
 
@@ -134,7 +137,7 @@ See [all error codes](../api/errors.md).
 | `timeoutMs` | 60 000 | Per request; uploads have no timeout |
 | `fetch` | global `fetch` | A custom fetch, for tests or proxies |
 
-- `429` is retried after `Retry-After`; `502`–`504` and network errors only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry; `cancel` and `delete` are never repeated.
+- `429` is retried after `Retry-After`; `502`–`504` and network errors only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry; `cancel` and `delete` are never repeated after a network error or a `5xx`.
 - The API key is sent only to the API's own origin and path: never to a storage upload URL, an evidence URL or another host. Redirects are never followed.
 
 ## Types

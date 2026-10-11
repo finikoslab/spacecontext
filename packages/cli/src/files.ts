@@ -21,7 +21,18 @@ export const MAX_FRAMES = 120;
 export const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
-export class UsageError extends Error {}
+/** Wrong usage (exit code 2): what is wrong, and optionally what to run instead. */
+export class UsageError extends Error {
+  constructor(
+    message: string,
+    /** Next steps, shown as `› …` lines. */
+    readonly hints: string[] = [],
+    /** Show the command's usage under the message. */
+    readonly showUsage = false
+  ) {
+    super(message);
+  }
+}
 
 export type ScanSource =
   | { kind: 'video'; file: string; contentType: VideoContentType; size: number }

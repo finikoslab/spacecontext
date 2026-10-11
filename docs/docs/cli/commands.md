@@ -5,7 +5,7 @@ description: 'Every command of the spacecontext CLI.'
 
 # CLI commands
 
-All commands accept `--json`, `--api-key <key>` and `--base-url <url>`. New here? Start with [`setup`](#get-started). Ids are the ones the API uses: spaces `app_…` (scanned with the app) or `spc_…` (created with the API or the CLI), scans `scn_…`.
+All commands accept `--json`, `--api-key <key>` and `--base-url <url>`. `spacecontext <command> --help` (or `spacecontext help <command>`) shows a command's options and examples, and an option a command does not take is refused rather than ignored. New here? Start with [`setup`](#get-started). Ids are the ones the API uses: spaces `app_…` (scanned with the app) or `spc_…` (created with the API or the CLI), scans `scn_…`.
 
 ## Get started
 
@@ -33,8 +33,8 @@ Claude Code gets the server for your user (`claude mcp add --transport http --sc
 | --- | --- |
 | `spacecontext login [--test] [--no-browser]` | Sign in from the terminal: a code to approve in the console, the key comes back here. `--key -` saves a key you already have, typed without echo (`--key sc_…` works but stays in your shell history). |
 | `spacecontext logout` | Forget the saved key. |
-| `spacecontext whoami` | The account, mode (test or live) and scopes of the key. |
-| `spacecontext wallet` | Balance, free scans left and price per scan. Needs `scans:read`. |
+| `spacecontext whoami` | The account, the key in use (masked, as the console shows it) and where it comes from, its mode (test or live) and scopes. |
+| `spacecontext wallet` | Balance, free scans left, price per scan, card on file and automatic recharge. Needs `scans:read`. |
 
 ## Spaces
 
@@ -59,14 +59,14 @@ spacecontext ask <space-id> <question…>
 $ spacecontext ask spc_demo "where is the fuse box?"
 The fuse box is in the Open-plan Living, Dining and Kitchen, in the hallway cupboard behind the coats.
 
-Sources:
-  - Fuse box (Open-plan Living, Dining and Kitchen)
+Sources
+  • Fuse box (Open-plan Living, Dining and Kitchen)
 
 $ spacecontext ask spc_demo "dov'è il frigorifero?"
 Dark refrigerator is in the Open-plan Living, Dining and Kitchen, at the left side of the kitchen work area. Condition: good.
 
-Sources:
-  - Dark refrigerator (Open-plan Living, Dining and Kitchen)
+Sources
+  • Dark refrigerator (Open-plan Living, Dining and Kitchen)
 ```
 
 ## Skills and comparisons
@@ -93,6 +93,33 @@ spacecontext cancel <scan-id>
 
 `scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order), starts the analysis and follows it live, printing each stage in words (`Reading the video`, `Looking at the frames`, `Extracting the context`…). With `--name` it first creates a space (`--type` is one of `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance`, `other`); with `--space` it scans an existing space again, and the new scan is checked against the previous one. `--format` chooses what to print when it is done: a summary (`text`), the whole document (`json`), one Markdown page (`markdown`, to stdout or `--out <file>`) or an Agent Skill folder (`skill`, written to `--out <dir>`). With `--no-wait` it returns once the scan has started; `scan-status --follow` picks it up again and prints every change until the end.
 
-Sizes are checked before anything is created. If an upload fails, the scan is cancelled (nothing is charged); a space created with `--name` stays, and the CLI tells you its id.
+At a terminal, the stage in progress is a live line with its elapsed time, and each finished stage stays as a ✓ line with how long it took; piped, each stage is one plain `› stage…` line. At the end, the CLI prints the space (areas and items, key locations, issues) and the commands to ask it, export it as a skill and read it again:
+
+```text
+$ spacecontext scan ./flat.mp4 --name "Seaside flat" --type apartment
+◆ Scanning flat.mp4 (video, 48.2 MB) into a new space "Seaside flat"
+✓ Space created  spc_3f9c…
+✓ Uploaded flat.mp4  48.2 MB in 12s
+✓ Scan started  scn_8a1b… · free scan
+✓ Queued  2s
+✓ Reading the video  21s
+✓ Checking the frames  4s
+✓ Looking at the frames  1m 04s
+✓ Writing the report  38s
+✓ Extracting the context  51s
+✓ Saving  1s
+✓ Scan complete in 3m 15s
+
+Seaside flat  spc_3f9c… · api
+Scan scn_8a1b… of 2026-10-11 · deep level, complete
+5 areas · 42 items · 3 issues · 6 key locations · 9 facts
+…
+Next
+  › Ask it: spacecontext ask spc_3f9c… "where is the fuse box?"
+  › Give it to your agent: spacecontext skill spc_3f9c… --out ~/.claude/skills/seaside-flat
+  › Read it again: spacecontext space spc_3f9c…
+```
+
+Sizes are checked before anything is created. If an upload fails, the scan is cancelled (nothing is charged); a space created with `--name` stays, and the CLI tells you its id. If you press Ctrl+C after the scan has started, the scan goes on on the server, and the CLI prints the `scan-status --follow` command that picks it up again.
 
 `cancel` cancels a scan that has not started. See [Scanning](scanning.md) for recording tips and costs.

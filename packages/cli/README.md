@@ -8,7 +8,8 @@
 [Space Context](https://spacecontext.app/developers/) from the terminal. Film a space once, then search it, ask it questions, compare scans and hand it to your agents as an Agent Skill or a Markdown page.
 
 ```bash
-npx spacecontext --help
+npx spacecontext --help              # every command, by group
+npx spacecontext scan --help         # one command: its options and examples
 ```
 
 Needs Node.js 22 or later. Run it with `npx`, or install it with `npm install -g spacecontext`. Videos are analysed on the server, so you don't need ffmpeg.
@@ -33,8 +34,8 @@ npx spacecontext skill spc_demo --out ./brisbane-apartment-skill
 ```text
 The fuse box is in the Open-plan Living, Dining and Kitchen, in the hallway cupboard behind the coats.
 
-Sources:
-  - Fuse box (Open-plan Living, Dining and Kitchen)
+Sources
+  • Fuse box (Open-plan Living, Dining and Kitchen)
 ```
 
 The demo space contains two real scans of an apartment in Brisbane (photos at check-in, a narrated video at check-out). Test keys are free and unlimited, and a test scan runs the whole flow and returns the demo content.
@@ -49,16 +50,16 @@ npx spacecontext search "where is the water shut-off?"
 npx spacecontext skill spc_… --out ~/.claude/skills/seaside-flat
 ```
 
-`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order). It then starts the analysis and prints each stage as it runs ("Reading the video", "Looking at the frames", "Extracting the context"…). After the free scan, each live scan costs US$1.00 from your prepaid balance, and failed scans are refunded. If an upload fails, the scan is cancelled and nothing is charged. A live key that can scan needs a card on file in the console first: adding one charges nothing.
+`scan` uploads a video (`.mp4`, `.mov`, `.m4v`, up to 100 MB and 10 minutes) or a folder of photos (`.jpg`, `.png`, `.webp`, up to 120, 2 MB each, taken in name order). It then starts the analysis and follows it live: at a terminal, a status line with the stage in progress and its elapsed time, and a ✓ line for each stage done ("Reading the video", "Looking at the frames", "Extracting the context"…). At the end it prints the space and the commands to ask it, export it as a skill and read it again. Press Ctrl+C after the start and the scan goes on on the server; the CLI tells you how to follow it again. After the free scan, each live scan costs US$1.00 from your prepaid balance, and failed scans are refunded. If an upload fails, the scan is cancelled and nothing is charged. A live key that can scan needs a card on file in the console first: adding one charges nothing.
 
 ## Commands
 
 | Command | |
 | --- | --- |
-| `setup [--client <list>] [--test] [--yes] [--json] [--no-browser] [--skip-login\|--skip-mcp\|--skip-skill]` | Sign in, connect Claude Code, Codex, Cursor and VS Code (`--client claude-code,codex,cursor,vscode` or `all`), install the skill, check the card on file. `--yes` for agents (no questions, no browser); exit code `0` when signed in and at least one assistant is connected |
+| `setup [--client <list>] [--test] [--yes] [--json] [--no-browser] [--skip-login] [--skip-mcp] [--skip-skill]` | Sign in, connect Claude Code, Codex, Cursor and VS Code (`--client claude-code,codex,cursor,vscode` or `all`), install the skill, check the card on file. `--yes` for agents (no questions, no browser); exit code `0` when signed in and at least one assistant is connected |
 | `login [--test] [--no-browser] [--key -]` | Sign in: approve a code in the console, and the key comes back to the terminal |
-| `logout`, `whoami` | Forget the saved key; show the account, mode and scopes of the key |
-| `wallet` | Balance, free scans left, price per scan |
+| `logout`, `whoami` | Forget the saved key; show the account, the key in use (masked) and where it comes from, its mode and scopes |
+| `wallet` | Balance, free scans left, price per scan, card on file |
 | `spaces [--source app\|api]` | Every space the key can read: `app_…` from the iPhone app, `spc_…` from the API |
 | `space <space-id> [--transcript]` | A summary of a space; `--json` for the whole Space Document |
 | `search <question…> [--space <id>] [--limit <1-25>]` | Search every space, in any language |
@@ -89,11 +90,15 @@ To save a key you already have, run `login --key -`: it asks for the key without
 
 ## Scripts and CI
 
-Every command accepts `--json` and prints the API's JSON on standard output, while progress goes to standard error. Exit codes are `0` for success, `1` when the request failed and `2` for wrong usage. Errors show the API's code and request id:
+Every command accepts `--json` and prints the API's JSON on standard output, while progress goes to standard error (with `--json`, only errors do). Exit codes are `0` for success, `1` when the request failed and `2` for wrong usage. Errors show the API's code and request id, then what to do next:
 
 ```text
-Error [INSUFFICIENT_FUNDS]: The wallet does not cover this scan (request 8f0c2b9e-…)
+✗ Error [INSUFFICIENT_FUNDS]: The wallet does not cover this scan (request 8f0c2b9e-…)
+  › Top up the balance in the console: https://spacecontext.app/developers/console/billing/
+  › `spacecontext wallet` shows the balance and the price of a scan
 ```
+
+Colours and the live status line appear only at a terminal: piped or redirected output is plain lines, and `NO_COLOR=1` turns colours off.
 
 Use a test key in CI: it's free and never touches real data.
 

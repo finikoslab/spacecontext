@@ -97,7 +97,7 @@ describe('spacecontext CLI', () => {
   it('prints help and version, and rejects unknown commands and options', async () => {
     const h = harness([]);
     expect(await main(['--help'], h.io)).toBe(0);
-    expect(h.stdout()).toContain('Usage: spacecontext <command>');
+    expect(h.stdout()).toContain('Usage  spacecontext <command> [options]');
     expect(await main(['--version'], h.io)).toBe(0);
     expect(h.stdout()).toContain(VERSION);
     expect(await main([], h.io)).toBe(2);
@@ -119,7 +119,11 @@ describe('spacecontext CLI', () => {
 
     expect(await main(['whoami'], h.io)).toBe(0);
     expect(h.calls.at(-1)!.headers.get('authorization')).toBe(`Bearer ${KEY}`);
-    expect(h.stdout()).toContain('dev@example.com (Pro)');
+    expect(h.stdout()).toContain('dev@example.com · Pro');
+    // The key in use, masked as the console shows it, and where it comes from.
+    expect(h.stdout()).toContain('sc_live_clit… · live');
+    expect(h.stdout()).toContain('From     the saved key');
+    expect(h.stdout()).not.toContain(KEY);
 
     expect(await main(['logout'], h.io)).toBe(0);
     expect(await main(['whoami'], h.io)).toBe(2);
@@ -142,7 +146,7 @@ describe('spacecontext CLI', () => {
 
     expect(await main(['login', '--test'], h.io)).toBe(0);
     expect(JSON.parse(String(h.calls[0]!.body))).toMatchObject({ mode: 'test', name: expect.stringMatching(/^CLI on /) });
-    expect(h.stderr()).toContain('enter this code:  BCDF-2345');
+    expect(h.stderr()).toContain('2. Enter  BCDF-2345');
     expect(h.stderr()).toContain('https://spacecontext.example/developers/console/authorize/');
     expect(h.stderr()).not.toContain('code=BCDF');
     // A test key never needs a card.
@@ -245,7 +249,7 @@ describe('spacecontext CLI', () => {
 
     expect(await main(['ask', SPACE_ID, 'where is the stopcock?'], h.io)).toBe(0);
     // An area cited as a source is not followed by its own name.
-    expect(h.stdout()).toContain('Sources:\n  - Stopcock (Bathroom)\n  - Bathroom\n');
+    expect(h.stdout()).toContain('Under the bathroom sink.\n\nSources\n  • Stopcock (Bathroom)\n  • Bathroom\n');
 
     expect(await main(['search', 'x', '--limit', 'ten'], h.io)).toBe(2);
     expect(await main(['ask', SPACE_ID], h.io)).toBe(2);
@@ -300,7 +304,7 @@ describe('spacecontext CLI', () => {
 
     expect(await main(['scan', 'frames', '--name', 'Flat', '--type', 'apartment'], h.io)).toBe(0);
     // The analysis is followed live, stage by stage, in words.
-    expect(h.stderr()).toContain('  Queued…\n  Looking at the frames…\n');
+    expect(h.stderr()).toContain('› Queued…\n› Looking at the frames…\n');
     expect(h.stderr()).not.toContain('Complete…');
     expect(JSON.parse(String(h.calls[0]!.body))).toEqual({ name: 'Flat', space_type: 'apartment' });
     // Natural order: frame-2 before frame-10, with each file's own type.
@@ -310,10 +314,14 @@ describe('spacecontext CLI', () => {
       [`/scans/${SCAN_ID}/frames/1`, 'image/jpeg'],
     ]);
     expect(new Uint8Array(await (uploads[0]!.body as Blob).arrayBuffer())).toEqual(new Uint8Array([0x89, 0x50, 2]));
-    expect(h.stderr()).toContain('(free scan)');
-    expect(h.stdout()).toContain('Flat  (');
-    expect(h.stdout()).toContain('## Kitchen\nOven');
-    expect(h.stdout()).toContain(`spacecontext ask ${SPACE_ID}`);
+    expect(h.stderr()).toContain(`✓ Scan started  ${SCAN_ID} · free scan`);
+    expect(h.stderr()).toMatch(/✓ Scan complete in \d+s\n$/);
+    expect(h.stdout()).toContain(`Flat  ${SPACE_ID} · api`);
+    expect(h.stdout()).toContain('1 area · 1 item · 1 issue · 0 key locations · 0 facts');
+    expect(h.stdout()).toContain('Kitchen  (1)\n  Oven');
+    // What to do with the space next, as commands to copy.
+    expect(h.stdout()).toContain(`Next\n  › Ask it: \`spacecontext ask ${SPACE_ID} "where is the fuse box?"\``);
+    expect(h.stdout()).toContain(`\`spacecontext skill ${SPACE_ID} --out ~/.claude/skills/flat\``);
 
     // The same scan, printed as a Markdown page, or written as a Skill folder.
     const asMarkdown = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
@@ -344,7 +352,7 @@ describe('spacecontext CLI', () => {
 
     expect(await main(['scan', 'frames', '--space', SPACE_ID], h.io)).toBe(0);
     expect(h.stderr()).not.toContain('RATE_LIMIT_EXCEEDED');
-    expect(h.stdout()).toContain('## Kitchen\nOven');
+    expect(h.stdout()).toContain('Kitchen  (1)\n  Oven');
     expect(h.calls.filter((call) => call.path === `/scans/${SCAN_ID}/events`)).toHaveLength(1);
     expect(h.calls.some((call) => call.method === 'GET' && call.path === `/scans/${SCAN_ID}`)).toBe(true);
   });
@@ -396,8 +404,9 @@ describe('spacecontext CLI', () => {
     ], { SPACECONTEXT_API_KEY: KEY });
 
     expect(await main(['check', 'shots'], h.io)).toBe(0);
-    expect(h.stdout()).toContain('a-hall.jpg  usable (good, 2.40)  electrical panel');
-    expect(h.stdout()).toContain('b-blur.jpg  NOT usable (unusable, 0.30)');
+    expect(h.stdout()).toContain('FILE        USABLE  QUALITY         SHOWS\n');
+    expect(h.stdout()).toContain('a-hall.jpg  ✓ yes   good, 2.40      electrical panel\n');
+    expect(h.stdout()).toContain('b-blur.jpg  ✗ no    unusable, 0.30\n');
     expect(h.stdout()).toContain('Usable: 1 of 2 frames');
     expect(h.stdout()).toContain('Seen: electrical panel (a-hall.jpg)');
     expect(h.stdout()).toContain('Not seen yet: water shutoff, water heater.');
@@ -442,7 +451,7 @@ describe('spacecontext CLI', () => {
 
     expect(await main(['scan', 'tour.mov', '--space', SPACE_ID], h.io)).toBe(1);
     // Not a live scan: nothing is charged, whatever the price.
-    expect(h.stderr()).toContain('(test mode, no charge)');
+    expect(h.stderr()).toContain(' · test mode, no charge');
     expect(JSON.parse(String(h.calls[0]!.body)).input).toMatchObject({ kind: 'video', video: { content_type: 'video/quicktime', content_length: 4 } });
     expect(h.stderr()).toContain('Error [ANALYSIS_EMPTY]: Scan failed: No space recognised (refunded)');
 

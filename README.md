@@ -74,7 +74,7 @@ The **demo space** (`spc_demo`) contains two real scans of an apartment in Brisb
 https://mcp.spacecontext.app/mcp
 ```
 
-In Claude Code, run `claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → Authenticate. ChatGPT, Cursor and VS Code are covered in [Connect an assistant](https://spacecontext.app/developers/docs/mcp/connect/). You sign in with Apple, Google or an emailed code. The connection is read-only unless you allow scanning, which needs a card on file. It sees the spaces of your account (the demo is for test keys), so use the paths below to explore the demo first.
+In Claude Code, run `claude mcp add --transport http --scope user spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → Authenticate. Codex, ChatGPT, Cursor and VS Code are covered in [Connect an assistant](https://spacecontext.app/developers/docs/mcp/connect/). You sign in with Apple, Google or an emailed code. The connection is read-only unless you allow scanning, which needs a card on file. It sees the spaces of your account (the demo is for test keys), so use the paths below to explore the demo first.
 
 **2. CLI.**
 
@@ -88,16 +88,16 @@ npx spacecontext skill spc_demo --out ./brisbane-apartment-skill
 ```text
 The fuse box is in the Open-plan Living, Dining and Kitchen, in the hallway cupboard behind the coats.
 
-Sources:
-  - Fuse box (Open-plan Living, Dining and Kitchen)
+Sources
+  • Fuse box (Open-plan Living, Dining and Kitchen)
 ```
 
-**3. SDK.** Install with `npm install @spacecontext/sdk`:
+**3. SDK.** Create a test key in the [console](https://spacecontext.app/developers/console/keys/) (**API keys**, mode **Test**), set it as `SPACECONTEXT_API_KEY` and install with `npm install @spacecontext/sdk`:
 
 ```ts
 import { SpaceContext } from '@spacecontext/sdk';
 
-const sc = new SpaceContext(); // reads SPACECONTEXT_API_KEY (sc_test_… for the demo)
+const sc = new SpaceContext(); // reads SPACECONTEXT_API_KEY
 
 const answer = await sc.spaces.ask('spc_demo', 'Where is the fuse box?');
 const document = await sc.spaces.get('spc_demo'); // the whole Space Document
@@ -107,7 +107,7 @@ console.log(answer.answer, document.key_locations.map((k) => `${k.label}: ${k.lo
 const { spaceId } = await sc.scan('./tour.mp4', { name: 'Seaside flat', onProgress: (p) => console.log(p.type) });
 ```
 
-**4. curl.** Create a test key in the [console](https://spacecontext.app/developers/console/) (**API keys**, mode **Test**):
+**4. curl.** With the same key:
 
 ```bash
 curl -X POST https://api.spacecontext.app/v1/spaces/spc_demo/ask \

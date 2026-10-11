@@ -45,7 +45,7 @@ The folder holds `SKILL.md`, `space.json` and one reference file per topic (area
 
 ## 4. Run a scan
 
-With a test key the whole scan flow runs, and the result is the demo space under the name you choose:
+With a test key the whole scan flow runs on any video file (`.mp4`, `.mov` or `.m4v`, up to 100 MB), for free, and the result is the demo space under the name you choose:
 
 ```bash
 npx spacecontext scan ./tour.mp4 --name "Test flat"

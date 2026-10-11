@@ -7,8 +7,10 @@ import { SpaceContext, SpaceContextError } from '@spacecontext/sdk';
 import type { Io } from './cli.js';
 import { configDirectory, readConfig, setting } from './config.js';
 import { UsageError } from './files.js';
+import { BILLING_URL, DOCS_URL, KEYS_URL } from './links.js';
 import { deviceLogin, openInBrowser } from './signin.js';
 import { findExecutable, needsShell, runProgram, writeFileAtomic, type RunResult, type Runner } from './system.js';
+import { brandLine, styleFor, type Style } from './ui.js';
 
 /**
  * `spacecontext setup`: sign in, connect the assistants found on this machine
@@ -20,9 +22,7 @@ import { findExecutable, needsShell, runProgram, writeFileAtomic, type RunResult
 
 export const MCP_URL = 'https://mcp.spacecontext.app/mcp';
 export const SKILL_URL = 'https://spacecontext.app/.well-known/agent-skills/spacecontext/SKILL.md';
-export const BILLING_URL = 'https://spacecontext.app/developers/console/billing/';
-const KEYS_URL = 'https://spacecontext.app/developers/console/keys/';
-const DOCS_URL = 'https://spacecontext.app/developers/docs/';
+export { BILLING_URL };
 const SERVER = 'spacecontext';
 
 /** A client's own command (`claude mcp add`…). */
@@ -76,7 +76,7 @@ const AFTER: Record<Client, string> = {
   vscode: 'VS Code: run "MCP: List Servers" from the Command Palette, start spacecontext and sign in when asked.',
 };
 
-const CONNECTORS = `Claude (claude.ai, Claude Desktop) or ChatGPT: Settings → Connectors → add a custom connector with ${MCP_URL} (ChatGPT: in developer mode).`;
+const CONNECTORS = `Claude (claude.ai, Claude Desktop): Settings → Connectors → add a custom connector with ${MCP_URL}; ChatGPT: Settings → Apps & Connectors → Advanced → Developer mode, then create a connector with the same URL.`;
 const SIGN_IN = 'Sign in: run `npx spacecontext login` and approve the code in the browser (`--test` for a free test key).';
 
 const LABELS: Record<string, string> = {
@@ -90,11 +90,9 @@ const LABELS: Record<string, string> = {
   card: 'Card',
 };
 
-const MARKS: Record<StepStatus, { mark: string; color: string }> = {
-  done: { mark: '✓', color: '\u001b[32m' },
-  skipped: { mark: '–', color: '\u001b[33m' },
-  failed: { mark: '✗', color: '\u001b[31m' },
-};
+function mark(s: Style, status: StepStatus): string {
+  return status === 'done' ? s.ok : status === 'failed' ? s.fail : s.yellow('–');
+}
 
 type Run = {
   io: Io;
@@ -108,7 +106,8 @@ type Run = {
   fetch: typeof fetch;
   /** Where the step lines go: stdout, or stderr when stdout carries the JSON summary. */
   say: (text: string) => void;
-  colors: boolean;
+  /** Colours of the stream the step lines go to. */
+  style: Style;
   steps: Step[];
   next: string[];
 };
@@ -128,9 +127,7 @@ function wantedClients(value: string | undefined): Wanted {
 
 function report(run: Run, id: string, status: StepStatus, detail: string): void {
   run.steps.push({ id, status, detail });
-  const { mark, color } = MARKS[status];
-  const shown = run.colors ? `${color}${mark}\u001b[0m` : mark;
-  run.say(`${shown} ${(LABELS[id] ?? id).padEnd(12)} ${detail}\n`);
+  run.say(`${mark(run.style, status)} ${(LABELS[id] ?? id).padEnd(12)} ${detail}\n`);
 }
 
 function describe(error: unknown): string {
@@ -646,13 +643,13 @@ export async function setup(io: Io, options: SetupOptions): Promise<number> {
     interactive: terminal.stdin && terminal.stderr && !options.yes,
     fetch: io.fetch ?? globalThis.fetch.bind(globalThis),
     say: options.json ? io.stderr : io.stdout,
-    // https://no-color.org: set and not empty.
-    colors: (options.json ? terminal.stderr : terminal.stdout) && !io.env.NO_COLOR,
+    // NO_COLOR, TERM=dumb and pipes: plain text.
+    style: styleFor(io, options.json ? 'stderr' : 'stdout'),
     steps: [],
     next: [],
   };
 
-  run.say('Setting up Space Context\n\n');
+  run.say(`${brandLine(run.style, 'Space Context', 'setup')}\n\n`);
   const use = await signIn(run);
   await connect(run, wanted);
   await skill(run);
@@ -663,7 +660,8 @@ export async function setup(io: Io, options: SetupOptions): Promise<number> {
   if (options.json) {
     io.stdout(`${JSON.stringify(summary, null, 2)}\n`);
   } else {
-    io.stdout(`\nNext:\n${summary.next.map((item) => item.split('\n').map((line, index) => (index === 0 ? `  • ${line}` : `      ${line}`)).join('\n')).join('\n')}\n`);
+    const s = styleFor(io, 'stdout');
+    io.stdout(`\n${s.bold('Next')}\n${summary.next.map((item) => item.split('\n').map((line, index) => (index === 0 ? `  ${s.next} ${line}` : `      ${line}`)).join('\n')).join('\n')}\n`);
   }
 
   const signedIn = options.skipLogin || run.steps.some((step) => step.id === 'sign-in' && step.status === 'done');

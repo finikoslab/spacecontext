@@ -29,7 +29,7 @@ The same command, run by you: it opens the browser for the sign-in, and for Code
 
 | Step | What it does |
 | --- | --- |
-| Sign in | Uses the key the CLI already has (saved, or `SPACECONTEXT_API_KEY`) if the API accepts it; otherwise the device sign-in of [`login`](cli/install.md#sign-in). `--test` asks for a test key. The key is saved for the CLI and never printed. |
+| Sign in | Uses the key the CLI already has (`--api-key`, `SPACECONTEXT_API_KEY` or the saved one) if the API accepts it; otherwise the device sign-in of [`login`](cli/install.md#sign-in). `--test` asks for a test key. The key is saved for the CLI and never printed. |
 | Assistants | Claude Code (`claude mcp add`, user scope), Codex (`codex mcp add`), Cursor (adds the server to `~/.cursor/mcp.json`, keeping your other servers and a copy in `mcp.json.bak`) and VS Code (`code --add-mcp`). By default the ones it finds; `--client codex,cursor` or `--client all` to choose. A `spacecontext` server that already points elsewhere is kept (skipped), unless you pass `--yes`. |
 | Skill | Saves the [skill](#3-install-the-skill) as `~/.claude/skills/spacecontext/SKILL.md`. A copy you have edited is kept unless you pass `--yes`. |
 | Card | With a live key, reads the wallet: with no card on file (a saved card, or a top-up already paid), it opens **Billing** in the console (adding a card charges nothing); with a card but no funds and no free scan left, it says to add funds. It never asks for card details in the terminal. |
@@ -49,13 +49,14 @@ The server is `https://mcp.spacecontext.app/mcp`. You sign in (Apple, Google or 
 
 | Assistant | How |
 | --- | --- |
-| Claude Code | `claude mcp add --transport http spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → Authenticate |
+| Claude Code | `claude mcp add --transport http --scope user spacecontext https://mcp.spacecontext.app/mcp`, then `/mcp` → Authenticate |
 | Codex | `codex mcp add spacecontext --url https://mcp.spacecontext.app/mcp`, then `codex mcp login spacecontext` |
-| Cursor | add `{"mcpServers":{"spacecontext":{"url":"https://mcp.spacecontext.app/mcp"}}}` to `~/.cursor/mcp.json` |
-| VS Code | `code --add-mcp '{"name":"spacecontext","type":"http","url":"https://mcp.spacecontext.app/mcp"}'` |
-| Claude, ChatGPT | Settings → Connectors → add a custom connector with the URL |
+| Cursor | add `{"mcpServers":{"spacecontext":{"url":"https://mcp.spacecontext.app/mcp"}}}` to `~/.cursor/mcp.json`, then **Login** next to it in Cursor's MCP settings |
+| VS Code | `code --add-mcp '{"name":"spacecontext","type":"http","url":"https://mcp.spacecontext.app/mcp"}'`, then **MCP: List Servers** in the Command Palette, start `spacecontext` and sign in |
+| Claude (claude.ai, Desktop) | **Settings → Connectors → Add custom connector** with the URL |
+| ChatGPT | **Settings → Apps & Connectors → Advanced → Developer mode**, then create a connector with the URL and OAuth |
 
-Details for each, including ChatGPT's developer mode: [Connect an assistant](mcp/connect.md).
+Details for each: [Connect an assistant](mcp/connect.md).
 
 ### 3. Install the skill
 

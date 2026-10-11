@@ -18,7 +18,7 @@ The TypeScript client for [Space Context](https://spacecontext.app/developers/),
 npm install @spacecontext/sdk
 ```
 
-You need an API key. A **test key** (`sc_test_…`) is free and unlimited, and reads the demo space `spc_demo`: two real scans of an apartment in Brisbane. Create one in the [console](https://spacecontext.app/developers/console/), or run `npx spacecontext login --test`.
+You need an API key. A **test key** (`sc_test_…`) is free and unlimited, and reads the demo space `spc_demo`: two real scans of an apartment in Brisbane. Create one in the [console](https://spacecontext.app/developers/console/keys/) (**API keys**, mode **Test**) and set it as `SPACECONTEXT_API_KEY`. A tool without a key can get one with [device sign-in](#sign-in-from-a-tool).
 
 ## Quick start
 
@@ -48,9 +48,9 @@ const { spaceId, document, markdown } = await sc.scan('./flat.mp4', {
 console.log(document.stats.items, 'items');
 ```
 
-`scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one.
+`scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one. `onProgress` receives, in order, `space_created` (with `name`), `uploading`, `uploaded`, `started`, a `scan` event at every change of status or stage (with `stage` and `label`), then `complete`.
 
-A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), and its charge is refunded. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, the account's free scan is used first (a new account has one, one free scan per card) and each scan after that costs US$1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
+A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`, and its charge is refunded. After `timeoutMs` (default 20 minutes) it throws `TIMEOUT`, and the scan goes on. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, the account's free scan is used first (a new account has one, one free scan per card) and each scan after that costs US$1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
 
 ## Methods
 
@@ -125,7 +125,7 @@ new SpaceContext({ apiKey, baseUrl, maxRetries, maxRetryDelayMs, timeoutMs, fetc
 
 ## Behaviour and safety
 
-- **Retries**: a `429` is retried after `Retry-After`. `502`–`504` and network errors are retried only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry, and `cancel` and `delete` are never repeated.
+- **Retries**: a `429` is retried after `Retry-After`. `502`–`504` and network errors are retried only for requests that are safe to repeat. Scan creation sends an `Idempotency-Key`, reused on retry, and `cancel` and `delete` are never repeated after a network error or a `5xx`.
 - **Following a scan**: `scans.events`, `scans.wait` and `scan()` follow the event stream and reconnect when it ends early. When no stream can be had (a proxy that does not stream, all 10 of the account's open streams in use, the stream failing), they poll `GET /scans/{id}` instead, every `intervalMs` (default 3 s) and less often, up to every 15 s, while nothing changes. At `timeoutMs` (default 20 minutes) they throw `TIMEOUT` with the last state in `details.scan`, even while the stream only sends pings, and close the stream.
 - **The key stays with the API**: it is sent only to the API's own origin and path, never to a storage upload URL, an evidence URL or another host. Redirects are never followed.
 - **Uploads**: pass a `Blob` (in Node, `fs.openAsBlob` streams a file from disk), an `ArrayBuffer` or a `Uint8Array`. Videos go straight to storage when the API offers a signed URL.

@@ -190,7 +190,7 @@ describe('spacecontext setup', () => {
     // 1. The device sign-in: the code is shown on stderr, no browser with --yes, and the key goes only to the config file.
     expect(h.calls.filter((call) => call.path.startsWith('/auth/device')).map((call) => call.path)).toEqual(['/auth/device', '/auth/device/token']);
     expect(JSON.parse(String(h.calls[0]!.body))).toMatchObject({ mode: 'live' });
-    expect(h.stderr()).toContain('enter this code:  BCDF-2345');
+    expect(h.stderr()).toContain('2. Enter  BCDF-2345');
     expect(h.opened).toEqual([]);
     const config = path.join(configDir, 'config.json');
     expect(JSON.parse(await readFile(config, 'utf8'))).toEqual({ apiKey: LIVE_KEY });
@@ -264,7 +264,7 @@ describe('spacecontext setup', () => {
     expect(out).toContain('✓ Cursor       Already in ~/.cursor/mcp.json');
     expect(out).toContain('✓ Skill        Up to date in ~/.claude/skills/spacecontext/SKILL.md');
     expect(out).toContain('✓ Card         Card on file: US$12.50, 1 free scan left');
-    expect(out).toContain('\nNext:\n  • Claude Code: restart it if it is running');
+    expect(out).toContain('\nNext\n  › Claude Code: restart it if it is running');
     expect(out).not.toContain('codex mcp login');
     // The SDK snippet, indented under its item.
     expect(out).toContain("\n      import { SpaceContext } from '@spacecontext/sdk';\n");
@@ -445,11 +445,11 @@ describe('spacecontext setup', () => {
     expect(h.ran[1]!.options).toMatchObject({ stdin: 'inherit' });
     expect(h.ran[1]!.options.stopWhen).toBeUndefined();
     expect(h.ran[2]!.args).toEqual(['mcp', 'login', 'spacecontext']);
-    expect(h.stdout()).toContain('✓\u001b[0m Codex        MCP server added and signed in');
+    expect(h.stdout()).toContain('✓\u001b[39m Codex        MCP server added and signed in');
     // What Codex printed was shown to the person, on stderr.
     expect(h.stderr()).toContain('Successfully logged in.');
     // Colours at a terminal, none with NO_COLOR.
-    expect(h.stdout()).toContain('\u001b[32m✓\u001b[0m');
+    expect(h.stdout()).toContain('\u001b[32m✓\u001b[39m');
 
     // A Codex that logs in while adding: no second login.
     h = harness({

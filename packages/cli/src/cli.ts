@@ -5,9 +5,13 @@ import { writeFile } from 'node:fs/promises';
 import { clearConfig, configDirectory, readConfig, setting, writeConfig } from './config.js';
 import { stat } from 'node:fs/promises';
 import { fileBlob, frameFiles, MAX_FRAME_BYTES, MAX_VIDEO_BYTES, scanSource, UsageError, writeSkill } from './files.js';
+import { COMMAND_HELP, commandHelp, GLOBAL_OPTIONS, mainHelp, SPACE_TYPES, usageOf } from './help.js';
+import { hints, type ErrorContext } from './hints.js';
+import { BILLING_URL, DEFAULT_API_URL, KEYS_URL } from './links.js';
 import { setup } from './setup.js';
 import { deviceLogin } from './signin.js';
 import type { Runner } from './system.js';
+import { brandLine, closest, duration, plural, size, spinning, Status, styleFor, table, tildePath, visibleWidth, type Style } from './ui.js';
 
 export const VERSION = '0.2.0';
 
@@ -21,8 +25,14 @@ export type Io = {
   fetch?: typeof fetch;
   /** Opens a URL in the browser (device sign-in). Null never opens one; undefined uses the system opener. */
   openBrowser?: ((url: string) => void) | null;
-  /** Which of stdin, stdout and stderr are terminals (colours, interactive logins). Unset: none. */
+  /** Which of stdin, stdout and stderr are terminals (colours, spinners, interactive logins). Unset: none. */
   terminal?: { stdin: boolean; stdout: boolean; stderr: boolean };
+  /** The terminal's width, to fit tables and the status line. Unset: unknown (nothing is cut). */
+  columns?: number;
+  /** The clock, in milliseconds (tests). Defaults to `Date.now`. */
+  now?: () => number;
+  /** Ctrl+C: runs the handler before the process ends. Returns a function that removes it. */
+  onInterrupt?: (handler: () => void) => () => void;
   /** Runs a program with an argument array (`setup`). Undefined: a child process, never a shell. */
   run?: Runner;
   /** The absolute path of a program on PATH, or null (`setup`). Undefined: looks in `env.PATH`. */
@@ -30,67 +40,6 @@ export type Io = {
   /** Defaults to `process.platform`. */
   platform?: NodeJS.Platform;
 };
-
-const SPACE_TYPES: SpaceType[] = ['apartment', 'house', 'office', 'warehouse', 'vehicle', 'boat', 'camper', 'shop', 'garage', 'appliance', 'other'];
-
-const HELP = `spacecontext ${VERSION} — the context layer for the physical world
-
-Usage: spacecontext <command> [options]
-
-Get started
-  setup [--client claude-code,codex,cursor,vscode,all] [--test] [--yes]
-        [--no-browser] [--skip-login] [--skip-mcp] [--skip-skill]
-                                Sign in, connect your assistants (MCP), install
-                                the skill and check the card on file, in one go;
-                                --yes runs without questions or browser (agents),
-                                --json prints a summary with the next steps
-
-Account
-  login [--test] [--no-browser] [--key -]
-                                Sign in: approve a code in the console (opens the
-                                browser); --key - saves a key you already have,
-                                typed without echo (--key sc_… works too, but
-                                stays in your shell history)
-  logout                        Forget the saved key
-  whoami                        Show the account, mode and scopes of the key
-  wallet                        Show the prepaid balance and the free scans left
-
-Spaces
-  spaces [--source app|api]     List your spaces
-  space <id> [--transcript]     Show a space (use --json for the whole document)
-  search <question…> [--space <id>] [--limit n]
-                                Search every space you can read
-  ask <space-id> <question…>    Ask a space a question, answered with citations
-  skill <space-id> [--out dir] [--transcript]
-                                Export a space as an Agent Skill folder
-  markdown <space-id> [--out file] [--transcript]
-                                Export a space as one Markdown page
-  scans <space-id>              The scan history of a space
-  diff <space-id> --from <scan-id> [--to <scan-id>]
-                                What changed between two scans
-  delete-space <space-id>       Delete a space created through the API, with its scans
-
-Scans
-  scan <video|frames-dir> (--space <id> | --name <name> [--type <type>])
-       [--language en|it] [--format text|json|markdown|skill] [--out <path>]
-       [--no-wait]              Upload a video (.mp4 .mov .m4v) or a folder of
-                                frames, follow the analysis live, and print the
-                                result in the format you want
-  check <image|frames-dir>      Before scanning: which frames are usable, and which
-                                key locations (fuse box, stopcock, boiler…) they show
-  scan-status <scan-id> [--follow]
-                                Show where a scan is (--follow: until it ends)
-  cancel <scan-id>              Cancel a scan that has not started (nothing is charged)
-
-Options
-  --json                        Print the API response as JSON
-  --api-key <key>               Use this key instead of the saved one or SPACECONTEXT_API_KEY
-  --base-url <url>              API base URL (default https://api.spacecontext.app/v1)
-  -h, --help                    Show this help
-  -v, --version                 Show the version
-
-Docs: https://spacecontext.app/developers/
-`;
 
 const OPTIONS = {
   json: { type: 'boolean' },
@@ -123,7 +72,21 @@ const OPTIONS = {
 
 type Values = { [K in keyof typeof OPTIONS]?: (typeof OPTIONS)[K]['type'] extends 'boolean' ? boolean : string };
 
-type Context = { io: Io; values: Values; args: string[] };
+type Context = {
+  io: Io;
+  values: Values;
+  args: string[];
+  /** Styles for what goes to stdout and to stderr: each stream has its own terminal. */
+  out: Style;
+  err: Style;
+  /** Filled in as the command runs, to say what to do when it fails. */
+  failure: ErrorContext;
+};
+
+/** A spinner while waiting for the API, at a terminal and never with --json (stderr stays quiet). */
+function busy<T>(context: Context, text: string, work: () => Promise<T>): Promise<T> {
+  return context.values.json ? work() : spinning(context.io, text, work);
+}
 
 function print(io: Io, values: Values, json: unknown, text: () => string): void {
   io.stdout(values.json ? `${JSON.stringify(json, null, 2)}\n` : text());
@@ -133,50 +96,177 @@ function money(cents: number): string {
   return `${cents < 0 ? '-' : ''}$${(Math.abs(cents) / 100).toFixed(2)}`;
 }
 
-function one(args: string[], what: string): string {
+/** `` `command` `` in a hint: cyan at a terminal, in backticks elsewhere. */
+function commands(s: Style, text: string): string {
+  return s.color ? text.replace(/`([^`]+)`/g, (_, command: string) => s.cyan(command)) : text;
+}
+
+/** `› line`, with continuation lines indented under it. */
+function nextLines(s: Style, entries: string[], indent = '  '): string {
+  return entries
+    .map((entry) =>
+      entry
+        .split('\n')
+        .map((line, index) => `${indent}${index === 0 ? `${s.next} ` : '  '}${commands(s, line)}`)
+        .join('\n')
+    )
+    .map((line) => `${line}\n`)
+    .join('');
+}
+
+function missing(what: string, hint?: string): UsageError {
+  return new UsageError(`Missing ${what}`, hint ? [hint] : [], true);
+}
+
+function one(args: string[], what: string, hint?: string): string {
   const [value] = args;
-  if (!value) throw new UsageError(`Missing ${what}`);
+  if (!value) throw missing(what, hint);
   return value;
 }
 
 function words(args: string[], what: string): string {
   const text = args.join(' ').trim();
-  if (!text) throw new UsageError(`Missing ${what}`);
+  if (!text) throw missing(what);
   return text;
 }
 
-async function client(context: Context): Promise<SpaceContext> {
+const SPACE_ID_HINT = '`spacecontext spaces` lists your space ids';
+
+/** `sc_live_abcd…`: as much of a key as the console shows. */
+function maskKey(key: string): string {
+  return `${key.slice(0, key.length > 20 ? 12 : 8)}…`;
+}
+
+type KeyInUse = { apiKey: string; source: 'flag' | 'env' | 'saved'; baseUrl: string | undefined; file: string };
+
+async function keyInUse(context: Context): Promise<KeyInUse> {
   const { io, values } = context;
-  const stored = await readConfig(configDirectory(io.env));
+  const directory = configDirectory(io.env);
+  const stored = await readConfig(directory);
   const environmentKey = setting(io.env, 'SPACECONTEXT_API_KEY');
   const apiKey = values['api-key'] ?? environmentKey ?? stored.apiKey;
-  if (!apiKey) throw new UsageError('No API key: run `spacecontext login`, or set SPACECONTEXT_API_KEY');
+  if (!apiKey) {
+    throw new UsageError('Not signed in: no API key', [
+      'Sign in: `spacecontext login` (or `spacecontext login --test` for a free test key)',
+      'Or set SPACECONTEXT_API_KEY, or pass --api-key',
+    ]);
+  }
+  const source = values['api-key'] !== undefined ? 'flag' : environmentKey !== undefined ? 'env' : 'saved';
   // The base URL saved by `login` belongs to the key saved with it: a key from
   // the flag or the environment never goes to it.
-  const usesStoredKey = values['api-key'] === undefined && environmentKey === undefined;
-  const baseUrl = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL') ?? (usesStoredKey ? stored.baseUrl : undefined);
+  const baseUrl = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL') ?? (source === 'saved' ? stored.baseUrl : undefined);
+  return { apiKey, source, baseUrl, file: path.join(directory, 'config.json') };
+}
+
+const SOURCE_NAMES = { flag: '--api-key', env: 'SPACECONTEXT_API_KEY', saved: 'the saved key' } as const;
+
+async function client(context: Context): Promise<SpaceContext> {
+  const { apiKey, source, baseUrl } = await keyInUse(context);
+  if (!/^sc_(live|test)_[A-Za-z0-9_-]+$/.test(apiKey)) {
+    // Never echoed: a malformed key may still be a secret pasted in the wrong place.
+    throw new UsageError(`${SOURCE_NAMES[source]} is not a Space Context key (sc_live_… or sc_test_…)`, ['Get one with `spacecontext login`']);
+  }
+  context.failure.keySource = source;
+  context.failure.keyMode = apiKey.startsWith('sc_test_') ? 'test' : 'live';
+  if (baseUrl) context.failure.baseUrl = baseUrl;
   return new SpaceContext({
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
-    ...(io.fetch ? { fetch: io.fetch } : {}),
+    ...(context.io.fetch ? { fetch: context.io.fetch } : {}),
   });
 }
 
-function documentSummary(document: SpaceDocument): string {
+/** `2026-10-05` from an ISO date. */
+function day(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 10) : '—';
+}
+
+/** Words wrapped at `width` (when known), every line after the first indented. */
+function wrap(text: string, width: number | undefined, indent: string): string {
+  if (!width || width < 40) return `${indent}${text}`;
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && visibleWidth(indent + line + ' ' + word) > width - 1) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.map((entry) => indent + entry).join('\n');
+}
+
+/** The terminal's width for stdout, when stdout is one. */
+function stdoutWidth(io: Io): number | undefined {
+  return io.terminal?.stdout ? io.columns : undefined;
+}
+
+function kindLabel(kind: string): string {
+  return kind.replaceAll('_', ' ');
+}
+
+/** A folder name for `--out` suggestions: `Seaside flat` → `seaside-flat`. */
+function slug(name: string): string {
+  const value = name
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return value || 'my-space';
+}
+
+function severity(s: Style, value: string | null | undefined): string {
+  const label = (value ?? 'n/a').padEnd(8);
+  if (value === 'critical' || value === 'high') return s.red(label);
+  if (value === 'medium') return s.yellow(label);
+  return s.dim(label);
+}
+
+function documentSummary(s: Style, document: SpaceDocument, width: number | undefined): string {
+  const stats = document.stats;
   const lines = [
-    `${document.space.name}  (${document.space.id}, ${document.space.source})`,
-    `Scan ${document.scan.id}${document.scan.analyzed_at ? `, ${document.scan.analyzed_at}` : ''} — ${document.enrichment.level} level, ${document.enrichment.status}`,
-    `${document.stats.areas} areas, ${document.stats.items} items, ${document.stats.issues} issues, ${document.stats.key_locations} key locations, ${document.stats.facts} facts`,
+    `${s.bold(document.space.name)}  ${s.dim(`${document.space.id} · ${document.space.source}`)}`,
+    s.dim(`Scan ${document.scan.id}${document.scan.analyzed_at ? ` of ${day(document.scan.analyzed_at)}` : ''} · ${document.enrichment.level} level, ${document.enrichment.status}`),
+    [plural(stats.areas, 'area'), plural(stats.items, 'item'), plural(stats.issues, 'issue'), plural(stats.key_locations, 'key location'), plural(stats.facts, 'fact')].join(' · '),
   ];
-  if (document.summary) lines.push('', document.summary);
-  for (const area of document.areas) {
-    const items = document.items.filter((item) => item.area_id === area.id).map((item) => item.name);
-    lines.push('', `## ${area.name || area.id}`, items.length > 0 ? items.join(', ') : '(no items)');
+  if (document.enrichment.status === 'pending') lines.push(s.dim('Still being enriched: read it again in a minute for the full detail.'));
+  if (document.summary) lines.push('', wrap(document.summary, width, ''));
+
+  const areas = document.areas ?? [];
+  const items = document.items ?? [];
+  const areaName = new Map(areas.map((area) => [area.id, area.name || area.id]));
+  const groups = areas.map((area) => ({ name: area.name || area.id, items: items.filter((item) => item.area_id === area.id) }));
+  const elsewhere = items.filter((item) => !areaName.has(item.area_id));
+  if (elsewhere.length > 0) groups.push({ name: 'Elsewhere', items: elsewhere });
+  for (const group of groups) {
+    const names = group.items.map((item) => (item.quantity && item.quantity > 1 ? `${item.name} ×${item.quantity}` : item.name));
+    lines.push('', `${s.bold(group.name)}  ${s.dim(`(${group.items.length})`)}`, names.length > 0 ? wrap(names.join(', '), width, '  ') : s.dim('  no items'));
   }
-  if (document.issues.length > 0) {
-    lines.push('', 'Issues:');
-    for (const issue of document.issues) lines.push(`  - [${issue.severity ?? 'n/a'}] ${issue.title}`);
+
+  const keyLocations = document.key_locations ?? [];
+  if (keyLocations.length > 0) {
+    lines.push('', s.bold('Key locations'));
+    for (const location of keyLocations) {
+      const area = location.area_id ? areaName.get(location.area_id) : undefined;
+      const where = [location.location, area && area !== location.location ? area : null].filter(Boolean).join(', ');
+      lines.push(`  ${location.label}${where ? s.dim(` — ${where}`) : ''}`);
+    }
   }
+
+  const issues = document.issues ?? [];
+  if (issues.length > 0) {
+    lines.push('', s.bold('Issues'));
+    for (const issue of issues) {
+      const area = issue.area_id ? areaName.get(issue.area_id) : undefined;
+      lines.push(`  ${severity(s, issue.severity)}${issue.title}${area ? s.dim(` — ${area}`) : ''}`);
+    }
+  }
+
   const checklist = document.coverage.checklist ?? [];
   if (checklist.length > 0) {
     const seen = checklist.filter((check) => check.seen).map((check) => kindLabel(check.kind));
@@ -184,19 +274,21 @@ function documentSummary(document: SpaceDocument): string {
     lines.push('', `Key locations filmed: ${seen.join(', ') || 'none'}`);
     if (unseen.length > 0) lines.push(`Not filmed: ${unseen.join(', ')}`);
   }
-  for (const warning of document.coverage.warnings) lines.push('', `Note: ${warning}`);
+  for (const warning of document.coverage.warnings) lines.push('', `${s.warn} ${warning}`);
   return `${lines.join('\n')}\n`;
 }
 
-function kindLabel(kind: string): string {
-  return kind.replaceAll('_', ' ');
+function statusWord(s: Style, status: Scan['status']): string {
+  if (status === 'complete') return s.green(status);
+  if (status === 'failed' || status === 'cancelled') return s.red(status);
+  return s.yellow(status);
 }
 
-function scanLine(scan: Scan): string {
+function scanLine(s: Style, scan: Scan): string {
   const { stage, label } = describeScan(scan);
   const detail = stage !== scan.status ? ` (${stage}: ${label})` : '';
   const error = scan.error ? ` — ${scan.error.code}: ${scan.error.message}` : '';
-  return `${scan.id} ${scan.status}${detail}${error}`;
+  return `${scan.id} ${statusWord(s, scan.status)}${detail}${error}`;
 }
 
 const FORMATS = ['text', 'json', 'markdown', 'skill'] as const;
@@ -210,28 +302,31 @@ function format(values: Values): Format {
 
 /** Writes the Skill of a space to `--out`, or to a folder named by the API. */
 async function exportSkill(context: Context, sc: SpaceContext, id: string, params: { include?: 'transcript'; enrich?: 'auto' | 'none' }): Promise<void> {
-  const bundle = await sc.spaces.skill(id, params);
+  const { io, values, out } = context;
+  const bundle = await busy(context, 'Exporting the skill', () => sc.spaces.skill(id, params));
   // The default folder is named by the API: a name that is not a plain slug
   // ("../../x", "/etc") would place the skill outside the current directory.
-  if (!context.values.out && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(bundle.name)) {
+  if (!values.out && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(bundle.name)) {
     throw new Error(`Refusing to use "${bundle.name}" as a folder name: pass --out <dir>`);
   }
-  const directory = path.resolve(context.io.cwd, context.values.out ?? bundle.name);
+  const directory = path.resolve(io.cwd, values.out ?? bundle.name);
   const written = await writeSkill(directory, bundle);
-  print(context.io, context.values, { directory, files: written }, () =>
-    `Skill "${bundle.name}" written to ${directory} (${written.length} files).\nAdd the folder to your agent's skills, e.g. ~/.claude/skills/${bundle.name}\n`
+  print(io, values, { directory, files: written }, () =>
+    `${out.ok} Skill "${bundle.name}" written to ${tildePath(io, directory)} ${out.dim(`(${plural(written.length, 'file')})`)}\n` +
+    nextLines(out, [`Add the folder to your agent's skills, e.g. ~/.claude/skills/${bundle.name}`], '')
   );
 }
 
 /** Prints the Markdown page of a space, or writes it to `--out`. */
 async function exportMarkdown(context: Context, sc: SpaceContext, id: string, params: { include?: 'transcript'; enrich?: 'auto' | 'none' }): Promise<void> {
-  const page = await sc.spaces.markdown(id, params);
-  if (context.values.out) {
-    const file = path.resolve(context.io.cwd, context.values.out);
+  const { io, values, err } = context;
+  const page = await busy(context, 'Exporting the page', () => sc.spaces.markdown(id, params));
+  if (values.out) {
+    const file = path.resolve(io.cwd, values.out);
     await writeFile(file, page);
-    context.io.stderr(`Written to ${file}\n`);
+    io.stderr(`${err.ok} Written to ${tildePath(io, file)}\n`);
   } else {
-    context.io.stdout(page);
+    io.stdout(page);
   }
 }
 
@@ -242,10 +337,26 @@ async function exportMarkdown(context: Context, sc: SpaceContext, id: string, pa
  * on the command line stays in the shell's history.
  */
 async function typedKey(io: Io): Promise<string> {
-  if (!io.prompt) throw new UsageError('--key - reads the key from a terminal: run it in one, or set SPACECONTEXT_API_KEY');
+  if (!io.prompt) throw new UsageError('--key - reads the key from a terminal', ['Run it in a terminal, or set SPACECONTEXT_API_KEY']);
   const key = (await io.prompt('API key (input hidden): ')).trim();
   if (!key) throw new UsageError('No key entered');
   return key;
+}
+
+function loggedIn(context: Context, email: string, mode: string, scopes: string[], file: string): string {
+  const { io, out: s } = context;
+  const next =
+    mode === 'test'
+      ? ['Try the demo: `spacecontext ask spc_demo "where is the fuse box?"`', 'Read it all: `spacecontext space spc_demo`']
+      : ['Your spaces: `spacecontext spaces`', ...(scopes.includes('scans:write') ? ['Scan one: `spacecontext scan ./video.mp4 --name "My place"`'] : [])];
+  const lines = [
+    `${s.ok} Logged in as ${s.bold(email)} with a ${mode} key (${scopes.join(', ')}).\n`,
+    `  ${s.dim(`Saved in ${tildePath(io, file)}`)}\n`,
+  ];
+  if (setting(io.env, 'SPACECONTEXT_API_KEY')) {
+    lines.push(`${s.warn} SPACECONTEXT_API_KEY is set: commands use it, not the key just saved. Unset it to use this one.\n`);
+  }
+  return `${lines.join('')}\n${s.bold('Next')}\n${nextLines(s, next)}`;
 }
 
 async function login(context: Context): Promise<void> {
@@ -257,75 +368,126 @@ async function login(context: Context): Promise<void> {
   if (!key) {
     // Device sign-in: a code to approve in the console; the key comes back here, never through the browser.
     const { signedIn, file } = await deviceLogin(io, { mode: values.test ? 'test' : 'live', baseUrl, openBrowser: !values['no-browser'] });
-    print(io, values, { user: signedIn.user, key: signedIn.key }, () =>
-      `Logged in as ${signedIn.user.email} with a ${signedIn.key.mode} key (${signedIn.key.scopes.join(', ')}).\nSaved in ${file}\n`
-    );
+    print(io, values, { user: signedIn.user, key: signedIn.key }, () => loggedIn(context, signedIn.user.email, signedIn.key.mode, signedIn.key.scopes, file));
     return;
   }
+  if (!/^sc_(live|test)_[A-Za-z0-9_-]+$/.test(key)) {
+    throw new UsageError('That is not a Space Context key (sc_live_… or sc_test_…)', ['Run `spacecontext login` without --key to get one']);
+  }
+  context.failure.keySource = 'flag';
   const sc = new SpaceContext({ apiKey: key, ...(baseUrl ? { baseUrl } : {}), ...(io.fetch ? { fetch: io.fetch } : {}) });
-  const me = await sc.me();
+  const me = await busy(context, 'Checking the key', () => sc.me());
   const file = await writeConfig(configDirectory(io.env), { apiKey: key, ...(baseUrl ? { baseUrl } : {}) });
-  print(io, values, me, () => `Logged in as ${me.user.email} with a ${me.key.mode} key (${me.key.scopes.join(', ')}).\nSaved in ${file}\n`);
+  print(io, values, me, () => loggedIn(context, me.user.email, me.key.mode, me.key.scopes, file));
 }
 
 async function logout(context: Context): Promise<void> {
-  await clearConfig(configDirectory(context.io.env));
-  print(context.io, context.values, { logged_out: true }, () => 'Logged out.\n');
+  const { io, values, out: s } = context;
+  await clearConfig(configDirectory(io.env));
+  print(io, values, { logged_out: true }, () => {
+    const lines = [`${s.ok} Logged out: the saved key is forgotten.\n`, `  ${s.dim(`It still works until you revoke it in the console: ${KEYS_URL}`)}\n`];
+    if (setting(io.env, 'SPACECONTEXT_API_KEY')) lines.push(`${s.warn} SPACECONTEXT_API_KEY is still set: commands keep using it.\n`);
+    return lines.join('');
+  });
 }
 
 async function whoami(context: Context): Promise<void> {
-  const me = await (await client(context)).me();
-  print(context.io, context.values, me, () =>
-    `${me.user.email}${me.user.is_pro ? ' (Pro)' : ''}\nKey ${me.key.id}: ${me.key.mode}, scopes ${me.key.scopes.join(', ')}\n`
-  );
+  const { io, values, out: s } = context;
+  const use = await keyInUse(context);
+  const sc = await client(context);
+  const me = await busy(context, 'Checking the key', () => sc.me());
+  print(io, values, me, () => {
+    const from = use.source === 'saved' ? `the saved key (${tildePath(io, use.file)})` : SOURCE_NAMES[use.source];
+    const rows: Array<[string, string]> = [
+      ['Account', `${s.bold(me.user.email)}${me.user.is_pro ? ` · ${s.brand('Pro')}` : ''}`],
+      ['Key', `${maskKey(use.apiKey)} · ${me.key.mode}${me.key.id ? s.dim(` · ${me.key.id}`) : ''}`],
+      ['Scopes', me.key.scopes.join(', ')],
+      ['From', from],
+    ];
+    if (use.baseUrl && use.baseUrl.replace(/\/+$/, '') !== DEFAULT_API_URL) rows.push(['API', use.baseUrl]);
+    return rows.map(([label, value]) => `${s.dim(label.padEnd(9))}${value}\n`).join('');
+  });
 }
 
 async function wallet(context: Context): Promise<void> {
-  const wallet = await (await client(context)).wallet();
-  print(context.io, context.values, wallet, () =>
-    `Balance ${money(wallet.balance_cents)} · ${wallet.free_scans_remaining} free scan(s) left · ${money(wallet.scan_price_cents)} per scan\n` +
-    `Auto-recharge ${wallet.auto_recharge.enabled ? 'on' : 'off'}\n`
-  );
+  const { io, values, out: s } = context;
+  const sc = await client(context);
+  const wallet = await busy(context, 'Reading the wallet', () => sc.wallet());
+  print(io, values, wallet, () => {
+    const recharge = wallet.auto_recharge;
+    const rechargeText = recharge.enabled
+      ? `on${typeof recharge.threshold_cents === 'number' && typeof recharge.amount_cents === 'number' ? ` (adds ${money(recharge.amount_cents)} below ${money(recharge.threshold_cents)})` : ''}`
+      : `off${recharge.last_error ? s.dim(` (${recharge.last_error})`) : ''}`;
+    const rows: Array<[string, string]> = [
+      ['Balance', s.bold(money(wallet.balance_cents))],
+      ['Free scans', `${wallet.free_scans_remaining} left`],
+      ['Scan price', money(wallet.scan_price_cents)],
+      ['Card on file', wallet.card_on_file === false ? s.yellow('no') : wallet.card_on_file ? s.green('yes') : s.dim('unknown')],
+      ['Auto-recharge', rechargeText],
+    ];
+    let text = rows.map(([label, value]) => `${s.dim(label.padEnd(14))}${value}\n`).join('');
+    if (wallet.card_on_file === false && context.failure.keyMode === 'live') {
+      text += `\n${nextLines(s, [`Live scans need a card on file; adding one charges nothing:\n${BILLING_URL}`], '')}`;
+    } else if (wallet.free_scans_remaining <= 0 && wallet.balance_cents < wallet.scan_price_cents && context.failure.keyMode === 'live') {
+      text += `\n${nextLines(s, [`Top up before your next live scan: ${BILLING_URL}`], '')}`;
+    }
+    return text;
+  });
 }
 
 async function spaces(context: Context): Promise<void> {
-  const source = context.values.source;
+  const { io, values, out: s } = context;
+  const source = values.source;
   if (source !== undefined && source !== 'app' && source !== 'api') throw new UsageError('--source must be app or api');
   const sc = await client(context);
-  const all: SpaceSummary[] = [];
-  for await (const space of sc.spaces.iterate(source ? { source } : {})) all.push(space);
-  print(context.io, context.values, all, () =>
-    all.length === 0
-      ? 'No spaces yet. Scan one with `spacecontext scan video.mp4 --name "My flat"`.\n'
-      : all
-          .map((space) => {
-            const scan = space.latest_scan;
-            return `${space.id}  ${space.name}${scan ? `  (${scan.areas} areas, ${scan.items} items, ${scan.issues} issues)` : '  (no scan yet)'}`;
-          })
-          .join('\n') + '\n'
-  );
+  const all: SpaceSummary[] = await busy(context, 'Listing your spaces', async () => {
+    const found: SpaceSummary[] = [];
+    for await (const space of sc.spaces.iterate(source ? { source } : {})) found.push(space);
+    return found;
+  });
+  print(io, values, all, () => {
+    if (all.length === 0) return `No spaces yet.\n${nextLines(s, ['Scan one: `spacecontext scan ./video.mp4 --name "My flat"`'], '')}`;
+    const rows = all.map((space) => {
+      const scan = space.latest_scan;
+      return [space.id, space.name, scan ? day(scan.analyzed_at) : s.dim('no scan'), scan ? String(scan.items) : '', scan ? String(scan.issues) : ''];
+    });
+    return (
+      table(s, ['ID', 'NAME', 'SCANNED', 'ITEMS', 'ISSUES'], rows, { right: [3, 4], shrink: 1, width: stdoutWidth(io) }) +
+      s.dim(`\n${plural(all.length, 'space')} · spacecontext space <id> shows one\n`)
+    );
+  });
 }
 
 async function space(context: Context): Promise<void> {
-  const id = one(context.args, 'space id');
-  const document = await (await client(context)).spaces.get(id, context.values.transcript ? { include: 'transcript' } : {});
-  print(context.io, context.values, document, () => documentSummary(document));
+  const { io, values, out } = context;
+  const id = one(context.args, 'space id', SPACE_ID_HINT);
+  const sc = await client(context);
+  const document = await busy(context, 'Reading the space', () => sc.spaces.get(id, values.transcript ? { include: 'transcript' } : {}));
+  print(io, values, document, () => documentSummary(out, document, stdoutWidth(io)));
 }
 
 async function search(context: Context): Promise<void> {
+  const { io, values, out: s } = context;
   const query = words(context.args, 'question');
-  const limitText = context.values.limit;
-  if (limitText !== undefined && !/^\d+$/.test(limitText)) throw new UsageError('--limit must be a number');
-  const results = await (await client(context)).search(query, {
-    ...(context.values.space ? { spaceId: context.values.space } : {}),
-    ...(limitText ? { limit: Number(limitText) } : {}),
-  });
-  print(context.io, context.values, results, () =>
+  const limitText = values.limit;
+  if (limitText !== undefined && !/^\d+$/.test(limitText)) throw new UsageError('--limit must be a number from 1 to 25');
+  const sc = await client(context);
+  const results = await busy(context, 'Searching', () =>
+    sc.search(query, {
+      ...(values.space ? { spaceId: values.space } : {}),
+      ...(limitText ? { limit: Number(limitText) } : {}),
+    })
+  );
+  print(io, values, results, () =>
     results.data.length === 0
-      ? 'Nothing found.\n'
+      ? `Nothing found for "${query}".\n${s.dim('A space is searchable once its scan is complete; spacecontext spaces lists them.')}\n`
       : results.data
-          .map((hit) => `${hit.title}${inArea(hit.title, hit.area, ' — ')}  [${hit.space_name}, ${hit.record_type} ${hit.record_id}]\n  ${hit.text}`)
-          .join('\n') + '\n'
+          .map((hit, index) => {
+            const number = `${index + 1}.`.padEnd(3);
+            const head = `${s.dim(number)} ${s.bold(hit.title)}${inArea(hit.title, hit.area, ' — ')}  ${s.dim(`[${hit.space_name}, ${hit.record_type} ${hit.record_id}]`)}`;
+            return `${head}\n${wrap(hit.text, stdoutWidth(io), '    ')}\n`;
+          })
+          .join('\n')
   );
 }
 
@@ -335,86 +497,111 @@ function inArea(title: string, area: string | null | undefined, before: string, 
 }
 
 async function ask(context: Context): Promise<void> {
+  const { io, values, out: s } = context;
   const [id, ...rest] = context.args;
-  if (!id) throw new UsageError('Missing space id');
-  const answer = await (await client(context)).spaces.ask(id, words(rest, 'question'));
-  print(context.io, context.values, answer, () => {
-    const sources = answer.citations.map((citation) => `  - ${citation.title}${inArea(citation.title, citation.area, ' (', ')')}`);
-    return `${answer.answer}\n${sources.length > 0 ? `\nSources:\n${sources.join('\n')}\n` : ''}`;
+  if (!id) throw missing('space id', SPACE_ID_HINT);
+  const question = words(rest, 'question');
+  const sc = await client(context);
+  const answer = await busy(context, 'Asking the space', () => sc.spaces.ask(id, question));
+  print(io, values, answer, () => {
+    const lines = [wrap(answer.answer, stdoutWidth(io), '')];
+    if (!answer.documented) lines.push(s.dim('(not documented in this space)'));
+    if (answer.citations.length > 0) {
+      lines.push('', s.bold('Sources'), ...answer.citations.map((citation) => `  • ${citation.title}${inArea(citation.title, citation.area, s.dim(' ('), s.dim(')'))}`));
+    }
+    return `${lines.join('\n')}\n`;
   });
 }
 
 async function skill(context: Context): Promise<void> {
-  const id = one(context.args, 'space id');
+  const id = one(context.args, 'space id', SPACE_ID_HINT);
   await exportSkill(context, await client(context), id, context.values.transcript ? { include: 'transcript' } : {});
 }
 
 async function markdown(context: Context): Promise<void> {
-  const id = one(context.args, 'space id');
+  const id = one(context.args, 'space id', SPACE_ID_HINT);
   await exportMarkdown(context, await client(context), id, context.values.transcript ? { include: 'transcript' } : {});
 }
 
 async function diff(context: Context): Promise<void> {
-  const id = one(context.args, 'space id');
-  const from = context.values.from;
-  if (!from) throw new UsageError('--from <scan-id> is required');
-  const result = await (await client(context)).spaces.diff(id, { from, ...(context.values.to ? { to: context.values.to } : {}) });
-  print(context.io, context.values, result, () => diffSummary(result));
+  const { io, values, out } = context;
+  const id = one(context.args, 'space id', SPACE_ID_HINT);
+  const from = values.from;
+  if (!from) throw new UsageError('--from <scan-id> is required', [`\`spacecontext scans ${id}\` lists the scans of the space`], true);
+  const sc = await client(context);
+  const result = await busy(context, 'Comparing the scans', () => sc.spaces.diff(id, { from, ...(values.to ? { to: values.to } : {}) }));
+  print(io, values, result, () => diffSummary(out, result));
 }
 
-function diffSummary(diff: SpaceDiff): string {
+function diffSummary(s: Style, diff: SpaceDiff): string {
   const where = (area: string | null) => (area ? ` — ${area}` : '');
   const out: string[] = [
-    `${diff.from.scan_id} → ${diff.to.scan_id} (${diff.level} level, ${diff.linked ? 'the later scan was checked against the earlier one' : 'matched by content'})`,
+    `${diff.from.scan_id} → ${diff.to.scan_id} ${s.dim(`(${diff.level} level, ${diff.linked ? 'the later scan was checked against the earlier one' : 'matched by content'})`)}`,
   ];
   const section = (title: string, lines: string[]) => {
-    if (lines.length > 0) out.push('', `${title} (${lines.length})`, ...lines.map((line) => `  ${line}`));
+    if (lines.length > 0) out.push('', `${s.bold(title)} (${lines.length})`, ...lines.map((line) => `  ${line}`));
   };
   section('Areas added', diff.areas.added);
   section('Areas not in the later scan', diff.areas.removed);
   section('Areas in another condition', diff.areas.condition_changed.map((entry) => `${entry.area}: ${entry.from} → ${entry.to}`));
-  section('Items added', diff.items.added.map((item) => `+ ${item.name}${where(item.area)}`));
-  section('Items gone (seen: the place is empty)', diff.items.removed.map((item) => `- ${item.name}${where(item.area)}${item.note ? `: ${item.note}` : ''}`));
-  section('Items not seen in the later scan (gone, or not filmed)', diff.items.not_seen.map((item) => `? ${item.name}${where(item.area)}`));
+  section('Items added', diff.items.added.map((item) => `${s.green('+')} ${item.name}${where(item.area)}`));
+  section('Items gone (seen: the place is empty)', diff.items.removed.map((item) => `${s.red('-')} ${item.name}${where(item.area)}${item.note ? `: ${item.note}` : ''}`));
+  section('Items not seen in the later scan (gone, or not filmed)', diff.items.not_seen.map((item) => `${s.yellow('?')} ${item.name}${where(item.area)}`));
   section('Items moved', diff.items.moved.map((item) => `${item.name}: ${item.from_area ?? 'no area'} → ${item.area ?? 'no area'}`));
   section('Items recounted', diff.items.quantity_changed.map((item) => `${item.name}${where(item.area)}: ${item.from_quantity} → ${item.quantity}`));
   section('Items in another condition', diff.items.condition_changed.map((item) => `${item.name}${where(item.area)}: ${item.from_condition} → ${item.to_condition}`));
-  section('Issues new', diff.issues.new.map((issue) => `! ${issue.title}${where(issue.area)}`));
-  section('Issues fixed (seen)', diff.issues.resolved.map((issue) => `✓ ${issue.title}${where(issue.area)}${issue.note ? `: ${issue.note}` : ''}`));
-  section('Issues not seen in the later scan', diff.issues.not_seen.map((issue) => `? ${issue.title}${where(issue.area)}`));
+  section('Issues new', diff.issues.new.map((issue) => `${s.red('!')} ${issue.title}${where(issue.area)}`));
+  section('Issues fixed (seen)', diff.issues.resolved.map((issue) => `${s.green('✓')} ${issue.title}${where(issue.area)}${issue.note ? `: ${issue.note}` : ''}`));
+  section('Issues not seen in the later scan', diff.issues.not_seen.map((issue) => `${s.yellow('?')} ${issue.title}${where(issue.area)}`));
   if (out.length === 1) out.push('', 'No differences found.');
   return `${out.join('\n')}\n`;
 }
 
 async function scans(context: Context): Promise<void> {
-  const id = one(context.args, 'space id');
-  const { data } = await (await client(context)).spaces.scans(id);
-  print(context.io, context.values, data, () =>
+  const { io, values, out: s } = context;
+  const id = one(context.args, 'space id', SPACE_ID_HINT);
+  const sc = await client(context);
+  const { data } = await busy(context, 'Listing the scans', () => sc.spaces.scans(id));
+  print(io, values, data, () =>
     data.length === 0
       ? 'No completed scan yet.\n'
-      : data.map((entry) => `${entry.id}${entry.current ? ' (current)' : ''}  ${entry.analyzed_at ?? 'date unknown'}  ${entry.areas} areas, ${entry.items} items, ${entry.issues} issues`).join('\n') + '\n'
+      : table(
+          s,
+          ['SCAN', 'ANALYZED', 'AREAS', 'ITEMS', 'ISSUES'],
+          data.map((entry) => [
+            `${entry.id}${entry.current ? s.green(' (current)') : ''}`,
+            entry.analyzed_at ? entry.analyzed_at.slice(0, 16).replace('T', ' ') : 'date unknown',
+            String(entry.areas),
+            String(entry.items),
+            String(entry.issues),
+          ]),
+          { right: [2, 3, 4] }
+        ) + (data.length > 1 ? s.dim(`\nspacecontext diff ${id} --from <scan-id> compares one with the current scan\n`) : '')
   );
 }
 
 async function cancel(context: Context): Promise<void> {
+  const { io, values, out: s } = context;
   const id = one(context.args, 'scan id');
   await (await client(context)).scans.cancel(id);
-  print(context.io, context.values, { cancelled: id }, () => `Scan ${id} cancelled. Nothing was charged.\n`);
+  print(io, values, { cancelled: id }, () => `${s.ok} Scan ${id} cancelled. Nothing was charged.\n`);
 }
 
 async function deleteSpace(context: Context): Promise<void> {
-  const id = one(context.args, 'space id');
+  const { io, values, out: s } = context;
+  const id = one(context.args, 'space id', SPACE_ID_HINT);
   await (await client(context)).spaces.delete(id);
-  print(context.io, context.values, { deleted: id }, () => `Space ${id} deleted, with its scans and files.\n`);
+  print(io, values, { deleted: id }, () => `${s.ok} Space ${id} deleted, with its scans and files.\n`);
 }
 
 async function scanStatus(context: Context): Promise<void> {
-  const { io, values } = context;
+  const { io, values, out } = context;
   const id = one(context.args, 'scan id');
   const sc = await client(context);
+  context.failure.scanId = id;
   if (!values.follow) {
     const scan = await sc.scans.get(id);
-    print(io, values, scan, () => `${scanLine(scan)}\n`);
+    print(io, values, scan, () => `${scanLine(out, scan)}\n`);
     return;
   }
   // Every change as it happens, then the final state.
@@ -422,7 +609,7 @@ async function scanStatus(context: Context): Promise<void> {
   for await (const scan of sc.scans.events(id)) {
     last = scan;
     if (values.json) io.stdout(`${JSON.stringify(scan)}\n`);
-    else io.stdout(`${scanLine(scan)}\n`);
+    else io.stdout(`${scanLine(out, scan)}\n`);
   }
   if (last && last.status !== 'complete') {
     throw new SpaceContextError(`Scan ${last.status}: ${last.error?.message ?? 'no detail'}`, 0, last.error?.code ?? 'SCAN_FAILED', null);
@@ -434,15 +621,22 @@ async function scanStatus(context: Context): Promise<void> {
  * they show, so what is missing can be filmed before paying for a scan.
  */
 async function check(context: Context): Promise<void> {
-  const { io, values } = context;
-  const files = await frameFiles(path.resolve(io.cwd, one(context.args, 'image or frames directory')));
+  const { io, values, out: s } = context;
+  const files = await frameFiles(path.resolve(io.cwd, one(context.args, 'image or photos folder')));
   for (const frame of files) {
     if ((await stat(frame.file)).size > MAX_FRAME_BYTES) throw new UsageError(`${path.basename(frame.file)} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
   }
   const sc = await client(context);
   const checked: Array<{ file: string; check: FrameCheck }> = [];
-  for (const frame of files) {
-    checked.push({ file: path.basename(frame.file), check: await sc.frames.check(await fileBlob(frame.file), frame.contentType) });
+  const status = values.json ? null : new Status(io);
+  status?.step(`Checking ${plural(files.length, 'image')}`, { plain: files.length > 1 });
+  try {
+    for (const [index, frame] of files.entries()) {
+      status?.update(`Checking image ${index + 1} of ${files.length}`);
+      checked.push({ file: path.basename(frame.file), check: await sc.frames.check(await fileBlob(frame.file), frame.contentType) });
+    }
+  } finally {
+    status?.stop();
   }
 
   const kinds = checked[0]?.check.key_locations.map((entry) => entry.kind) ?? [];
@@ -458,25 +652,29 @@ async function check(context: Context): Promise<void> {
   const summary = { frames: checked.length, usable, seen, not_seen: notSeen };
 
   print(io, values, { frames: checked.map(({ file, check }) => ({ file, ...check })), summary }, () => {
-    const width = Math.max(...checked.map(({ file }) => file.length));
-    const lines = checked.map(({ file, check }) => {
-      const state = check.usable ? 'usable' : 'NOT usable';
+    const rows = checked.map(({ file, check }) => {
       // A frame can be sharp and still show no place (a drawing, a document, a screen).
-      const why = check.shows_space < 0.5 ? 'not a place' : `${check.quality.level}, ${check.quality.score.toFixed(2)}`;
+      const quality = check.shows_space < 0.5 ? 'not a place' : `${check.quality.level}, ${check.quality.score.toFixed(2)}`;
       const shows = check.key_locations.filter((entry) => entry.seen).map((entry) => kindLabel(entry.kind));
-      return `${file.padEnd(width)}  ${state} (${why})${shows.length > 0 ? `  ${shows.join(', ')}` : ''}`;
+      return [file, check.usable ? `${s.ok} yes` : `${s.fail} no`, quality, shows.join(', ')];
     });
-    lines.push('', `Usable: ${usable} of ${checked.length} frame${checked.length === 1 ? '' : 's'}`);
+    const lines = [table(s, ['FILE', 'USABLE', 'QUALITY', 'SHOWS'], rows, { shrink: 0, width: stdoutWidth(io) }).trimEnd()];
+    lines.push('', `Usable: ${usable} of ${plural(checked.length, 'frame')}`);
     lines.push(`Seen: ${seen.length > 0 ? seen.map((entry) => `${kindLabel(entry.kind)} (${entry.file})`).join(', ') : 'none'}`);
-    if (notSeen.length > 0) lines.push(`Not seen yet: ${notSeen.map(kindLabel).join(', ')}. Film them before scanning if the space has them.`);
-    return `${lines.join('\n')}\n`;
+    let text = `${lines.join('\n')}\n`;
+    if (notSeen.length > 0) {
+      text += `Not seen yet: ${notSeen.map(kindLabel).join(', ')}.\n${nextLines(s, ['Film them before scanning, if the space has them'], '')}`;
+    }
+    return text;
   });
 }
 
 async function scan(context: Context): Promise<void> {
-  const { io, values } = context;
-  const input = path.resolve(io.cwd, one(context.args, 'video file or frames directory'));
-  if (Boolean(values.space) === Boolean(values.name)) throw new UsageError('Pass either --space <id> or --name <name>');
+  const { io, values, out, err } = context;
+  const input = path.resolve(io.cwd, one(context.args, 'video file or photos folder'));
+  if (Boolean(values.space) === Boolean(values.name)) {
+    throw new UsageError(values.space ? 'Pass --space or --name, not both' : 'Say where the scan goes: --name <name> for a new space, or --space <space-id>', [], true);
+  }
   const language = values.language ?? 'en';
   if (language !== 'en' && language !== 'it') throw new UsageError('--language must be en or it');
   const spaceType = values.type;
@@ -487,74 +685,128 @@ async function scan(context: Context): Promise<void> {
   const source = await scanSource(input);
   // Checked before anything is created: the API limits, from the same source as the SDK.
   if (source.kind === 'video' && source.size > MAX_VIDEO_BYTES) {
-    throw new UsageError(`${path.basename(source.file)} is larger than ${MAX_VIDEO_BYTES / 1_048_576} MB`);
+    throw new UsageError(`${path.basename(source.file)} is larger than ${MAX_VIDEO_BYTES / 1_048_576} MB`, ['Trim or compress the video, or scan photos instead']);
   }
+  let totalBytes = source.kind === 'video' ? source.size : 0;
   if (source.kind === 'frames') {
     for (const frame of source.files) {
-      if ((await stat(frame.file)).size > MAX_FRAME_BYTES) throw new UsageError(`${path.basename(frame.file)} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
+      const bytes = (await stat(frame.file)).size;
+      if (bytes > MAX_FRAME_BYTES) throw new UsageError(`${path.basename(frame.file)} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
+      totalBytes += bytes;
     }
   }
   const sc = await client(context);
-  const progress = (text: string) => {
-    if (!values.json) io.stderr(text);
-  };
+  const now = io.now ?? Date.now;
+  const began = now();
+  // --json: stdout is the document and stderr stays quiet (errors aside).
+  const status = values.json ? null : new Status(io);
+  const name = path.basename(input);
+  const what = source.kind === 'video' ? `video, ${size(source.size)}` : `${plural(source.files.length, 'photo')}, ${size(totalBytes)}`;
+  const target = values.name ? `a new space ${err.bold(`"${values.name}"`)}` : err.bold(values.space!);
+  status?.line(`${brandLine(err, `Scanning ${name}`)} ${err.dim(`(${what})`)} into ${target}`);
 
   let spaceId = values.space!;
-  if (values.name) {
-    const created = await sc.spaces.create({ name: values.name, ...(spaceType ? { space_type: spaceType as SpaceType } : {}) });
-    spaceId = created.id;
-    progress(`Created space ${created.id}\n`);
-  }
-
-  let started: Scan;
+  let started: Scan | undefined;
+  const released: Array<() => void> = [];
+  const onInterrupt = (handler: () => void) => {
+    const release = io.onInterrupt?.(handler);
+    if (release) released.push(release);
+  };
   try {
-    if (source.kind === 'video') {
-      progress(`Uploading ${path.basename(source.file)} (${(source.size / 1_048_576).toFixed(1)} MB)…\n`);
-      started = await sc.scans.fromVideo(spaceId, { data: await fileBlob(source.file), contentType: source.contentType, language });
-    } else {
-      progress(`Uploading ${source.files.length} frames…\n`);
-      const frames = await Promise.all(source.files.map(async (frame) => ({ data: await fileBlob(frame.file), contentType: frame.contentType })));
-      started = await sc.scans.fromFrames(spaceId, frames, { language });
+    onInterrupt(() => {
+      status?.stop();
+      if (started) return;
+      const left = values.name && spaceId ? ` The space ${spaceId} has no scan: \`spacecontext delete-space ${spaceId}\` removes it.` : '';
+      io.stderr(`\n${err.warn} Interrupted during the upload: a scan that has not started is never charged.${left}\n`);
+    });
+    if (values.name) {
+      status?.step('Creating the space', { plain: false });
+      const created = await sc.spaces.create({ name: values.name, ...(spaceType ? { space_type: spaceType as SpaceType } : {}) });
+      spaceId = created.id;
+      status?.complete('Space created', created.id);
     }
-  } catch (error) {
-    // The SDK has cancelled the scan; a space made for it stays and is said so.
-    if (values.name) progress(`The space ${spaceId} was created but has no scan: scan again with --space ${spaceId}, or remove it with \`spacecontext delete-space ${spaceId}\`.\n`);
-    throw error;
-  }
-  const charge = !started.livemode ? 'test mode, no charge' : started.charge.kind === 'free_scan' ? 'free scan' : money(started.charge.price_cents);
-  progress(`Scan ${started.id} started (${charge}).\n`);
 
-  if (values['no-wait']) {
-    print(io, values, started, () => `Check it with: spacecontext scan-status ${started.id}\n`);
-    return;
+    try {
+      if (source.kind === 'video') {
+        status?.step(`Uploading ${name}`);
+        started = await sc.scans.fromVideo(spaceId, { data: await fileBlob(source.file), contentType: source.contentType, language });
+      } else {
+        const count = source.files.length;
+        status?.step(`Uploading ${plural(count, 'photo')}`);
+        const frames = await Promise.all(source.files.map(async (frame) => ({ data: await fileBlob(frame.file), contentType: frame.contentType })));
+        started = await sc.scans.fromFrames(spaceId, frames, { language, onUpload: (index) => status?.update(`Uploading photo ${index + 1} of ${count}`) });
+      }
+      if (status) {
+        status.complete(source.kind === 'video' ? `Uploaded ${name}` : `Uploaded ${plural(source.files.length, 'photo')}`, `${size(totalBytes)} in ${duration(status.elapsed())}`);
+      }
+    } catch (error) {
+      status?.fail();
+      // The SDK has cancelled the scan; a space made for it stays and is said so.
+      if (values.name) {
+        status?.line(`${err.warn} The space ${spaceId} was created but has no scan: scan again with --space ${spaceId}, or remove it with \`spacecontext delete-space ${spaceId}\`.`);
+      }
+      throw error;
+    }
+    const scanId = started.id;
+    context.failure.scanId = scanId;
+    const charge = !started.livemode ? 'test mode, no charge' : started.charge.kind === 'free_scan' ? 'free scan' : `${money(started.charge.price_cents)} from the balance`;
+    status?.line(`${err.ok} Scan started  ${err.dim(`${scanId} · ${charge}`)}`);
+
+    if (values['no-wait']) {
+      print(io, values, started, () => nextLines(out, [`It runs on the server. Follow it: \`spacecontext scan-status ${scanId} --follow\``], ''));
+      return;
+    }
+    onInterrupt(() => {
+      status?.stop();
+      io.stderr(`\n${err.warn} Stopped following. The scan goes on on the server:\n${nextLines(err, [`\`spacecontext scan-status ${scanId} --follow\``])}`);
+    });
+    let lastStage: string | null = null;
+    const finished = await sc.scans.wait(scanId, {
+      onProgress: (current) => {
+        const { stage, label } = describeScan(current);
+        if (stage === lastStage) return;
+        lastStage = stage;
+        if (stage !== 'complete' && stage !== 'failed' && stage !== 'cancelled') status?.step(label);
+      },
+    });
+    if (finished.status !== 'complete') {
+      status?.fail();
+      throw new SpaceContextError(
+        `Scan ${finished.status}: ${finished.error?.message ?? 'no detail'}${finished.charge.refunded ? ' (refunded)' : ''}`,
+        0,
+        finished.error?.code ?? 'SCAN_FAILED',
+        null
+      );
+    }
+    status?.complete();
+    status?.line(`${err.ok} ${err.bold('Scan complete')} in ${duration(now() - began)}`);
+  } finally {
+    status?.stop();
+    for (const release of released) release();
   }
-  let lastStage: string | null = null;
-  const finished = await sc.scans.wait(started.id, {
-    onProgress: (current) => {
-      const { stage, label } = describeScan(current);
-      if (stage !== lastStage && stage !== 'complete') progress(`  ${label}…\n`);
-      lastStage = stage;
-    },
-  });
-  if (finished.status !== 'complete') {
-    throw new SpaceContextError(
-      `Scan ${finished.status}: ${finished.error?.message ?? 'no detail'}${finished.charge.refunded ? ' (refunded)' : ''}`,
-      0,
-      finished.error?.code ?? 'SCAN_FAILED',
-      null
-    );
-  }
+
   if (output === 'markdown') return exportMarkdown(context, sc, spaceId, { enrich: 'none' });
   if (output === 'skill') return exportSkill(context, sc, spaceId, { enrich: 'none' });
   const document = await sc.spaces.get(spaceId, { enrich: 'none' });
-  if (output === 'json') return io.stdout(`${JSON.stringify(document, null, 2)}\n`);
-  print(io, values, document, () => `${documentSummary(document)}\nNext: spacecontext ask ${spaceId} "where is the fuse box?"\n`);
+  if (output === 'json') {
+    io.stdout(`${JSON.stringify(document, null, 2)}\n`);
+    return;
+  }
+  print(io, values, document, () => {
+    const folder = slug(document.space.name);
+    const next = nextLines(out, [
+      `Ask it: \`spacecontext ask ${spaceId} "where is the fuse box?"\``,
+      `Give it to your agent: \`spacecontext skill ${spaceId} --out ~/.claude/skills/${folder}\``,
+      `Read it again: \`spacecontext space ${spaceId}\``,
+    ]);
+    return `\n${documentSummary(out, document, stdoutWidth(io))}\n${out.bold('Next')}\n${next}`;
+  });
 }
 
 /** Everything a developer or an agent needs, in one command; the exit code says whether it worked. */
 async function setupCommand(context: Context): Promise<number> {
   const { io, values } = context;
-  if (context.args.length > 0) throw new UsageError(`setup takes no arguments (got "${context.args[0]}")`);
+  if (context.args.length > 0) throw new UsageError(`setup takes no arguments (got "${context.args[0]}")`, [], true);
   return setup(io, {
     clients: values.client,
     test: Boolean(values.test),
@@ -591,14 +843,47 @@ const COMMANDS: Record<string, (context: Context) => Promise<void | number>> = {
   'delete-space': deleteSpace,
 };
 
+/** What went wrong with the command line, and where to look (exit code 2). */
+function usageFailure(io: Io, s: Style, message: string, command: string | null, extra: string[] = [], showUsage = false): number {
+  let text = `${s.fail} ${message}\n`;
+  if (showUsage && command) text += `  ${s.dim('Usage:')} ${usageOf(command, ' '.repeat(9))}\n`;
+  // Where to read more, unless the error already says what to do.
+  const help = command ? `\`spacecontext ${command} --help\` shows its options` : '`spacecontext --help` lists every command';
+  text += nextLines(s, extra.length === 0 || showUsage ? [...extra, help] : extra);
+  io.stderr(text);
+  return 2;
+}
+
+/** A command of the CLI (never a property every object has, such as `constructor`). */
+function isCommand(name: string): boolean {
+  return Object.hasOwn(COMMANDS, name);
+}
+
+/** Node's message for a command line it cannot parse, in a shorter form. */
+function parseFailure(error: unknown): { message: string; hint: string | null } {
+  const message = error instanceof Error ? error.message : String(error);
+  const unknown = /Unknown option '(-{1,2}[^']+)'/.exec(message);
+  if (unknown) {
+    const option = unknown[1]!;
+    const guess = closest(option.replace(/^-+/, ''), Object.keys(OPTIONS));
+    return { message: `Unknown option ${option}`, hint: guess ? `Did you mean --${guess}?` : null };
+  }
+  const value = /Option '(-{1,2}[^ ']+)[^']*' argument missing/.exec(message);
+  if (value) return { message: `${value[1]} needs a value`, hint: null };
+  return { message: message.split('. ')[0]!, hint: null };
+}
+
 /** Runs the CLI. Returns the exit code: 0 success, 1 failure, 2 wrong usage. */
 export async function main(argv: string[], io: Io): Promise<number> {
+  const out = styleFor(io, 'stdout');
+  const err = styleFor(io, 'stderr');
   let parsed;
   try {
     parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true });
   } catch (error) {
-    io.stderr(`${error instanceof Error ? error.message : String(error)}\nRun \`spacecontext --help\`.\n`);
-    return 2;
+    const { message, hint } = parseFailure(error);
+    const command = argv.find((arg) => !arg.startsWith('-') && isCommand(arg)) ?? null;
+    return usageFailure(io, err, message, command, hint ? [hint] : []);
   }
   const values = parsed.values as Values;
   const [command, ...args] = parsed.positionals;
@@ -606,46 +891,46 @@ export async function main(argv: string[], io: Io): Promise<number> {
     io.stdout(`${VERSION}\n`);
     return 0;
   }
-  if (values.help || !command) {
-    io.stdout(HELP);
-    return command || values.help ? 0 : 2;
-  }
-  const run = COMMANDS[command];
-  if (!run) {
-    io.stderr(`Unknown command "${command}". Run \`spacecontext --help\`.\n`);
-    return 2;
-  }
-  try {
-    return (await run({ io, values, args })) ?? 0;
-  } catch (error) {
-    if (error instanceof UsageError) {
-      io.stderr(`${error.message}\n`);
-      return 2;
+  if (command === 'help') {
+    const topic = args[0];
+    if (topic && isCommand(topic)) {
+      io.stdout(commandHelp(out, topic));
+      return 0;
     }
+    if (topic) return usageFailure(io, err, `No command "${topic}"`, null);
+    io.stdout(mainHelp(out, VERSION));
+    return 0;
+  }
+  if (!command) {
+    io.stdout(mainHelp(out, VERSION));
+    return values.help ? 0 : 2;
+  }
+  const run = isCommand(command) ? COMMANDS[command] : undefined;
+  if (!run) {
+    const guess = closest(command, [...Object.keys(COMMANDS), 'help']);
+    return usageFailure(io, err, `Unknown command "${command}"`, null, guess ? [`Did you mean \`spacecontext ${guess}\`?`] : []);
+  }
+  if (values.help) {
+    io.stdout(commandHelp(out, command));
+    return 0;
+  }
+  const accepted = new Set([...GLOBAL_OPTIONS, ...(COMMAND_HELP[command]?.accepts ?? [])]);
+  const stray = Object.keys(values).find((name) => !accepted.has(name));
+  if (stray) return usageFailure(io, err, `${command} does not take --${stray}`, command);
+
+  const context: Context = { io, values, args, out, err, failure: { command } };
+  try {
+    // Only a number is an exit code (a stray return value must never become one).
+    const code = await run(context);
+    return typeof code === 'number' ? code : 0;
+  } catch (error) {
+    if (error instanceof UsageError) return usageFailure(io, err, error.message, command, error.hints, error.showUsage);
     if (error instanceof SpaceContextError) {
-      const request = error.requestId ? ` (request ${error.requestId})` : '';
-      io.stderr(`Error [${error.code}]: ${error.message}${request}\n${hint(error.code)}`);
+      const request = error.requestId ? err.dim(` (request ${error.requestId})`) : '';
+      io.stderr(`${err.fail} ${err.red(`Error [${error.code}]`)}: ${error.message}${request}\n${nextLines(err, hints(error, context.failure))}`);
       return 1;
     }
-    io.stderr(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
+    io.stderr(`${err.fail} ${err.red('Error')}: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
-  }
-}
-
-function hint(code: string): string {
-  switch (code) {
-    case 'INSUFFICIENT_FUNDS':
-      return 'Top up your wallet in the console: https://spacecontext.app/developers/console/\n';
-    case 'PRO_REQUIRED':
-      return 'Spaces scanned with the app need Space Context Pro on this deployment.\n';
-    case 'ENRICHMENT_PENDING':
-      return 'The space is being screened for sensitive values; try again in a minute.\n';
-    case 'INSUFFICIENT_SCOPE':
-      return 'This key lacks a scope for this request; create one with the right scopes in the console (a live key that can scan needs a card on file).\n';
-    case 'INVALID_TOKEN':
-    case 'MISSING_AUTH_HEADER':
-      return 'Run `spacecontext login` with a valid key.\n';
-    default:
-      return '';
   }
 }
