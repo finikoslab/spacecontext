@@ -454,16 +454,16 @@ export interface paths {
         put?: never;
         /**
          * Pay with x402 and get an API key (agents)
-         * @description For an agent with a wallet and no account: pay in USDC with [x402](https://x402.org) v2 and receive an API key. No key, no sign-in: the payment is the credential, and the paying address is the account.
+         * @description For an agent with a wallet and no account: pay in USDC on **Base** or **Solana** with [x402](https://x402.org) v2 and receive an API key. No key, no sign-in: the payment is the credential, and the paying address is the account. Any x402 v2 client works (for example `@x402/fetch` with `@x402/evm` and `@x402/svm`): the network fee is paid by the facilitator, the payer needs only USDC.
          *
-         *     1. Call without `PAYMENT-SIGNATURE`: 402 `PAYMENT_REQUIRED` with the `PAYMENT-REQUIRED` header (base64 JSON, also in the body as `payment_required`): scheme `exact`, the network, the amount in atomic USDC units (6 decimals: US$1.00 = `1000000`), the USDC contract and the address to pay.
-         *     2. Sign it (EIP-3009 `transferWithAuthorization`) and send **the same request, with the same body**, adding `PAYMENT-SIGNATURE` (base64 JSON PaymentPayload). The payment is verified and settled by the facilitator; the answer carries `PAYMENT-RESPONSE` with the transaction.
+         *     1. Call without `PAYMENT-SIGNATURE`: 402 `PAYMENT_REQUIRED` with the `PAYMENT-REQUIRED` header (base64 JSON, also in the body as `payment_required`). `accepts` has one entry per network, Base first: scheme `exact`, the network (CAIP-2), the amount in atomic USDC units (6 decimals: US$1.00 = `1000000`), the USDC contract or mint, the address to pay, and `extra` (the EIP-712 domain of USDC on Base; on Solana `feePayer`, the facilitator account that pays the network fee). `extensions.bazaar` describes the call for x402 catalogs.
+         *     2. Pick one entry, sign it, and send **the same request, with the same body**, adding `PAYMENT-SIGNATURE` (base64 JSON PaymentPayload with that entry, unchanged, as `accepted`). On Base the payload is an EIP-3009 `transferWithAuthorization`; on Solana a transaction partially signed by the payer: SetComputeUnitLimit, SetComputeUnitPrice, a `TransferChecked` of exactly the amount into the USDC account of `payTo`, optional memo, fee payer `extra.feePayer`. The payment is verified and settled by the facilitator; the answer carries `PAYMENT-RESPONSE` with the transaction.
          *
-         *     On Base mainnet (`eip155:8453`) the payment is credited to the account's wallet (`amount_cents`, then US$1.00 per scan; agents have no free scan) and the key is **live**. On Base Sepolia (`eip155:84532`) testnet USDC is free, so the payment credits nothing: the key is a **test** key (demo space, no charges, no model). The same paying address always gets the same account.
+         *     On mainnet (Base `eip155:8453`, Solana `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`) the payment is credited to the account's wallet (`amount_cents`, then US$1.00 per live scan; reading, search and answers are included; agents have no free scan; the credit does not expire) and the key is **live**. On testnets (Base Sepolia `eip155:84532`, Solana devnet `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`) USDC is free, so the payment credits nothing: the key is a **test** key (demo space, no charges, no model). The same paying address always gets the same account; a Base wallet and a Solana wallet are two accounts.
          *
          *     **Store `api_key` from your first purchase: it is shown once.** A signed authorization can be submitted by whoever holds it, so a payment alone returns a key only when it opens the account. Later payments from the same wallet top up the same account and return only `api_key_prefix`. An existing key is replaced only with that key: `rotate_key: true` plus `Authorization: Bearer <the current key>` (the previous key is revoked). The first key of the other mode (e.g. a live key for an account that so far paid on testnet) needs `Authorization: Bearer <one of the account's current keys>`. Both are checked before any payment is taken (403 `AGENT_KEY_REQUIRED`, nothing charged). A payment replayed with the same transaction is recognised: nothing is credited or minted twice.
          *
-         *     400 `PAYMENT_INVALID` when the signature header is malformed or does not match the requirements (amount, network, asset, address), before anything is sent to the facilitator. 402 `PAYMENT_FAILED` when the facilitator rejects or cannot settle the payment (`reason`; nothing was charged). 404 when agent payments are off on this deployment. Limited per IP.
+         *     400 `PAYMENT_INVALID` when the signature header is malformed or does not match the requirements (amount, network, asset, address, fee payer, the payer's signature), before anything is sent to the facilitator. 402 `PAYMENT_FAILED` when the facilitator rejects or cannot settle the payment (`reason`; nothing was charged). 503 `PAYMENTS_UNAVAILABLE` when the chosen network cannot be served right now (nothing was charged). 404 when agent payments are off on this deployment. Limited per IP.
          */
         post: operations["buyAgentCredits"];
         delete?: never;
@@ -1277,8 +1277,8 @@ export interface components {
         };
         AgentCreditRequest: {
             /**
-             * @description US cents to pay (and, on mainnet, to credit)
-             * @default 500
+             * @description US cents to pay (and, on mainnet, to credit): US$1.00 is one live scan. x402 clients cap a payment at US$1 by default; raise their limit to pay more at once
+             * @default 100
              */
             amount_cents?: number;
             /**
@@ -1291,8 +1291,10 @@ export interface components {
             /** @enum {string} */
             object: "agent_credit";
             /** @enum {string} */
-            network: "eip155:84532" | "eip155:8453";
+            network: "eip155:8453" | "eip155:84532" | "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" | "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+            /** @description Lowercase on Base; base58 as written on Solana */
             payer: string;
+            /** @description The transaction hash (Base) or signature (Solana) */
             transaction: string;
             /** @description true on mainnet: live credit and a live key */
             livemode: boolean;
@@ -1311,17 +1313,23 @@ export interface components {
         X402PaymentRequirements: {
             /** @enum {string} */
             scheme: "exact";
-            /** @enum {string} */
-            network: "eip155:84532" | "eip155:8453";
+            /**
+             * @description CAIP-2: Base (`eip155:…`) or Solana (`solana:…`)
+             * @enum {string}
+             */
+            network: "eip155:8453" | "eip155:84532" | "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" | "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
             /** @description Atomic units of the asset (USDC: 6 decimals) */
             amount: string;
+            /** @description The USDC contract (Base) or mint (Solana) */
             asset: string;
+            /** @description Who is paid: on Solana, the owner of the USDC account the transfer goes to */
             payTo: string;
             maxTimeoutSeconds: number;
-            /** @description EIP-712 domain of the asset */
             extra: {
                 name: string;
                 version: string;
+            } | {
+                feePayer: string;
             };
         };
         X402PaymentRequired: {
@@ -1335,6 +1343,8 @@ export interface components {
                 mimeType: string;
             };
             accepts: components["schemas"]["X402PaymentRequirements"][];
+            /** @description `bazaar`: how to call this resource and what it returns, for x402 catalogs */
+            extensions?: Record<string, never>;
         };
         AgentPaymentError: {
             error: {
@@ -1347,8 +1357,10 @@ export interface components {
                 /** @description On 500: the settled transaction, for reconciliation */
                 transaction?: string;
                 network?: string;
-                /** @description On 502: the authorization nonce, for reconciliation */
+                /** @description On 502 (Base): the authorization nonce, for reconciliation */
                 nonce?: string;
+                /** @description On 502 (Solana): the payer's transaction signature, for reconciliation */
+                signature?: string;
             };
         };
         Error: {
@@ -2194,7 +2206,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description base64 of the JSON x402 v2 PaymentPayload: `x402Version: 2`, `accepted` (the requirements received, unchanged), `payload: { signature, authorization: { from, to, value, validAfter, validBefore, nonce } }`. */
+                /** @description base64 of the JSON x402 v2 PaymentPayload: `x402Version: 2`, `accepted` (one entry of `accepts`, unchanged), and `payload`: on Base `{ signature, authorization: { from, to, value, validAfter, validBefore, nonce } }`, on Solana `{ transaction }` (base64 of the partially signed transaction). */
                 "PAYMENT-SIGNATURE"?: string;
             };
             path?: never;
@@ -2260,7 +2272,7 @@ export interface operations {
                     "application/json": components["schemas"]["AgentPaymentError"];
                 };
             };
-            /** @description The settlement could not be confirmed (`nonce`) */
+            /** @description The settlement could not be confirmed (`nonce` on Base, `signature` on Solana) */
             502: {
                 headers: {
                     [name: string]: unknown;

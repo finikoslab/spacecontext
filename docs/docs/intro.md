@@ -30,6 +30,7 @@ All three use the same account as the Space Context iPhone app, and the same [AP
 - **Compare** two scans of the same space: items added, removed, moved, issues new or resolved. → [Skills and comparisons](api/skills-and-diff.md)
 - **Export** a space as an Agent Skill folder that any agent can read. → [Use a space in Claude Code](guides/claude-code-skill.md)
 - **Get notified** when a scan completes or fails. → [Webhooks](api/webhooks.md)
+- **Pay as an agent**: an agent with USDC on Base or Solana buys credit and a key in one call, with no account and no card. → [Agents that pay (x402)](account/agent-payments.md)
 
 ## Try it for free
 

@@ -16,6 +16,8 @@ Reading, searching and asking spaces are included. **Live scans** are paid from 
 | Failed scans | Refunded automatically |
 | Live scans, and live keys that can scan | Need a card on file: saved in the console without a charge, or a top-up already paid |
 
+**Agents with a crypto wallet** can skip the card and the console: they pay in USDC on Base or Solana and get a key in the same call. See [Agents that pay (x402)](agent-payments.md).
+
 Spaces you scanned with the iPhone app are readable through the API, the console and MCP with the same account, at no cost. Billing stays separate: the app's credits and Space Context Pro are App Store purchases; API scans are always paid from the balance, never from app credits.
 
 ## Add a card

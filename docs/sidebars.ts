@@ -10,7 +10,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Account',
       collapsed: false,
-      items: ['account/console-and-login', 'account/api-keys', 'account/billing'],
+      items: ['account/console-and-login', 'account/api-keys', 'account/billing', 'account/agent-payments'],
     },
     {
       type: 'category',
