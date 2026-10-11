@@ -5,7 +5,7 @@
   "description": "Remote MCP server for Space Context, on Cloudflare Workers: your agent knows your spaces.",
   "license": "MIT",
   "author": "Finikos S.r.l.",
-  "homepage": "https://spacecontext.app/developers",
+  "homepage": "https://spacecontext.app/developers/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/finikoslab/spacecontext.git",
@@ -32,5 +32,14 @@
     "@spacecontext/sdk": "0.2.0",
     "agents": "^0.26.0",
     "zod": "^4.4.3"
-  }
+  },
+  "keywords": [
+    "spacecontext",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "ai-agents",
+    "physical-world",
+    "cloudflare-workers"
+  ]
 }

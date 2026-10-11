@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "app.spacecontext/spacecontext",
   "title": "Space Context",
-  "description": "Your filmed spaces for AI: inventory, key locations, how-tos and photo evidence.",
+  "description": "The context layer for the physical world: filmed spaces as cited context for agents.",
   "version": "0.2.0",
   "websiteUrl": "https://spacecontext.app/developers/",
   "repository": {

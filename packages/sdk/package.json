@@ -47,10 +47,14 @@
   },
   "keywords": [
     "spacecontext",
+    "sdk",
+    "api-client",
+    "ai-agents",
+    "mcp",
     "physical-world",
     "context",
-    "agents",
-    "mcp",
+    "space-document",
+    "video-to-json",
     "inventory",
     "property"
   ]

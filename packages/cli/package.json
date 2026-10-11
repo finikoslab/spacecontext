@@ -41,9 +41,12 @@
   "keywords": [
     "spacecontext",
     "cli",
-    "agents",
-    "skill",
-    "video",
-    "inventory"
+    "ai-agents",
+    "mcp",
+    "agent-skill",
+    "video-to-json",
+    "physical-world",
+    "inventory",
+    "check-in-check-out"
   ]
 }
