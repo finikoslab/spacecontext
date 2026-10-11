@@ -137,7 +137,7 @@ When you're ready to scan your own spaces, add a card in the console (nothing is
 | --- | --- |
 | Test keys, on the demo space | Free, within the [limits](https://spacecontext.app/developers/docs/limits/) |
 | First live scan of a new account | Free, one free scan per card: a card already used on another Space Context account (even a deleted one) brings none |
-| Each live scan after that | **US$1.00**, from a prepaid balance |
+| Each live scan after that | **$1.00**, from a prepaid balance |
 | Failed scans | Refunded automatically |
 | Reading, search, questions and frame checks | Included, within the [limits](https://spacecontext.app/developers/docs/limits/) |
 | Spaces scanned with the iPhone app | Readable at no cost |

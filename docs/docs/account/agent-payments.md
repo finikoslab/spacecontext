@@ -11,8 +11,8 @@ An agent with a crypto wallet does not need a person to sign up, add a card or c
 | --- | --- |
 | Endpoint | `POST https://api.spacecontext.app/v1/agent/credits` |
 | Networks | Base (`eip155:8453`) and Solana (`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`), USDC |
-| Amount | `amount_cents` from 100 (US$1) to 50 000 (US$500); without a body, US$1 |
-| What it buys | Credit for live scans at **US$1.00 each**; reading, search and answers are included. The credit does not expire |
+| Amount | `amount_cents` from 100 ($1) to 50 000 ($500); without a body, $1 |
+| What it buys | Credit for live scans at **$1.00 each**; reading, search and answers are included. The credit does not expire |
 | Network fee | Paid by the facilitator: the wallet needs only USDC, no ETH or SOL |
 | Key | A live key with every scope (`spaces:read`, `scans:read`, `scans:write`, `spaces:sensitive`) |
 
@@ -20,7 +20,7 @@ To try the API first without paying, use a [test key](api-keys.md#test-and-live)
 
 ## Pay with an x402 client
 
-Any x402 v2 client works. With the official one for TypeScript, a call with no body buys **US$1, one scan**, and goes through as is: x402 clients refuse to pay more than US$1 at once unless you raise their limit (`spendControls`), as below to buy five scans.
+Any x402 v2 client works. With the official one for TypeScript, a call with no body buys **$1, one scan**, and goes through as is: x402 clients refuse to pay more than $1 at once unless you raise their limit (`spendControls`), as below to buy five scans.
 
 ```bash
 npm install @x402/fetch @x402/evm viem          # Base
@@ -36,7 +36,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 const pay = wrapFetchWithPaymentFromConfig(fetch, {
   schemes: [{ network: 'eip155:8453', client: new ExactEvmScheme(privateKeyToAccount(process.env.EVM_PRIVATE_KEY as `0x${string}`)) }],
-  spendControls: { maxAmountPerPayment: '$5' }, // the client's own cap: US$1 unless raised
+  spendControls: { maxAmountPerPayment: '$5' }, // the client's own cap: $1 unless raised
 });
 
 const res = await pay('https://api.spacecontext.app/v1/agent/credits', {
@@ -85,14 +85,14 @@ Then use the key like any other: `Authorization: Bearer sc_live_…` on the [API
 
 ## What happens on the wire
 
-1. `POST /v1/agent/credits` without payment answers **402** with a `PAYMENT-REQUIRED` header: base64 of a JSON whose `accepts` lists one option per network, Base first. Each names the amount in atomic USDC units (6 decimals: US$1.00 is `1000000`), the USDC contract or mint, the address to pay (`payTo`) and, on Solana, `extra.feePayer`, the facilitator account that pays the network fee. The same JSON is in the body as `error.payment_required`, so you can read it with `curl`:
+1. `POST /v1/agent/credits` without payment answers **402** with a `PAYMENT-REQUIRED` header: base64 of a JSON whose `accepts` lists one option per network, Base first. Each names the amount in atomic USDC units (6 decimals: $1.00 is `1000000`), the USDC contract or mint, the address to pay (`payTo`) and, on Solana, `extra.feePayer`, the facilitator account that pays the network fee. The same JSON is in the body as `error.payment_required`, so you can read it with `curl`:
 
    ```bash
    curl -s -X POST https://api.spacecontext.app/v1/agent/credits | jq .error.payment_required.accepts
    ```
 
 2. The client picks one option and signs it: on Base an EIP-3009 `transferWithAuthorization`; on Solana a transaction that moves exactly that amount of USDC into the `payTo` wallet's USDC account, which the client signs and the facilitator co-signs as fee payer.
-3. It sends **the same request with the same body** again, adding `PAYMENT-SIGNATURE`. The amount follows the body: a payment signed for US$5 does not buy US$10.
+3. It sends **the same request with the same body** again, adding `PAYMENT-SIGNATURE`. The amount follows the body: a payment signed for $5 does not buy $10.
 4. We check the payment against what we asked (network, asset, recipient, amount, signature) before anything is sent on; the facilitator verifies and settles it; the answer carries the key, the balance and a `PAYMENT-RESPONSE` header with the transaction.
 
 The 402 also carries `extensions.bazaar`, which describes the call for x402 catalogs: agents that browse a catalog can find this endpoint without these docs.

@@ -90,4 +90,4 @@ curl https://api.spacecontext.app/v1/spaces/spc_demo/ask \
 
 ### 5. Go live
 
-Add a card in the console under **Billing → Add a card**: nothing is charged. The first live scan of a new account is free (one free scan per card: a card already used on another account brings none). After that, a live scan costs US$1.00 from a prepaid balance; failed scans are refunded to the balance. → [Billing](account/billing.md)
+Add a card in the console under **Billing → Add a card**: nothing is charged. The first live scan of a new account is free (one free scan per card: a card already used on another account brings none). After that, a live scan costs $1.00 from a prepaid balance; failed scans are refunded to the balance. → [Billing](account/billing.md)

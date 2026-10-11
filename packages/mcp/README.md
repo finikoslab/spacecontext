@@ -58,7 +58,7 @@ These tools work only on a connection where the user ticked **let it scan spaces
 | `check_frame` | Is this photo usable, and which key locations does it show; nothing is stored or charged |
 | `create_scan` | Declares a scan of an existing or a new space and returns the upload instructions |
 | `upload_frame` | Sends one image of a frames scan through the server, which holds the key |
-| `start_scan` | Starts and charges a scan: the free scan first, then US$1.00 from the balance; refunded if it fails |
+| `start_scan` | Starts and charges a scan: the free scan first, then $1.00 from the balance; refunded if it fails |
 | `cancel_scan` | Cancels a scan that hasn't started; nothing is charged |
 
 **Resources:** `spacecontext://spaces` (the list, JSON) and `spacecontext://spaces/{space_id}` (a space as Markdown). **Prompts:** `check_out_report` (compare two scans and write a report that keeps confirmed changes apart from what may be missing) and `where_is` (find one thing, with its area and evidence photo).

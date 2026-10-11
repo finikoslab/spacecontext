@@ -26,7 +26,7 @@ description: 'Sizes, rates and quotas of the Space Context API: uploads, request
 | Search | 20 per minute and 1 000 per day per account |
 | Questions (`ask`) | 20 per minute and 200 answered per day per account |
 | Frame checks (`POST /frames/check`) | 2 000 per day per account (free) |
-| Agent payments (`POST /agent/credits`) | 5 per minute per IP address; US$1 to US$500 per payment |
+| Agent payments (`POST /agent/credits`) | 5 per minute per IP address; $1 to $500 per payment |
 | Scans processing at once | 10 per account; more on request |
 | New spaces (`POST /spaces`) | 200 per day per account, in each mode (test keys included) |
 | New scans (`POST /spaces/{id}/scans`) | 500 per day per account, in each mode (test keys included) |

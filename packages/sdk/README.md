@@ -54,7 +54,7 @@ console.log(document.stats.items, 'items');
 
 `language` is the language the report is written in: `en` (the default), `it`, `es`, `fr`, `de`, `pt` or `nl`, exported as `REPORT_LANGUAGES`. The narration can be in any language.
 
-A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`, and its charge is refunded. After `timeoutMs` (default 20 minutes) it throws `TIMEOUT`, and the scan goes on. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, the account's free scan is used first (a new account has one, one free scan per card) and each scan after that costs US$1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
+A scan that fails throws a `SpaceContextError` whose `code` is the scan's own error (`FOOTAGE_UNUSABLE`, `ANALYSIS_EMPTY`…), with the scan in `details.scan`, and its charge is refunded. After `timeoutMs` (default 20 minutes) it throws `TIMEOUT`, and the scan goes on. With a test key the whole flow runs for free and returns the demo content under the name you chose. With a live key, the account's free scan is used first (a new account has one, one free scan per card) and each scan after that costs $1.00 from your prepaid balance ([Billing](https://spacecontext.app/developers/docs/account/billing/)).
 
 ## Methods
 

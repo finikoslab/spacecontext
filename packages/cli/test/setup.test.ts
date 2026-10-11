@@ -266,7 +266,7 @@ describe('spacecontext setup', () => {
     expect(out).toContain('✓ Codex        MCP server already added and signed in');
     expect(out).toContain('✓ Cursor       Already in ~/.cursor/mcp.json');
     expect(out).toContain('✓ Skill        Up to date in ~/.claude/skills/spacecontext/SKILL.md');
-    expect(out).toContain('✓ Card         Card on file: US$12.50, 1 free scan left');
+    expect(out).toContain('✓ Card         Card on file: $12.50, 1 free scan left');
     expect(out).toContain('\nNext\n  › Claude Code: restart it if it is running');
     expect(out).not.toContain('codex mcp login');
     // The SDK snippet, indented under its item.
@@ -629,8 +629,8 @@ describe('spacecontext setup', () => {
 
     // A saved card, or a top-up paid without saving it and spent down to nothing: a card on file all the same; only funds are missing.
     result = await live({ balance_cents: 0, free_scans_remaining: 0, card_on_file: true });
-    expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Card on file: US$0.00, 0 free scans left' });
-    expect(summary(result.h).next).toContain(`Add funds before your next live scan (US$1.00 each): ${BILLING_URL}`);
+    expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Card on file: $0.00, 0 free scans left' });
+    expect(summary(result.h).next).toContain(`Add funds before your next live scan ($1.00 each): ${BILLING_URL}`);
     expect(summary(result.h).next.some((item) => item.startsWith('Live scans need a card'))).toBe(false);
     expect(result.h.opened).toEqual([]);
 
@@ -642,7 +642,7 @@ describe('spacecontext setup', () => {
 
     // There, a balance stands for a paid top-up.
     result = await live({ balance_cents: 1000, free_scans_remaining: 0, card_on_file: undefined });
-    expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Prepaid balance: US$10.00, 0 free scans left' });
+    expect(result.step).toEqual({ id: 'card', status: 'done', detail: 'Prepaid balance: $10.00, 0 free scans left' });
     expect(summary(result.h).next.some((item) => item.startsWith('Add funds'))).toBe(false);
     expect(result.h.opened).toEqual([]);
 
