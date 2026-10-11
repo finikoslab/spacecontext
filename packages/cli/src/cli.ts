@@ -830,9 +830,14 @@ async function scan(context: Context): Promise<void> {
         throw new Error(`Compressed, ${name} is still ${size(bytes)}, over ${MAX_VIDEO_BYTES / 1_048_576} MB: trim it and scan again`);
       }
       const picture = plan.longSide === 1280 ? '720p' : '1080p';
-      status?.complete(`Compressed ${name}`, `${size(video.size)} → ${size(bytes)}, H.264 up to ${picture}, in ${duration(status.elapsed())}`);
-      video = { file: compressed, contentType: 'video/mp4', size: bytes };
-      totalBytes = bytes;
+      if (bytes >= video.size && video.size <= MAX_VIDEO_BYTES) {
+        // --compress on a video that already fits can come out larger: the original is sent.
+        status?.complete(`Kept ${name} as it is`, `compressing gave ${size(bytes)}, more than its ${size(video.size)}`);
+      } else {
+        status?.complete(`Compressed ${name}`, `${size(video.size)} → ${size(bytes)}, H.264 up to ${picture}, in ${duration(status.elapsed())}`);
+        video = { file: compressed, contentType: 'video/mp4', size: bytes };
+        totalBytes = bytes;
+      }
     }
     if (values.name) {
       status?.step('Creating the space', { plain: false });

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { compressionPlan, compressVideo, ffmpegArgs, findVideoTools, pathWhich, probeDuration, type VideoTools } from '../src/lib/compress.js';
-import { MAX_VIDEO_BYTES } from '../src/files.js';
+import { MAX_VIDEO_BYTES } from '../src/lib/files.js';
 
 describe('the bitrate that fits 100 MB', () => {
   it('aims at 90% of 100 MB over the duration, at most 8 Mbit/s, with 96 kbit/s of mono AAC', () => {
@@ -53,6 +53,8 @@ describe('the bitrate that fits 100 MB', () => {
       '96000',
       '-ac',
       '1',
+      '-t',
+      '600.000',
       '-movflags',
       '+faststart',
       '-progress',

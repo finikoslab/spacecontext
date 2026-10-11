@@ -732,12 +732,14 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
 
   it('compresses a video that fits only when asked (--compress), and caps the bitrate of a short one at 8 Mbit/s', async () => {
     const tools = await fakeVideoTools('bin', { seconds: '60.5', outputBytes: 40 });
-    await writeFile(path.join(directory, 'tour.webm'), new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]));
+    const webm = new Uint8Array(400);
+    webm.set([0x1a, 0x45, 0xdf, 0xa3]);
+    await writeFile(path.join(directory, 'tour.webm'), webm);
 
-    const asIs = harness(scanRoutes('video/webm', 4), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    const asIs = harness(scanRoutes('video/webm', 400), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
     expect(await main(['scan', 'tour.webm', '--space', SPACE_ID], asIs.io)).toBe(0);
     expect(await tools.calls()).toEqual([]);
-    expect(JSON.parse(String(asIs.calls[0]!.body)).input.video).toEqual({ content_type: 'video/webm', content_length: 4 });
+    expect(JSON.parse(String(asIs.calls[0]!.body)).input.video).toEqual({ content_type: 'video/webm', content_length: 400 });
 
     const asked = harness(scanRoutes('video/mp4', 40), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
     expect(await main(['scan', 'tour.webm', '--space', SPACE_ID, '--compress', '--json'], asked.io)).toBe(0);
@@ -747,6 +749,18 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
     expect(JSON.parse(String(asked.calls[0]!.body)).input.video).toEqual({ content_type: 'video/mp4', content_length: 40 });
     // --json: stderr stays quiet.
     expect(asked.stderr()).toBe('');
+  });
+
+  it('sends the original when --compress makes a video that fits larger', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '20', outputBytes: 4_000 });
+    const webm = new Uint8Array(400);
+    webm.set([0x1a, 0x45, 0xdf, 0xa3]);
+    await writeFile(path.join(directory, 'small.webm'), webm);
+    const h = harness(scanRoutes('video/webm', 400), { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    expect(await main(['scan', 'small.webm', '--space', SPACE_ID, '--compress'], h.io)).toBe(0);
+    expect((await tools.calls()).map((call) => call[0])).toEqual(['ffprobe', 'ffmpeg']);
+    expect(JSON.parse(String(h.calls[0]!.body)).input.video).toEqual({ content_type: 'video/webm', content_length: 400 });
+    expect(h.stderr()).toContain('✓ Kept small.webm as it is  compressing gave 4 KB, more than its 1 KB');
   });
 
   it('refuses a video over 10 minutes before encoding it, and creates nothing', async () => {

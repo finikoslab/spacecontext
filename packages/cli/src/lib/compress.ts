@@ -91,6 +91,10 @@ export function ffmpegArgs(input: string, output: string, plan: CompressionPlan)
     String(plan.audioBitrate),
     '-ac',
     '1',
+    // Never longer than the source: AAC padding would otherwise push a 599.9 s
+    // video past the API's 10 minutes.
+    '-t',
+    plan.seconds.toFixed(3),
     '-movflags',
     '+faststart',
     '-progress',
