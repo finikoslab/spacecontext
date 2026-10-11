@@ -1,6 +1,6 @@
 ---
 title: 'Billing'
-description: 'Free scan, prepaid balance, the card on file for live keys that can scan, card top-ups through Stripe, automatic top-up, invoices and company details, refunds and the ledger.'
+description: 'Free first scan, prepaid balance in US dollars, the card on file for live scans, Stripe top-ups, automatic top-up, taxes, invoices, refunds and the ledger.'
 ---
 
 # Billing

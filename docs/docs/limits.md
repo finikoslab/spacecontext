@@ -1,6 +1,6 @@
 ---
 title: 'Limits'
-description: 'Sizes, rates and quotas of the Space Context API.'
+description: 'Sizes, rates and quotas of the Space Context API: uploads, requests per minute, daily search and question limits, scans at once, account and result limits.'
 ---
 
 # Limits

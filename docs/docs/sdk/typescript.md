@@ -1,6 +1,6 @@
 ---
 title: 'TypeScript SDK'
-description: 'The @spacecontext/sdk client for Node, Deno and Cloudflare Workers.'
+description: 'The @spacecontext/sdk client for Node.js, Deno and Cloudflare Workers: one call from a video to the Space Document, reading, scanning, exports and errors.'
 ---
 
 # TypeScript SDK

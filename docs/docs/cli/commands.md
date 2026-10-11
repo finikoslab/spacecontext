@@ -1,6 +1,6 @@
 ---
 title: 'Commands'
-description: 'Every command of the spacecontext CLI.'
+description: 'Every command of the spacecontext CLI: setup, sign-in, spaces, search and ask, Agent Skill and Markdown exports, scan comparisons and scans from the terminal.'
 ---
 
 # CLI commands

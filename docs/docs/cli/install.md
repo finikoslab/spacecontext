@@ -1,6 +1,6 @@
 ---
 title: 'Install and sign in'
-description: 'Install the spacecontext CLI and save an API key.'
+description: 'Install the spacecontext CLI with npx or npm (Node.js 22.12 or later), sign in with a code approved in the console, and see which key it uses.'
 ---
 
 # Install the CLI

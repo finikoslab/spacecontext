@@ -1,6 +1,6 @@
 ---
 title: 'Console and sign-in'
-description: 'The developer console: sign in with Apple, Google, GitHub or an emailed code, see what your spaces hold, scan from the browser, connect assistants, manage keys, billing, webhooks and the audit log.'
+description: 'The developer console: sign in with Apple, Google, GitHub or an emailed code, approve terminal sign-ins, and manage spaces, scans, keys, billing and webhooks.'
 ---
 
 # Console and sign-in
