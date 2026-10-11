@@ -7,19 +7,20 @@ description: 'Film a space once, and your agents know it: an API, MCP server, CL
 
 # Space Context for developers
 
-Your agents know your code, your documents and your calendar. They know nothing about the places you live and work in. **Film a space once, and they know it too.**
+Space Context is the context layer for the physical world. Your agents know your code, your documents and your calendar; they know nothing about the places you live and work in. **Film a space once, and they know it too.**
 
-Space Context turns a video of a physical space (a flat, a holiday rental, an office, a van, an appliance) into a structured **Space Document**: every area, every item and where it is, its condition, what is broken, where the water shut-off and the fuse box are, how things work, with the original video frames as evidence. You read it, search it and ask it questions from your code, from the terminal or from an AI assistant.
+It turns a video of a physical space (a flat, a holiday rental, an office, a van, an appliance) into a structured **Space Document**: every area, every item and where it is, its condition, what is broken, where the water shut-off and the fuse box are, how things work, with the original video frames as evidence. You read it, search it and ask it questions from your code, from the terminal or from an AI assistant.
 
-## Three ways in
+## Four ways in
 
 | | Best for | Start here |
 | --- | --- | --- |
-| **MCP server** | Giving Claude (or any MCP client) read access to your spaces | [Connect an assistant](mcp/connect.md) |
+| **MCP server** | Giving Claude (or any MCP client) read access to your spaces, without writing code | [Connect an assistant](mcp/connect.md) |
 | **CLI** | Scanning a video and exporting an Agent Skill from the terminal | [Install the CLI](cli/install.md) |
-| **API and SDK** | Building it into your product | [API overview](api/overview.md), [TypeScript SDK](sdk/typescript.md) |
+| **TypeScript SDK** | Building it into a Node.js, Deno or Cloudflare Workers app: one call from a video to the Space Document | [TypeScript SDK](sdk/typescript.md) |
+| **REST API** | Building it into your product in any language: JSON over HTTPS, with an OpenAPI 3.1 contract | [API overview](api/overview.md) |
 
-All three use the same account as the Space Context iPhone app, and the same [API keys](account/api-keys.md) from the [console](account/console-and-login.md).
+All four use the same account as the Space Context iPhone app, and the same [API keys](account/api-keys.md) from the [console](account/console-and-login.md).
 
 ## What you can do
 
