@@ -933,13 +933,14 @@ describe('MCP tools: the whole space, photos and scanning', () => {
   });
 
   it('refuses a video the API would refuse before creating a space, and never leaves a space empty', async () => {
-    const MB = 1024 * 1024;
+    const GB = 1024 ** 3;
     const { accessToken } = await connect({ scans: true });
     await initialize(accessToken);
     const listed = (await rpc(accessToken, 'tools/list')).result.tools as Array<{ name: string; description: string; inputSchema: any }>;
     const createScan = listed.find((entry) => entry.name === 'create_scan')!;
-    expect(createScan.description).toContain('Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 100 MB and 10 minutes)');
-    expect(createScan.inputSchema.properties.video.properties.content_length.maximum).toBe(100 * MB);
+    expect(createScan.description).toContain('Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes)');
+    expect(createScan.inputSchema.properties.video.description).toBe('With source video: up to 4 GB and 10 minutes.');
+    expect(createScan.inputSchema.properties.video.properties.content_length.maximum).toBe(4 * GB);
     // The containers the API takes, and nothing else.
     expect(createScan.inputSchema.properties.video.properties.content_type.enum).toEqual(['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/3gpp', 'video/webm', 'video/x-matroska', 'video/matroska']);
     const avi = await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/x-msvideo', content_length: 1234 } } });
@@ -953,23 +954,26 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     expect(unknownLanguage.error ?? unknownLanguage.result?.isError).toBeTruthy();
     expect(backend.calls.some((entry) => entry.method === 'POST' && entry.path === '/spaces')).toBe(false);
 
-    const tooBig =await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 100 * MB + 1 } } });
+    const tooBig =await rpc(accessToken, 'tools/call', { name: 'create_scan', arguments: { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 4 * GB + 1 } } });
     expect(tooBig.error ?? tooBig.result?.isError).toBeTruthy();
     expect(backend.calls.some((entry) => entry.method === 'POST' && entry.path === '/spaces')).toBe(false);
 
-    const largest = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/webm', content_length: 100 * MB } });
+    const largest = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/webm', content_length: 4 * GB } });
     expect(largest.isError).toBeUndefined();
-    expect(backend.calls.find((entry) => entry.method === 'POST' && entry.path === '/spaces/spc_new/scans')!.body).toMatchObject({ input: { video: { content_type: 'video/webm', content_length: 100 * MB } } });
+    expect(backend.calls.find((entry) => entry.method === 'POST' && entry.path === '/spaces/spc_new/scans')!.body).toMatchObject({ input: { video: { content_type: 'video/webm', content_length: 4 * GB } } });
     expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/spaces/spc_new')).toBe(false);
 
-    // Refused by the API all the same: the space made for it goes too.
+    // A deployment that takes less (100 MB without its own video ingest) refuses
+    // it, saying its limit: the agent hears it, and the space made for it goes too.
+    const limit = 'input.video.content_length must be between 1 and 104857600 bytes (100 MiB: the largest video this deployment reads)';
     backend = fakeBackend({
-      'POST /spaces/spc_new/scans': () => new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Invalid scan input', request_id: 'r' } }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
+      'POST /spaces/spc_new/scans': () => new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: limit, request_id: 'r' } }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
       'DELETE /spaces/spc_new': () => new Response(null, { status: 204 }),
     });
-    const refused = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 1234 } });
+    const refused = await tool(accessToken, 'create_scan', { new_space: { name: 'Lake house' }, source: 'video', video: { content_type: 'video/mp4', content_length: 2 * GB } });
     expect(refused.isError).toBe(true);
     expect(refused.content[0]!.text).toContain('VALIDATION_ERROR');
+    expect(refused.content[0]!.text).toContain(limit);
     expect(backend.calls.filter((entry) => entry.method === 'DELETE').map((entry) => entry.path)).toEqual(['/spaces/spc_new']);
   });
 
