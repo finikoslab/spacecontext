@@ -12,7 +12,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** API metadata */
+        /**
+         * API metadata
+         * @description Where the contract, the docs and the MCP server are, and the input limits of this deployment (`limits`).
+         */
         get: operations["getApiInfo"];
         put?: never;
         post?: never;
@@ -353,7 +356,7 @@ export interface paths {
         get?: never;
         /**
          * Upload the video of a video scan through the API
-         * @description Only when `upload.url` points here (no direct upload link available). `Content-Length` and `Content-Type` must match what was declared. Needs `scans:write`.
+         * @description Only when `upload.url` points here (no direct upload link available). `Content-Length` and `Content-Type` must match what was declared. At most 99614720 bytes (95 MiB): a bigger video answers 413 `FILE_TOO_LARGE` and goes to the direct upload link instead. Needs `scans:write`.
          */
         put: operations["uploadScanVideo"];
         post?: never;
@@ -476,6 +479,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ApiInfo: {
+            /** @constant */
+            name: "space-context-api";
+            /** @constant */
+            version: "v1";
+            openapi: string;
+            /** Format: uri */
+            docs?: string;
+            /** Format: uri */
+            llms?: string;
+            /** Format: uri */
+            llms_full?: string;
+            /** Format: uri */
+            mcp?: string;
+            /** Format: uri */
+            console?: string;
+            /** @description What one scan may send to this deployment. */
+            limits: {
+                /** @description The largest video a scan may declare (`input.video.content_length`): 4294967296 (4 GiB) where the API reads videos with its own ffmpeg ingest, 104857600 (100 MiB) otherwise, and never more than 99614720 (95 MiB) where no direct upload link is issued. */
+                max_video_bytes: number;
+                /** @description The longest video read; a longer one fails with `VIDEO_TOO_LONG`, not charged. */
+                max_video_seconds: number;
+                /** @description The most frames (photos) one scan declares (`input.frames`). */
+                max_photos: number;
+            };
+        };
         ConsoleUser: {
             id: string;
             /** Format: email */
@@ -1155,10 +1184,11 @@ export interface components {
                 }[];
                 video?: {
                     /**
-                     * @description The container of the file: MP4, MOV, M4V or 3GP (H.264, HEVC 8 or 10 bit, AV1, ProRes, MPEG-4 part 2, H.263; AAC, Opus, PCM, AMR or no audio; any frame rate; rotation metadata applied, fragmented MP4 included), WebM or Matroska. A WebM recorded in a browser (MediaRecorder) has no duration and cannot be read: the scan fails with `VIDEO_UNREADABLE`, not charged; remux it first (`ffmpeg -i in.webm -c copy out.webm`). Any other type is refused here with 400 `INVALID_CONTENT_TYPE`.
+                     * @description The container of the file: MP4, MOV, M4V or 3GP (H.264, HEVC 8 or 10 bit, AV1, ProRes, MPEG-4 part 2, H.263; AAC, Opus, PCM, AMR or no audio; any frame rate; rotation metadata applied, fragmented MP4 included), WebM or Matroska. A WebM recorded in a browser (MediaRecorder) states no duration: where the API reads videos with its own ffmpeg (`limits.max_video_bytes` of `GET /v1` above 100 MiB) its length is measured and it is read like any other; elsewhere it fails with `VIDEO_UNREADABLE`, not charged (remux it first: `ffmpeg -i in.webm -c copy out.webm`). Any other type is refused here with 400 `INVALID_CONTENT_TYPE`.
                      * @enum {string}
                      */
                     content_type: "video/mp4" | "video/quicktime" | "video/x-m4v" | "video/3gpp" | "video/webm" | "video/x-matroska" | "video/matroska";
+                    /** @description The size of the file in bytes. Up to 4294967296 (4 GiB) where the API reads videos with its own ffmpeg ingest, 104857600 (100 MiB) otherwise; `limits.max_video_bytes` of `GET /` says which. Larger is refused here with 400 `VALIDATION_ERROR`. Above 99614720 (95 MiB) the video can only be sent to the direct upload link (`upload.url`). */
                     content_length: number;
                 };
                 transcript?: {
@@ -1460,7 +1490,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ApiInfo"];
+                };
             };
         };
     };
