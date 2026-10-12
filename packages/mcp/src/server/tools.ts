@@ -345,7 +345,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}, origin 
     {
       title: 'Create a scan',
       description:
-        'Declares a new scan of a space (an existing one, or a space created now). Frames (up to 120 images): then send each image with upload_frame (index 0…n-1). Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes): the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
+        'Declares a new scan of a space (an existing one, or a space created now). Frames (up to 120 images): then send each image with upload_frame (index 0…n-1). Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes on api.spacecontext.app, the API states its own limit in GET /v1): the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
       inputSchema: z.object({
         space_id: spaceId.optional().describe('Scan this existing space again (the new scan is checked against the previous one).'),
         new_space: z
@@ -358,12 +358,12 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}, origin 
             content_type: z
               .enum(VIDEO_CONTENT_TYPES)
               .describe(
-                'The container: video/mp4, video/quicktime (MOV), video/x-m4v, video/3gpp (3GP), video/webm, or video/x-matroska / video/matroska (MKV). Other containers (AVI, MPEG-TS…) are refused: convert to MP4 first. A WebM recorded in a browser has no duration and fails, refunded.'
+                'The container: video/mp4, video/quicktime (MOV), video/x-m4v, video/3gpp (3GP), video/webm, or video/x-matroska / video/matroska (MKV). Other containers (AVI, MPEG-TS…) are refused: convert to MP4 first. A WebM recorded in a browser states no duration: where the API reads videos with its own ffmpeg (limits.max_video_bytes of GET /v1 above 100 MiB) it is measured and read; elsewhere it fails with VIDEO_UNREADABLE, refunded (remux it first: ffmpeg -i in.webm -c copy out.webm).'
               ),
-            content_length: z.number().int().min(1).max(MAX_VIDEO_BYTES).describe('Exact size in bytes, at most 4 GB (4294967296).'),
+            content_length: z.number().int().min(1).max(MAX_VIDEO_BYTES).describe('Exact size in bytes: up to 4 GB (4294967296) on api.spacecontext.app. The API states its own limit in GET /v1 and refuses a bigger video when the scan is created.'),
           })
           .optional()
-          .describe('With source video: up to 4 GB and 10 minutes.'),
+          .describe('With source video: up to 4 GB and 10 minutes on api.spacecontext.app (the API states its limit in GET /v1).'),
         frames: z.object({ count: z.number().int().min(1).max(MAX_FRAMES) }).optional().describe('With source frames: how many images will be uploaded.'),
         language: z
           .enum(REPORT_LANGUAGES)
