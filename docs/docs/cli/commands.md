@@ -121,7 +121,7 @@ Next
   › Read it again: spacecontext space spc_3f9c…
 ```
 
-The limits are the ones the API states, read before anything is created (an API that does not state them is taken to accept 100 MB). A video over the limit is compressed to fit when `ffmpeg` and `ffprobe` are installed: an H.264 MP4 at the bitrate its duration allows (at most 8 Mbps, 720p under 2.5 Mbps), upright, uploaded and then deleted; a video over 10 minutes is refused before encoding. `--compress` re-encodes to a smaller H.264 file before uploading (useful on a slow connection), `--no-compress` never compresses. Without ffmpeg, a video over the limit is refused with how to install it. See [Scanning](scanning.md#automatic-compression).
+The limits are the ones the API states in `GET /v1`, read before anything is created (an API that does not state them takes 100 MB; when they cannot be read, nothing is checked or compressed unasked, and the API decides). A video over the limit is compressed to fit when `ffmpeg` and `ffprobe` are installed: an H.264 MP4 at the bitrate its duration allows (at most 8 Mbps, 720p under 2.5 Mbps), upright, uploaded and then deleted; a video over 10 minutes is refused before encoding. `--compress` re-encodes to a smaller H.264 file before uploading (useful on a slow connection), `--no-compress` never compresses. Without ffmpeg, a video over the limit is refused with how to install it. See [Scanning](scanning.md#automatic-compression).
 
 ```text
 $ spacecontext scan ./IMG_0042.MOV --name "Seaside flat" --compress

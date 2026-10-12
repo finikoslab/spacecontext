@@ -126,7 +126,7 @@ Declares a new scan and returns `upload`, exactly as the API gives it, and a `ne
 | `space_id` | string | Scan this space again (the new scan is checked against the previous one). Either this or `new_space`. |
 | `new_space` | `{ name, space_type? }` | Create a space for the scan. |
 | `source` | `"video"` \| `"frames"` | |
-| `video` | `{ content_type, content_length }` | With `source: "video"`: `video/mp4`, `video/quicktime`, `video/x-m4v`, `video/3gpp`, `video/webm`, `video/x-matroska` or `video/matroska`, and the exact size in bytes. Up to 4 GB and 10 minutes. |
+| `video` | `{ content_type, content_length }` | With `source: "video"`: `video/mp4`, `video/quicktime`, `video/x-m4v`, `video/3gpp`, `video/webm`, `video/x-matroska` or `video/matroska`, and the exact size in bytes. Up to 4 GB and 10 minutes on api.spacecontext.app; the API states its limit in `GET /v1`. |
 | `frames` | `{ count }` | With `source: "frames"`: how many images (1–120). |
 | `language` | `"en"` \| `"it"` \| `"es"` \| `"fr"` \| `"de"` \| `"pt"` \| `"nl"` | Optional, default `en`: the language the report is written in (English, Italiano, Español, Français, Deutsch, Português, Nederlands). The narration can be in any language. |
 

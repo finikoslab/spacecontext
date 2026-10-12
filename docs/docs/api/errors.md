@@ -39,7 +39,7 @@ When the deep pass of a space scanned with the app could not finish, the documen
 | `UPLOAD_INCOMPLETE` | 409 | Start refused: frames missing, or the video missing or of another size than declared. |
 | `INVALID_CONTENT_TYPE` | 400 | On create: the video's `content_type` is not one the API reads (`video/mp4`, `video/quicktime`, `video/x-m4v`, `video/3gpp`, `video/webm`, `video/x-matroska`, `video/matroska`). Nothing is created or charged; convert the video to MP4 first ([Scans](scans.md#2-declare-the-scan)). |
 | `INVALID_CONTENT_TYPE` | 415 | On an upload: a frame (or `POST /frames/check`) that is not a JPEG, PNG or WebP image, or a video sent with a `Content-Type` other than the declared one. |
-| `FILE_TOO_LARGE` | 413 | Over 2 MB per frame, over the declared size of the video, or a video over 95 MB sent through the API instead of the direct upload link (`max_bytes`). |
+| `FILE_TOO_LARGE` | 413 | A frame over 2 MB, or a video over 95 MB sent through the API itself (`max_bytes`): a bigger video goes only to the direct upload link. A video whose `Content-Length` is not the declared size is `400 VALIDATION_ERROR`. |
 | `EMPTY_FILE` | 400 | The upload has no bytes. |
 | `SCANS_IN_PROGRESS` | 429 | On start: ten scans of the account are already processing; start again when one finishes. On create: twenty scans are waiting for their upload (`max_open_scans`); upload and start them, or cancel some with `DELETE /scans/{id}`. |
 | `INSUFFICIENT_FUNDS` | 402 | The balance does not cover the scan; `balance_cents` and `price_cents` say by how much. |
@@ -50,7 +50,7 @@ A scan that fails after starting carries its reason in `scan.error.code`, and is
 
 | `scan.error.code` | Meaning |
 | --- | --- |
-| `VIDEO_UNREADABLE` | The video could not be decoded, or its length could not be read: a WebM recorded in a browser (`MediaRecorder`) states none; remux it first (`ffmpeg -i in.webm -c copy out.webm`). |
+| `VIDEO_UNREADABLE` | The video could not be decoded, or its length could not be read. A WebM recorded in a browser (`MediaRecorder`) states none: an API with its own ffmpeg (`limits.max_video_bytes` of `GET /v1` above 100 MB) measures it; elsewhere remux it first (`ffmpeg -i in.webm -c copy out.webm`). |
 | `VIDEO_TOO_LONG` | Over 10 minutes. |
 | `FOOTAGE_UNUSABLE` | Every frame was too dark, blurred or covered, or showed no place (a drawing, a screen). Refused before the analysis; film again in good light. |
 | `ANALYSIS_EMPTY` | No space was recognised in the frames. |

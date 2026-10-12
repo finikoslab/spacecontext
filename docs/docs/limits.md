@@ -17,7 +17,7 @@ description: 'Sizes, rates and quotas of the Space Context API: uploads, request
 | Direct upload link | Valid 1 hour |
 | Time to start a scan after creating it | 24 hours, then it is cancelled |
 
-`GET /v1` states the limits of the deployment it answers for in `limits` (`max_video_bytes`, `max_video_seconds`, `max_photos`); the SDK, the CLI and the console read them there, and take a deployment that does not state them to accept 100 MB. Ten minutes of a phone's default 1080p recording come to about 1.2 GB. On a slow connection, the [CLI](cli/scanning.md#automatic-compression) re-encodes a video to a smaller file before uploading it (`--compress`) when ffmpeg is installed.
+`GET /v1` states the limits of the deployment it answers for in `limits` (`max_video_bytes`, `max_video_seconds`, `max_photos`); the SDK, the CLI and the console read them there, take a deployment that does not state them to accept 100 MB, and check nothing when they cannot be read (the API then decides when the scan is declared). Ten minutes of a phone's default 1080p recording come to about 1.2 GB. On a slow connection, the [CLI](cli/scanning.md#automatic-compression) re-encodes a video to a smaller file before uploading it (`--compress`) when ffmpeg is installed.
 
 ## Rates
 

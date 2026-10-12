@@ -25,7 +25,7 @@ A phone's default recording is fine as it is. At 1080p and 30 fps (16–17 Mbps,
 
 ### Automatic compression
 
-When a video is over the API's limit and `ffmpeg` and `ffprobe` are on the `PATH`, or with `--compress`, the CLI reads its duration and encodes a temporary copy before creating anything. The limit is the one the API states (4 GB), or 100 MB on an API that does not state it:
+When a video is over the API's limit and `ffmpeg` and `ffprobe` are on the `PATH`, or with `--compress`, the CLI reads its duration and encodes a temporary copy before creating anything. The limit is the one the API states in `GET /v1` (4 GB on api.spacecontext.app), or 100 MB on an API that does not state it; when it cannot be read, only `--compress` compresses, at 8 Mbps:
 
 - the bitrate fills 90% of the limit over the duration, at most 8 Mbps: under 4 GB that is always 8 Mbps (ten minutes come to about 600 MB); under 100 MB, 10 minutes get about 1.26 Mbps and a minute gets 8 Mbps;
 - video in H.264 (`-preset veryfast`), its long side at most 1920 pixels, or 1280 when the bitrate is under 2.5 Mbps; a smaller video is never enlarged;

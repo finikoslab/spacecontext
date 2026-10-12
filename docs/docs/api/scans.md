@@ -30,7 +30,7 @@ An account creates at most 200 spaces and 500 scans a day in each mode, test key
 
 ## 2. Declare the scan
 
-For a video, declare its type and exact size, up to 4 GB:
+For a video, declare its type and exact size: up to 4 GB on api.spacecontext.app, and `limits.max_video_bytes` of `GET /v1` states the limit of the deployment you call ([below](#3-upload)):
 
 ```bash
 curl -X POST $API/spaces/spc_3f…/scans -H "$AUTH" -H "Content-Type: application/json" \
@@ -47,7 +47,7 @@ curl -X POST $API/spaces/spc_3f…/scans -H "$AUTH" -H "Content-Type: applicatio
 
 Any frame rate is fine, and a phone's rotation is applied: a portrait video gives upright frames. Any other type (AVI, MPEG-TS, Ogg, FLV, WMV…) is refused here with `400 INVALID_CONTENT_TYPE`, before anything is created or charged; convert it to MP4 first: `ffmpeg -i in.avi -c:v libx264 -c:a aac -movflags +faststart out.mp4`.
 
-The duration is read from the container itself, whatever type you declared (for a fragmented MP4 that does not state it, from the video), and a video over 10 minutes fails with `VIDEO_TOO_LONG`, refunded. A WebM recorded in a browser with `MediaRecorder` states no duration and cannot be read: its scan fails with `VIDEO_UNREADABLE`, refunded. Remux it first, which writes the duration: `ffmpeg -i in.webm -c copy out.webm`.
+The duration is read from the container itself, whatever type you declared (for a fragmented MP4 that does not state it, from the video), and a video over 10 minutes fails with `VIDEO_TOO_LONG`, refunded. A WebM recorded in a browser with `MediaRecorder` states no duration: where the API reads videos with its own ffmpeg (`limits.max_video_bytes` of `GET /v1` above 100 MB), its length is measured and it is read like any other video; elsewhere its scan fails with `VIDEO_UNREADABLE`, refunded. There, remux it first, which writes the duration: `ffmpeg -i in.webm -c copy out.webm`.
 
 For photos, list them in order, with their time in milliseconds when you know it:
 
@@ -97,7 +97,7 @@ curl -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --upload-file flat.mp4
 
 `GET /v1` states the limits of the deployment it answers for in `limits` (`max_video_bytes`, `max_video_seconds`, `max_photos`). A `content_length` over `max_video_bytes` is refused when the scan is declared (`400 VALIDATION_ERROR`, with the limit in the message), before anything is uploaded or charged. A deployment that does not state its limits takes videos up to 100 MB.
 
-The `Content-Type` of the upload must be the declared type: another one is refused with `415 INVALID_CONTENT_TYPE`.
+The `Content-Type` of the upload must be the declared type: another one is refused with `415 INVALID_CONTENT_TYPE`. The `Content-Length` must be the declared size: through the API another one is refused with `400 VALIDATION_ERROR`, and the storage link, which signs the length, refuses it too.
 
 **Size.** A phone's default recording fits: ten minutes at 1080p (16–17 Mbps) come to about 1.2 GB, and in 4K at 30 fps to about 3 GB. On a slow connection, compress before uploading (a scan needs no more than about 8 Mbps); the [CLI](../cli/scanning.md#automatic-compression) does it with `--compress` when ffmpeg is installed, and by itself for a video over the limit.
 
