@@ -89,9 +89,10 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
     summary: 'Upload a video or photos and follow the analysis live',
     usage: ['scan <video|photos-dir> --name <name> [options]', 'scan <video|photos-dir> --space <space-id> [options]'],
     about: [
-      'Video: .mp4 .mov .m4v .3gp .webm .mkv, up to 4 GB and 10 minutes, narrated',
-      'or not. A bigger video is compressed to fit (H.264 MP4) when ffmpeg is',
-      'installed; --compress makes any video smaller first, for a slow connection.',
+      'Video: .mp4 .mov .m4v .3gp .webm .mkv, narrated or not, up to 10 minutes',
+      'and the size the API states (4 GB on api.spacecontext.app). A bigger video is',
+      'compressed to fit (H.264 MP4) when ffmpeg is installed; --compress makes any',
+      'video smaller first, for a slow connection.',
       'Photos: a folder of .jpg .png .webp, up to 120 of 2 MB each, in name order.',
       'Test keys scan for free and return the demo content. Live keys use the',
       "account's free scan first, then the price per scan from the prepaid balance",

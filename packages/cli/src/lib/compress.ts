@@ -41,7 +41,10 @@ export type CompressionPlan = {
   longSide: 1920 | 1280;
 };
 
-/** The bitrates that make `seconds` of video fit in `maxBytes` (the API's limit) with a 10% margin, at most 8 Mbit/s. */
+/**
+ * The bitrates that make `seconds` of video fit in `maxBytes` (the API's limit)
+ * with a 10% margin, at most 8 Mbit/s; `Infinity` (no limit known) gives the cap.
+ */
 export function compressionPlan(seconds: number, maxBytes: number): CompressionPlan {
   const totalBitrate = Math.min(MAX_TOTAL_BITRATE, Math.floor((SIZE_MARGIN * maxBytes * 8) / seconds));
   return {

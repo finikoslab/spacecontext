@@ -732,10 +732,11 @@ async function scan(context: Context): Promise<void> {
   const sc = await client(context);
   // A video's limits are the API's own (4 GB and 10 minutes where it reads videos
   // with its own ffmpeg), read before anything is created; an API that does not
-  // say them is taken to accept 100 MB, as before.
+  // state them takes 100 MB. Null when they could not be read: then nothing is
+  // guessed or re-encoded unasked, and the API decides when the scan is declared.
   const limits = source.kind === 'video' ? await sc.limits() : null;
   const overLimit = source.kind === 'video' && limits !== null && source.size > limits.maxVideoBytes;
-  // A video over the limit is compressed to fit when ffmpeg is installed; --compress always, --no-compress never.
+  // A video over a known limit is compressed to fit when ffmpeg is installed; --compress always, --no-compress never.
   const platform = io.platform ?? process.platform;
   const compressing = source.kind === 'video' && !values['no-compress'] && (Boolean(values.compress) || overLimit);
   const tools = compressing ? await findVideoTools(io.which ?? pathWhich(io.env, platform)) : null;
@@ -750,7 +751,7 @@ async function scan(context: Context): Promise<void> {
   }
   // The duration sets the bitrate; a video the API would refuse as too long is refused before encoding it.
   let plan: CompressionPlan | null = null;
-  if (tools && source.kind === 'video' && limits) {
+  if (tools && source.kind === 'video') {
     const name = path.basename(source.file);
     const probe = await probeDuration(tools, source.file, io.run);
     if (probe.seconds === null) {
@@ -762,7 +763,7 @@ async function scan(context: Context): Promise<void> {
         ...(overLimit ? [] : ['Or send it as it is, without --compress']),
       ]);
     }
-    const longest = limits.maxVideoSeconds;
+    const longest = limits?.maxVideoSeconds ?? Infinity;
     if (probe.seconds > longest) {
       const extension = path.extname(name) || '.mp4';
       const minutes = longest % 60 === 0 ? ` (${plural(longest / 60, 'minute')})` : '';
@@ -770,7 +771,8 @@ async function scan(context: Context): Promise<void> {
         `Trim it: \`ffmpeg -i ${/^[\w.-]+$/.test(name) ? name : `in${extension}`} -t ${longest} -c copy trimmed${extension}\`, or film it again`,
       ]);
     }
-    plan = compressionPlan(probe.seconds, limits.maxVideoBytes);
+    // Limits unknown (only --compress gets here): the bitrate's own cap, 8 Mbit/s.
+    plan = compressionPlan(probe.seconds, limits?.maxVideoBytes ?? Infinity);
   }
   const now = io.now ?? Date.now;
   const began = now();
@@ -807,7 +809,7 @@ async function scan(context: Context): Promise<void> {
       io.stderr(`\n${err.warn} Interrupted during the upload: a scan that has not started is never charged.${left}\n`);
     });
     let video = source.kind === 'video' ? { file: source.file, contentType: source.contentType, size: source.size } : null;
-    if (video && tools && plan && limits) {
+    if (video && tools && plan) {
       const folder = await mkdtemp(path.join(tmpdir(), 'spacecontext-'));
       temporary = folder;
       onInterrupt(() => rmSync(folder, { recursive: true, force: true }));
@@ -829,13 +831,12 @@ async function scan(context: Context): Promise<void> {
         throw error;
       }
       encoding = false;
-      const maxBytes = limits.maxVideoBytes;
-      if (bytes > maxBytes) {
+      if (limits && bytes > limits.maxVideoBytes) {
         status?.fail();
-        throw new Error(`Compressed, ${name} is still ${size(bytes)}, over ${sizeLimit(maxBytes)}: trim it and scan again`);
+        throw new Error(`Compressed, ${name} is still ${size(bytes)}, over ${sizeLimit(limits.maxVideoBytes)}: trim it and scan again`);
       }
       const picture = plan.longSide === 1280 ? '720p' : '1080p';
-      if (bytes >= video.size && video.size <= maxBytes) {
+      if (bytes >= video.size && !overLimit) {
         // --compress on a video that already fits can come out larger: the original is sent.
         status?.complete(`Kept ${name} as it is`, `compressing gave ${size(bytes)}, more than its ${size(video.size)}`);
       } else {

@@ -4,6 +4,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { main, type Io } from '../src/cli.js';
 import { COMMAND_HELP } from '../src/terminal/help.js';
+import { hints } from '../src/terminal/hints.js';
+import { SpaceContextError } from '@spacecontext/sdk';
 import { closest, colorEnabled, duration, Status, styleFor, table } from '../src/terminal/ui.js';
 
 /** How the CLI looks: help, errors and their next steps, terminals and pipes, NO_COLOR, and --json left alone. */
@@ -120,8 +122,8 @@ describe('help', () => {
     const topic = harness([]);
     expect(await main(['help', 'scan'], topic.io)).toBe(0);
     expect(topic.stdout()).toContain('--no-wait');
-    expect(topic.stdout()).toContain('Video: .mp4 .mov .m4v .3gp .webm .mkv, up to 4 GB and 10 minutes');
-    expect(topic.stdout()).toContain('A bigger video is compressed to fit (H.264 MP4) when ffmpeg is\n  installed; --compress makes any video smaller first, for a slow connection.');
+    expect(topic.stdout()).toContain('Video: .mp4 .mov .m4v .3gp .webm .mkv, narrated or not, up to 10 minutes\n  and the size the API states (4 GB on api.spacecontext.app).');
+    expect(topic.stdout()).toContain('A bigger video is\n  compressed to fit (H.264 MP4) when ffmpeg is installed; --compress makes any\n  video smaller first, for a slow connection.');
     expect(topic.stdout()).toMatch(/--compress +Re-encode to a smaller H\.264 file before uploading\n/);
     expect(topic.stdout()).toMatch(/--no-compress +Never compress: a video over the limit is refused\n/);
     expect(topic.stdout()).not.toContain('100 MB');
@@ -345,5 +347,25 @@ describe('terminal helpers', () => {
     expect(text).toContain('\r\u001b[2K✓ Queued  ');
     expect(text).toContain('\r\u001b[2K✗ Observing  ');
     expect(text.endsWith('\n')).toBe(true);
+  });
+});
+
+describe('hints about videos', () => {
+  const error = (code: string, status: number, message = `${code} message`) => new SpaceContextError(message, status, code, 'req_1');
+  it('says where a big video goes, what a browser WebM needs, and never a size the API may not take', () => {
+    for (const code of ['FILE_TOO_LARGE', 'PAYLOAD_TOO_LARGE']) {
+      const [where, compress] = hints(error(code, 413), { command: 'scan' });
+      expect(where).toBe('The API itself takes uploads of at most 95 MB (a photo 2 MB): a bigger video\ngoes only to the storage link the API gives when the scan is declared, and\nthis API gave none');
+      expect(compress).toBe('With ffmpeg installed, `spacecontext scan --compress` makes the video smaller');
+    }
+    expect(hints(error('INVALID_CONTENT_TYPE', 400), { command: 'scan' })).toEqual(['Videos: .mp4 .mov .m4v .3gp .webm .mkv, up to 10 minutes; photos: .jpg\n.png .webp, up to 2 MB each']);
+    expect(hints(error('VIDEO_UNREADABLE', 0), { command: 'scan' })[1]).toBe(
+      'A WebM recorded in a browser states no duration: an API without its own\nffmpeg cannot read it: remux it first (`ffmpeg -i in.webm -c copy out.webm`)'
+    );
+    expect(hints(error('VALIDATION_ERROR', 400, 'input.video.content_length must be between 1 and 104857600 bytes'), { command: 'scan' })[0]).toContain('run the scan again');
+    expect(hints(error('VALIDATION_ERROR', 400, 'name is required'), { command: 'scan' })).toEqual([]);
+    for (const code of ['FILE_TOO_LARGE', 'INVALID_CONTENT_TYPE', 'VIDEO_UNREADABLE', 'VALIDATION_ERROR']) {
+      expect(hints(error(code, 400, 'content_length'), { command: 'scan' }).join('\n')).not.toMatch(/4 GB|100 MB/);
+    }
   });
 });

@@ -69,11 +69,20 @@ export function hints(error: SpaceContextError, context: ErrorContext): string[]
     case 'INVALID_STATE':
       return context.command === 'cancel' ? ['Only a scan that has not started can be cancelled; a scan that fails is refunded'] : [];
     case 'FILE_TOO_LARGE':
+    case 'PAYLOAD_TOO_LARGE':
+      // Through the API itself, not to storage: the API gave no storage link for this scan.
+      return [
+        'The API itself takes uploads of at most 95 MB (a photo 2 MB): a bigger video\ngoes only to the storage link the API gives when the scan is declared, and\nthis API gave none',
+        'With ffmpeg installed, `spacecontext scan --compress` makes the video smaller',
+      ];
     case 'INVALID_CONTENT_TYPE':
     case 'EMPTY_FILE':
-      return [
-        'Videos: .mp4 .mov .m4v .3gp .webm .mkv up to 4 GB and 10 minutes (with ffmpeg\ninstalled, `spacecontext scan` compresses a bigger one); photos: .jpg .png .webp\nup to 2 MB each',
-      ];
+      return ['Videos: .mp4 .mov .m4v .3gp .webm .mkv, up to 10 minutes; photos: .jpg\n.png .webp, up to 2 MB each'];
+    case 'VALIDATION_ERROR':
+      // A video over the API's limit, declared because the limit could not be read first.
+      return /content_length/.test(error.message)
+        ? ['The API takes a smaller video (its limit is above): run the scan again, and\nwith ffmpeg installed the CLI compresses it to fit the limit the API states', ...follow]
+        : follow;
     case 'FOOTAGE_UNUSABLE':
       return [`Film again in good light, slowly, showing whole rooms: ${RECORDING_TIPS_URL}`, '`spacecontext check <photos-dir>` tells usable photos before a scan'];
     case 'ANALYSIS_EMPTY':
@@ -83,7 +92,7 @@ export function hints(error: SpaceContextError, context: ErrorContext): string[]
     case 'VIDEO_UNREADABLE':
       return [
         'Check that the video plays, or export it again as .mp4',
-        'A WebM recorded in a browser does not say how long it lasts: remux it first\n(`ffmpeg -i in.webm -c copy out.webm`)',
+        'A WebM recorded in a browser states no duration: an API without its own\nffmpeg cannot read it: remux it first (`ffmpeg -i in.webm -c copy out.webm`)',
       ];
     case 'AI_ANALYSIS_FAILED':
     case 'AI_OVERLOADED':

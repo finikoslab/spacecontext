@@ -615,13 +615,13 @@ describe('spacecontext CLI, housekeeping', () => {
     const frames = path.join(directory, 'big');
     await mkdir(frames);
     await writeFile(path.join(frames, 'frame-1.jpg'), new Uint8Array(2 * 1024 * 1024 + 1));
-    const h = harness([], { SPACECONTEXT_API_KEY: KEY });
+    const h = harness([limitsSay(null)], { SPACECONTEXT_API_KEY: KEY });
     expect(await main(['scan', 'big', '--name', 'Flat'], h.io)).toBe(2);
     expect(h.stderr()).toContain('larger than 2 MB');
     expect(h.calls).toEqual([]);
 
-    // A 390 MB video, without ffmpeg, where the API does not say its limits (an
-    // older deployment, or the descriptor not answering): 100 MB, as before.
+    // A 390 MB video, without ffmpeg, where the API does not state its limits (an
+    // older deployment): 100 MB, as before.
     const video = path.join(directory, 'IMG_0042.MOV');
     await writeFile(video, '');
     await truncate(video, 390 * 1024 * 1024);
@@ -788,6 +788,34 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
     expect(h.stderr()).not.toContain('Compress');
   });
 
+  it('never re-encodes unasked when the limits could not be read: the video is declared as it is and the API decides', async () => {
+    const tools = await fakeVideoTools('bin', { seconds: '400.000000', outputBytes: 12_345 });
+    await bigVideo('IMG_0042.MOV');
+    const limit = 'input.video.content_length must be between 1 and 104857600 bytes (100 MiB: the largest video this deployment reads)';
+    const h = harness(
+      [
+        (call) => (call.method === 'GET' && call.path === '' ? json({ error: { code: 'UNAVAILABLE', message: 'Try later', request_id: 'r' } }, 503) : undefined),
+        (call) =>
+          call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans`
+            ? json({ error: { code: 'VALIDATION_ERROR', message: limit, request_id: 'req_size' } }, 400)
+            : undefined,
+      ],
+      { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin }
+    );
+    expect(await main(['scan', 'IMG_0042.MOV', '--space', SPACE_ID], h.io)).toBe(1);
+    expect(await tools.calls()).toEqual([]);
+    expect(JSON.parse(String(h.calls[0]!.body)).input.video).toEqual({ content_type: 'video/quicktime', content_length: 390 * MB });
+    expect(h.stderr()).toContain(`Error [VALIDATION_ERROR]: ${limit}`);
+    expect(h.stderr()).toContain('The API takes a smaller video (its limit is above): run the scan again, and\n    with ffmpeg installed the CLI compresses it to fit the limit the API states');
+
+    // --compress still compresses, at the bitrate's own cap.
+    const asked = harness([...scanRoutes('video/mp4', 12_345)], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    expect(await main(['scan', 'IMG_0042.MOV', '--space', SPACE_ID, '--compress'], asked.io)).toBe(0);
+    const encode = (await tools.calls()).find((call) => call[0] === 'ffmpeg')!.slice(1);
+    expect(after(encode, '-b:v')).toBe(String(8_000_000 - 96_000));
+    expect(asked.descriptorReads()).toBe(1);
+  });
+
   it('compresses a video over the 4 GB the API takes at 8 Mbit/s and 1080p at most', async () => {
     const tools = await fakeVideoTools('bin', { seconds: '540', outputBytes: 9_000 });
     await bigVideo('tour.mkv', 5 * GB);
@@ -837,7 +865,7 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
   it('refuses a video over 10 minutes before encoding it, and creates nothing', async () => {
     const tools = await fakeVideoTools('bin', { seconds: '612.48' });
     await bigVideo('IMG_0042.MOV');
-    const h = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    const h = harness([limitsSay(null)], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
     expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h.io)).toBe(2);
     expect(h.stderr()).toContain('✗ IMG_0042.MOV lasts 612.5 s: a video can last up to 600 s (10 minutes)\n');
     expect(h.stderr()).toContain('`ffmpeg -i IMG_0042.MOV -t 600 -c copy trimmed.MOV`');
@@ -846,7 +874,7 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
 
     // A duration ffprobe cannot read: said, nothing encoded.
     const unknown = await fakeVideoTools('unknown', { seconds: 'N/A' });
-    const h2 = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: unknown.bin });
+    const h2 = harness([limitsSay(null)], { SPACECONTEXT_API_KEY: KEY, PATH: unknown.bin });
     expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h2.io)).toBe(2);
     expect(h2.stderr()).toContain('ffprobe could not read how long IMG_0042.MOV lasts: the file does not say how long it lasts');
     expect(h2.stderr()).toContain('› Check that the video plays, or export it again as .mp4\n');
@@ -861,7 +889,7 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
   it('says what ffmpeg said when it fails, and refuses a result still too big; nothing is created and the copy is gone', async () => {
     await bigVideo('IMG_0042.MOV');
     const broken = await fakeVideoTools('broken', { seconds: '300', fail: 'IMG_0042.MOV: Invalid data found when processing input' });
-    const h = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: broken.bin });
+    const h = harness([limitsSay(null)], { SPACECONTEXT_API_KEY: KEY, PATH: broken.bin });
     expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h.io)).toBe(1);
     expect(h.stderr()).toContain('› Compressing IMG_0042.MOV…\n✗ Error: ffmpeg could not compress the video: IMG_0042.MOV: Invalid data found when processing input\n');
     const failed = (await broken.calls()).find((call) => call[0] === 'ffmpeg')!;
@@ -869,7 +897,7 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
     expect(h.calls).toEqual([]);
 
     const bloated = await fakeVideoTools('bloated', { seconds: '300', outputBytes: 101 * 1024 * 1024 });
-    const h2 = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: bloated.bin });
+    const h2 = harness([limitsSay(null)], { SPACECONTEXT_API_KEY: KEY, PATH: bloated.bin });
     expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat'], h2.io)).toBe(1);
     expect(h2.stderr()).toContain('Error: Compressed, IMG_0042.MOV is still 101.0 MB, over 100 MB: trim it and scan again');
     const encoded = (await bloated.calls()).find((call) => call[0] === 'ffmpeg')!;
@@ -880,7 +908,7 @@ describe.skipIf(process.platform === 'win32')('scan: a video too big is compress
   it('never compresses with --no-compress, and refuses --compress without ffmpeg or on photos', async () => {
     const tools = await fakeVideoTools('bin', { seconds: '120' });
     await bigVideo('IMG_0042.MOV');
-    const h = harness([], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
+    const h = harness([limitsSay(null)], { SPACECONTEXT_API_KEY: KEY, PATH: tools.bin });
     expect(await main(['scan', 'IMG_0042.MOV', '--name', 'Flat', '--no-compress'], h.io)).toBe(2);
     expect(h.stderr()).toContain('IMG_0042.MOV is 390.0 MB: a video can be up to 100 MB');
     expect(h.stderr()).toContain('Without --no-compress the CLI compresses it to fit, when ffmpeg is installed');
