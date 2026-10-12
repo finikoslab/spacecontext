@@ -1,7 +1,7 @@
 import type { components } from '../generated/schema.js';
 import { errorFromResponse, SpaceContextError } from '../errors.js';
 import { parseServerSentEvents, type ServerSentEvent } from './sse.js';
-import { byteLength, formatSize, isUploadStream } from './body.js';
+import { byteLength, FileReadError, formatSize, isUploadStream } from './body.js';
 import { runScan, type ScanFormat, type ScanOptions, type ScanResult, type ScanSource } from '../scans/scan.js';
 
 type Schemas = components['schemas'];
@@ -36,6 +36,9 @@ export type ReportLanguage = NonNullable<ScanInput['language']>;
 export const REPORT_LANGUAGES = ['en', 'it', 'es', 'fr', 'de', 'pt', 'nl'] as const satisfies readonly ReportLanguage[];
 
 export const DEFAULT_BASE_URL = 'https://api.spacecontext.app/v1';
+
+/** How long the limits read from the API are kept: a long-running client sees a new deployment within the hour. */
+const LIMITS_TTL_MS = 60 * 60_000;
 
 /** Statuses after which a scan no longer changes. */
 export const FINAL_SCAN_STATUSES: ReadonlySet<Scan['status']> = new Set(['complete', 'failed', 'cancelled']);
@@ -187,6 +190,46 @@ function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
 }
 
+/** What failed, with its cause: `fetch failed (connect ECONNREFUSED 127.0.0.1:443)`. */
+function failure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : null;
+  return cause && cause !== message ? `${message} (${cause})` : message;
+}
+
+/**
+ * The stream as sent, noting the error when reading it fails: then the body
+ * (the file), not the network, made the request fail.
+ */
+function tracked(source: ReadableStream<Uint8Array>, failed: { error: unknown }): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        let next: ReadableStreamReadResult<Uint8Array>;
+        try {
+          next = await reader.read();
+        } catch (error) {
+          failed.error = error;
+          throw error;
+        }
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      },
+      cancel: (reason) => reader.cancel(reason),
+    },
+    { highWaterMark: 0 }
+  );
+}
+
+/** The body could not be read (a file changed or gone while uploading): sending it again would not help. */
+function bodyFailure(error: unknown, failed: { error: unknown }): Error | null {
+  if (failed.error !== null) return failed.error instanceof Error ? failed.error : new Error(String(failed.error));
+  const cause = error instanceof Error ? error.cause : undefined;
+  // A Blob read from a file that changed after fs.openAsBlob.
+  return cause instanceof FileReadError || (cause instanceof Error && cause.name === 'NotReadableError') ? cause : null;
+}
+
 /**
  * The events of one stream, ending quietly when the connection drops mid-stream
  * (the read rejects): the caller opens the stream again. The caller's own abort
@@ -218,8 +261,8 @@ export class SpaceContext {
   private readonly maxRetries: number;
   private readonly timeoutMs: number;
   private readonly maxRetryDelayMs: number;
-  /** The deployment's limits once read: they do not change while a client lives. */
-  private knownLimits: ScanLimits | null = null;
+  /** The deployment's limits once read, and when: read again after `LIMITS_TTL_MS`. */
+  private knownLimits: { limits: ScanLimits; at: number } | null = null;
 
   constructor(options: SpaceContextOptions = {}) {
     const apiKey = options.apiKey ?? environment('SPACECONTEXT_API_KEY');
@@ -490,32 +533,36 @@ export class SpaceContext {
   /**
    * What a scan may be on this deployment, from the API's descriptor (`GET /v1`,
    * public): the largest video (4 GiB where the API reads videos with its own
-   * ffmpeg, 100 MiB elsewhere), the longest, and the most photos. Read once per
-   * client. It never fails because of the descriptor: when it cannot be read
-   * (no answer, an error, a deployment that does not say), the result is
-   * `DEFAULT_SCAN_LIMITS`, and a read that failed is tried again next time.
-   * `scan()` checks a source against it before creating anything.
+   * ffmpeg, 100 MiB without it, 95 MiB where it issues no direct upload link),
+   * the longest, and the most photos. A deployment older than the `limits`
+   * field gives `DEFAULT_SCAN_LIMITS`. Kept for an hour.
+   *
+   * `null` when the descriptor could not be read (no answer, an error, a page
+   * that is not the descriptor): the limits are unknown, never guessed, and the
+   * API decides when the scan is declared. It is read again at the next call.
+   * `scan()` checks a source against known limits before creating anything.
    */
-  async limits(options: RequestOptions = {}): Promise<ScanLimits> {
-    if (!this.knownLimits) {
-      let descriptor: unknown;
-      try {
-        // `/v1`, not `/v1/`: the API redirects the latter, and redirects are never followed.
-        descriptor = await this.json<unknown>({
-          method: 'GET',
-          path: '',
-          idempotent: true,
-          retryRateLimit: false,
-          timeoutMs: Math.min(this.timeoutMs, 15_000),
-          signal: options.signal,
-        });
-      } catch {
-        if (options.signal?.aborted) throw options.signal.reason;
-        return { ...DEFAULT_SCAN_LIMITS };
-      }
-      this.knownLimits = scanLimits(descriptor);
+  async limits(options: RequestOptions = {}): Promise<ScanLimits | null> {
+    if (this.knownLimits && Date.now() - this.knownLimits.at < LIMITS_TTL_MS) return { ...this.knownLimits.limits };
+    let descriptor: unknown;
+    try {
+      // `/v1`, not `/v1/`: the API redirects the latter, and redirects are never followed.
+      descriptor = await this.json<unknown>({
+        method: 'GET',
+        path: '',
+        idempotent: true,
+        retryRateLimit: false,
+        timeoutMs: Math.min(this.timeoutMs, 15_000),
+        signal: options.signal,
+      });
+    } catch {
+      if (options.signal?.aborted) throw options.signal.reason;
+      return null;
     }
-    return { ...this.knownLimits };
+    // A proxy's or a gateway's JSON is not the API saying anything.
+    if (typeof descriptor !== 'object' || descriptor === null || (descriptor as { name?: unknown }).name !== 'space-context-api') return null;
+    this.knownLimits = { limits: scanLimits(descriptor), at: Date.now() };
+    return { ...this.knownLimits.limits };
   }
 
   // ---------------------------------------------------------------- account
@@ -856,7 +903,8 @@ export class SpaceContext {
       const signals = [spec.signal, spec.noTimeout ? undefined : AbortSignal.timeout(spec.timeoutMs ?? this.timeoutMs)].filter(
         (signal): signal is AbortSignal => signal !== undefined
       );
-      const sent = stream ? stream.stream() : body;
+      const failed: { error: unknown } = { error: null };
+      const sent = stream ? tracked(stream.stream(), failed) : body;
       let response: Response;
       try {
         response = await this.fetcher(url, {
@@ -872,13 +920,15 @@ export class SpaceContext {
       } catch (error) {
         if (sent instanceof ReadableStream) await sent.cancel().catch(() => undefined);
         if (spec.signal?.aborted) throw spec.signal.reason;
+        const unreadable = bodyFailure(error, failed);
+        if (unreadable) throw new SpaceContextError(`The upload could not be read: ${unreadable.message}`, 0, 'FILE_READ_ERROR', null);
         const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
         if (spec.idempotent && attempt < this.maxRetries) {
           await sleep(this.backoff(attempt, null), spec.signal);
           continue;
         }
         throw new SpaceContextError(
-          timedOut ? 'The request timed out' : `The request failed: ${error instanceof Error ? error.message : String(error)}`,
+          timedOut ? 'The request timed out' : `The request failed: ${failure(error)}`,
           0,
           timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
           null

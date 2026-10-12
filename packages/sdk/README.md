@@ -50,7 +50,7 @@ const { spaceId, document, markdown } = await sc.scan('./flat.mp4', {
 console.log(document.stats.items, 'items');
 ```
 
-`scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. A video is MP4, MOV, M4V, 3GP, WebM or Matroska (`.mp4`, `.mov`, `.m4v`, `.3gp`, `.webm`, `.mkv`, or the types in `VIDEO_CONTENT_TYPES`), up to 4 GB and 10 minutes. The limits are the API's own: `sc.limits()` reads them once (`{ maxVideoBytes, maxVideoSeconds, maxPhotos }`), and a deployment that does not state them is taken to accept 100 MB. A bigger video is refused before anything is created, and a video from a path is read from disk while it uploads, never into memory. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one. `onProgress` receives, in order, `space_created` (with `spaceId`), `uploading`, `uploaded`, `started`, a `scan` event at every change of status or stage (with `stage` and `label`), then `complete`.
+`scan()` accepts a path (a video, an image or a folder of photos; Node only), a `Blob` or `File` with its type, `{ video, contentType }` or `{ frames: [...] }`. A video is MP4, MOV, M4V, 3GP, WebM or Matroska (`.mp4`, `.mov`, `.m4v`, `.3gp`, `.webm`, `.mkv`, or the types in `VIDEO_CONTENT_TYPES`), up to 4 GB and 10 minutes on api.spacecontext.app. The limits are the API's own: `sc.limits()` reads them from `GET /v1` (`{ maxVideoBytes, maxVideoSeconds, maxPhotos }`, kept for an hour; an API that does not state them takes 100 MB), and a bigger video is refused before anything is created. When the descriptor cannot be read, `limits()` is `null` and nothing is guessed: the API decides when the scan is declared. A video from a path is read from disk while it uploads, never into memory. Pass `space: 'spc_…'` instead of `name` to scan an existing space again: the new scan is checked against the previous one. It creates the space, uploads, starts the scan, follows its event stream and returns `{ spaceId, scan, document }`, plus `markdown` or `skill` if you asked for one. `onProgress` receives, in order, `space_created` (with `spaceId`), `uploading`, `uploaded`, `started`, a `scan` event at every change of status or stage (with `stage` and `label`), then `complete`.
 
 `language` is the language the report is written in: `en` (the default), `it`, `es`, `fr`, `de`, `pt` or `nl`, exported as `REPORT_LANGUAGES`. The narration can be in any language.
 
@@ -75,7 +75,7 @@ Each method maps to one documented operation, and the last argument is always op
 | `sc.scans.create`, `uploadFrame`, `uploadVideo`, `start`, `get`, `cancel` | The scan steps one by one |
 | `sc.frames.check(bytes, 'image/jpeg')` | Is this frame usable, and which key locations does it show (guided capture) |
 | `sc.me()`, `sc.wallet()` | The key's account, mode and scopes; the balance, free scans left and price |
-| `sc.limits()` | The largest and longest video and the most photos a scan takes here, read once; the defaults (100 MB, 10 minutes, 120 photos) when the API does not say |
+| `sc.limits()` | The largest and longest video and the most photos a scan takes here (kept an hour); the defaults (100 MB, 10 minutes, 120 photos) for an API that does not state them, `null` when they cannot be read |
 | `sc.evidenceFrame(url)` | Download an evidence frame from a signed URL of the API, without sending the key |
 
 `describeScan(scan)` turns a status and stage into a label ("Looking at the frames", "Extracting the context"…). The demo space's frames are public files on `https://spacecontext.app/demo/brisbane/`: fetch them directly, as `evidenceFrame` refuses them with `INVALID_URL`.
@@ -111,7 +111,7 @@ try {
 }
 ```
 
-`status` is the HTTP status (0 when there was no answer), `code` is stable and safe to branch on (`NETWORK_ERROR` and `TIMEOUT` come from the client), `requestId` is what to quote to support, `details` carries every field of the error, and `retryAfter` is in seconds. See [all error codes](https://spacecontext.app/developers/docs/api/errors/).
+`status` is the HTTP status (0 when there was no answer), `code` is stable and safe to branch on (`NETWORK_ERROR`, `TIMEOUT` and `FILE_READ_ERROR`, a file that changed or went away while it was uploading, come from the client), `requestId` is what to quote to support, `details` carries every field of the error, and `retryAfter` is in seconds. See [all error codes](https://spacecontext.app/developers/docs/api/errors/).
 
 ## Options
 

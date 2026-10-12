@@ -14,8 +14,10 @@ export function byteLength(body: UploadBody): number {
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
 
-/** `150.0 MB`, `4.2 GB`; a limit (`whole`) without a needless decimal: `100 MB`, `4 GB`. */
+/** `150.0 MB`, `4.2 GB`, `12 KB`; a limit (`whole`) without a needless decimal: `100 MB`, `4 GB`. */
 export function formatSize(bytes: number, whole = false): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < MB) return `${Math.round(bytes / 1024)} KB`;
   const [value, unit] = bytes >= GB ? [bytes / GB, 'GB'] : [bytes / MB, 'MB'];
   return `${whole && Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`;
 }
@@ -47,46 +49,51 @@ export async function nodeFs(): Promise<NodeFs | null> {
 /** What a stream reads from the file at a time. */
 const CHUNK_BYTES = 1024 * 1024;
 
+/** Thrown by a file stream: the file, not the network, failed (never worth sending again as it is). */
+export class FileReadError extends Error {
+  override readonly name = 'FileReadError';
+}
+
 /**
- * The first `size` bytes of a file as a stream, opened anew for each attempt
- * and read a megabyte at a time. A file that shrinks while it is sent fails
- * the upload instead of sending less than the length announced.
+ * The first `size` bytes of a file as a stream, a new one for each attempt,
+ * read a megabyte at a time. The file is opened and closed again for every
+ * read, so no handle is left open whatever the server does with the body (an
+ * answer before it is all sent, a retry, a stream never cancelled). Nothing is
+ * read ahead of the upload. A file that shrinks while it is sent fails the
+ * upload instead of sending less than the length announced.
  */
 function fileStream(fs: NodeFs, path: string, size: number): UploadStream {
   return {
     size,
     stream: () => {
-      let handle: NodeFileHandle | null = null;
       let position = 0;
-      const close = async () => {
-        const open = handle;
-        handle = null;
-        await open?.close();
-      };
-      return new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          try {
-            handle ??= await fs.promises.open(path, 'r');
+      return new ReadableStream<Uint8Array>(
+        {
+          async pull(controller) {
             const length = Math.min(CHUNK_BYTES, size - position);
             if (length === 0) {
-              await close();
               controller.close();
               return;
             }
             const buffer = new Uint8Array(length);
-            const { bytesRead } = await handle.read(buffer, 0, length, position);
-            if (bytesRead === 0) throw new Error(`${path} got shorter while it was being uploaded`);
+            let bytesRead: number;
+            try {
+              const handle = await fs.promises.open(path, 'r');
+              try {
+                ({ bytesRead } = await handle.read(buffer, 0, length, position));
+              } finally {
+                await handle.close();
+              }
+            } catch (error) {
+              throw new FileReadError(`${path} could not be read: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            if (bytesRead === 0) throw new FileReadError(`${path} got shorter while it was being uploaded`);
             position += bytesRead;
             controller.enqueue(bytesRead === length ? buffer : buffer.subarray(0, bytesRead));
-          } catch (error) {
-            await close().catch(() => undefined);
-            controller.error(error);
-          }
+          },
         },
-        async cancel() {
-          await close();
-        },
-      });
+        { highWaterMark: 0 }
+      );
     },
   };
 }

@@ -218,8 +218,11 @@ async function resolvePath(target: string): Promise<Resolved> {
 /**
  * What the API would refuse after the space is created, against this
  * deployment's limits: refused before, so that no space is left without a scan.
+ * Unknown limits (the descriptor could not be read) check nothing: the API
+ * decides when the scan is declared, rather than a guess refusing a video it takes.
  */
-function checkLimits(resolved: Resolved, limits: ScanLimits): void {
+function checkLimits(resolved: Resolved, limits: ScanLimits | null): void {
+  if (!limits) return;
   if (resolved.kind === 'video') {
     const size = byteLength(resolved.data);
     if (size > limits.maxVideoBytes) {
@@ -244,7 +247,7 @@ export async function runScan<Format extends ScanFormat = 'document'>(
   if (Boolean(options.space) === Boolean(options.name)) throw invalid('Pass either space (an existing space id) or name (a space to create)');
   const resolved = await resolveSource(source);
   const request = { signal: options.signal };
-  // Read once per client; when it cannot be read, the limits of a deployment that does not say them.
+  // Read once an hour per client; unknown when the descriptor cannot be read (then the API decides).
   checkLimits(resolved, await sc.limits(request));
   const report = options.onProgress ?? (() => undefined);
 

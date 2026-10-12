@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import { mkdtemp, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -579,15 +580,34 @@ describe('scan() in one call', () => {
     expect(calls.map(routeOf)).toEqual(['GET ']);
   });
 
-  it('never fails a scan because the descriptor cannot be read: the limits of a deployment that does not say them', async () => {
-    for (const failing of [() => apiError(500, 'INTERNAL_ERROR'), () => new Response('<html>gateway</html>', { status: 200 }), () => Promise.reject(new TypeError('fetch failed'))]) {
-      const { fetch, calls } = flow({ descriptor: failing as () => Response });
+  it('never guesses limits it could not read: no pre-check, the API decides when the scan is declared', async () => {
+    const failures = [
+      () => apiError(500, 'INTERNAL_ERROR'),
+      () => apiError(429, 'RATE_LIMIT_EXCEEDED'),
+      () => new Response('<html>gateway</html>', { status: 200 }),
+      () => json({ status: 'ok' }),
+      () => Promise.reject(new TypeError('fetch failed')),
+    ];
+    const storage = { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=1', headers: { 'Content-Type': 'video/mp4' } } as Scan['upload'];
+    for (const failing of failures) {
+      const { fetch, calls } = flow({ descriptor: failing as () => Response, upload: storage });
       const sc = client(fetch);
       expect((await sc.scan(sizedVideo(4), { space: SPACE_ID })).scan.status).toBe('complete');
-      await expect(sc.scan(sizedVideo(150 * MB), { space: SPACE_ID })).rejects.toThrow('over the 100 MB this API takes');
+      // 150 MB is declared: this API may well take it (4 GB with its own ingest).
+      expect((await sc.scan(sizedVideo(150 * MB), { space: SPACE_ID })).scan.status).toBe('complete');
+      expect(JSON.parse(calls.filter((call) => call.url.endsWith('/scans')).at(-1)!.body as string).input.video.content_length).toBe(150 * MB);
       // A read that failed is tried again by the next scan.
       expect(calls.filter((call) => routeOf(call) === 'GET ')).toHaveLength(2);
     }
+
+    // And when it does not take it, its refusal is what the caller gets.
+    const limit = 'input.video.content_length must be between 1 and 104857600 bytes (100 MiB: the largest video this deployment reads)';
+    const refusing = fakeFetch((call) =>
+      routeOf(call) === 'GET '
+        ? apiError(503, 'UNAVAILABLE')
+        : json({ error: { code: 'VALIDATION_ERROR', message: limit, request_id: 'req_1' } }, 400)
+    );
+    await expect(client(refusing.fetch).scan(sizedVideo(150 * MB), { space: SPACE_ID })).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR', message: limit });
   });
 
   it('refuses a video over upload.max_bytes before sending it to the API, which offers no storage link here, and cancels the scan', async () => {
@@ -601,6 +621,72 @@ describe('scan() in one call', () => {
       details: { max_bytes: 95 * MB },
     });
     expect(calls.map(routeOf)).toEqual(['GET ', `POST /spaces/${SPACE_ID}/scans`, `DELETE /scans/${SCAN_ID}`]);
+  });
+
+  it.skipIf(process.platform === 'win32')('closes the file after every read, also when the server answers before the body is all sent', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'sc-fd-'));
+    try {
+      const file = await sparseFile(directory, 'big.mp4', 4 * GB);
+      const body = await fileBody(file);
+      const openFiles = () => readdirSync('/dev/fd').length;
+      const before = openFiles();
+      // Storage reads a few megabytes, then refuses (an expired link): the stream is neither read to the end nor cancelled.
+      const { fetch } = fakeFetch(() => new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 }));
+      const reading = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+        const reader = (init.body as ReadableStream<Uint8Array>).getReader();
+        for (let chunk = 0; chunk < 3; chunk++) await reader.read();
+        reader.releaseLock();
+        return fetch(input, { ...init, body: null });
+      });
+      const direct = scan({
+        input: { ...scan().input, video: { content_type: 'video/mp4', content_length: 4 * GB } },
+        upload: { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=1', headers: { 'Content-Type': 'video/mp4' } } as Scan['upload'],
+      });
+      await expect(client(reading as unknown as typeof globalThis.fetch).scans.uploadVideo(direct, body)).rejects.toMatchObject({ status: 403 });
+      expect(reading).toHaveBeenCalledTimes(1);
+      expect(openFiles()).toBe(before);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('reports a file that cannot be read during the upload as such, and does not send it again', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'sc-read-'));
+    try {
+      const file = await sparseFile(directory, 'big.mp4', 4 * GB);
+      const body = await fileBody(file);
+      await truncate(file, 2 * MB);
+      // Node's fetch reads the body and fails as `fetch failed`, the read error as its cause.
+      const reading = vi.fn(async (_input: RequestInfo | URL, init: RequestInit = {}) => {
+        try {
+          await new Response(init.body).arrayBuffer();
+        } catch (error) {
+          throw new TypeError('fetch failed', { cause: error });
+        }
+        return new Response(null, { status: 200 });
+      });
+      const direct = scan({
+        input: { ...scan().input, video: { content_type: 'video/mp4', content_length: 4 * GB } },
+        upload: { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=1', headers: { 'Content-Type': 'video/mp4' } } as Scan['upload'],
+      });
+      const sc = new SpaceContext({ apiKey: LIVE, baseUrl: BASE, fetch: reading as unknown as typeof globalThis.fetch, maxRetries: 3 });
+      await expect(sc.scans.uploadVideo(direct, body)).rejects.toMatchObject({
+        status: 0,
+        code: 'FILE_READ_ERROR',
+        message: `The upload could not be read: ${file} got shorter while it was being uploaded`,
+      });
+      expect(reading).toHaveBeenCalledTimes(1);
+
+      // A network failure says its cause, and is retried.
+      const down = vi.fn(async () => {
+        throw new TypeError('fetch failed', { cause: new Error('connect ECONNREFUSED 127.0.0.1:443') });
+      });
+      const offline = new SpaceContext({ apiKey: LIVE, baseUrl: BASE, fetch: down as unknown as typeof globalThis.fetch, maxRetries: 1 });
+      await expect(offline.scans.get(SCAN_ID)).rejects.toMatchObject({ code: 'NETWORK_ERROR', message: 'The request failed: fetch failed (connect ECONNREFUSED 127.0.0.1:443)' });
+      expect(down).toHaveBeenCalledTimes(2);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it.skipIf(process.platform === 'win32')('sends a file of 4 GiB, whose size fs.openAsBlob gets wrong, as a stream of its exact length; refuses a bigger one by its real size', async () => {
@@ -657,6 +743,9 @@ describe.skipIf(process.platform === 'win32')('fileBody', () => {
       const again = body.stream().getReader();
       expect((await again.read()).value!.byteLength).toBe(MB);
       await expect(again.read()).rejects.toThrow('got shorter while it was being uploaded');
+      // A file gone: said as such.
+      await rm(file);
+      await expect(body.stream().getReader().read()).rejects.toThrow(`${file} could not be read: ENOENT`);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -664,26 +753,47 @@ describe.skipIf(process.platform === 'win32')('fileBody', () => {
 });
 
 describe('limits()', () => {
-  it('reads the descriptor once, without the key, and keeps the default of a field missing or malformed', async () => {
+  it('reads the descriptor without the key, keeps it an hour, and keeps the default of a field missing or malformed', async () => {
+    vi.useFakeTimers();
     const { fetch, calls } = fakeFetch(() => descriptor({ max_video_bytes: 4 * GB, max_video_seconds: '600', max_photos: 0 }));
     const sc = client(fetch);
     expect(await sc.limits()).toEqual({ maxVideoBytes: 4 * GB, maxVideoSeconds: 600, maxPhotos: 120 });
+    vi.advanceTimersByTime(59 * 60_000);
     expect(await sc.limits()).toEqual({ maxVideoBytes: 4 * GB, maxVideoSeconds: 600, maxPhotos: 120 });
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ url: BASE, method: 'GET' });
     expect(calls[0]!.headers.authorization).toBeUndefined();
+    // After an hour, read again: a long-running client sees a new deployment.
+    vi.advanceTimersByTime(2 * 60_000);
+    await sc.limits();
+    expect(calls).toHaveLength(2);
 
+    // An API older than the field states nothing: its limits are the defaults, kept as well.
     const older = fakeFetch(() => descriptor(null));
-    expect(await client(older.fetch).limits()).toEqual({ ...DEFAULT_SCAN_LIMITS });
+    const old = client(older.fetch);
+    expect(await old.limits()).toEqual({ ...DEFAULT_SCAN_LIMITS });
+    await old.limits();
+    expect(older.calls).toHaveLength(1);
     expect(DEFAULT_SCAN_LIMITS).toEqual({ maxVideoBytes: 100 * MB, maxVideoSeconds: 600, maxPhotos: 120 });
   });
 
-  it('answers the defaults when the descriptor cannot be read, and throws only for the caller\'s own abort', async () => {
-    const down = fakeFetch(() => Promise.reject(new TypeError('fetch failed')));
-    expect(await client(down.fetch).limits()).toEqual({ ...DEFAULT_SCAN_LIMITS });
-    const redirected = fakeFetch(() => new Response(null, { status: 308, headers: { Location: '/v1' } }));
-    expect(await client(redirected.fetch).limits()).toEqual({ ...DEFAULT_SCAN_LIMITS });
+  it("is null when the descriptor cannot be read, never a guess, tries again next time, and throws only for the caller's own abort", async () => {
+    for (const failing of [
+      () => Promise.reject(new TypeError('fetch failed')),
+      () => apiError(503, 'UNAVAILABLE'),
+      () => apiError(429, 'RATE_LIMIT_EXCEEDED'),
+      () => new Response(null, { status: 308, headers: { Location: '/v1' } }),
+      () => new Response('<html>gateway</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
+      () => json({ status: 'ok' }),
+    ]) {
+      const { fetch, calls } = fakeFetch(failing as () => Response);
+      const sc = client(fetch);
+      expect(await sc.limits()).toBeNull();
+      expect(await sc.limits()).toBeNull();
+      expect(calls).toHaveLength(2);
+    }
 
+    const down = fakeFetch(() => Promise.reject(new TypeError('fetch failed')));
     const controller = new AbortController();
     controller.abort(new Error('stopped'));
     await expect(client(down.fetch).limits({ signal: controller.signal })).rejects.toThrow('stopped');
