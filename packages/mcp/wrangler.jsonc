@@ -26,6 +26,14 @@
   // The API reached inside Cloudflare: each user keeps their own IP for rate
   // limits and sign-in protection. Without it the Worker calls API_BASE_URL.
   "services": [{ "binding": "BACKEND", "service": "spacecontext-backend" }],
+  // Requests a minute per client IP: client registration is anonymous, and
+  // every sign-in page (/authorize…) writes to KV and calls the API. Not
+  // inherited: each environment declares its own, with namespace ids unique
+  // in the account (the API Worker uses 1001-1005 and 2001-2005).
+  "ratelimits": [
+    { "name": "RATE_LIMIT_REGISTER", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RATE_LIMIT_AUTHORIZE", "namespace_id": "3002", "simple": { "limit": 60, "period": 60 } }
+  ],
   "observability": { "enabled": true },
   "env": {
     "dev": {
@@ -40,7 +48,9 @@
         "PUBLIC_URL": "http://localhost:8788"
       },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "spacecontext-mcp-dev-oauth" }],
-      "services": []
+      "services": [],
+      // No limits locally; the tests bring their own.
+      "ratelimits": []
     },
     // Staging: the dev branch deploys here (Workers Builds), against the dev API.
     "staging": {
@@ -59,7 +69,11 @@
         "GOOGLE_WEB_CLIENT_ID": "98828797984-8a9im4pl24nf7c7g80o4i92po2hhvf0g.apps.googleusercontent.com"
       },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "21f82a0549ce432fa7aadf47c5a2d415" }],
-      "services": [{ "binding": "BACKEND", "service": "spacecontext-backend-staging" }]
+      "services": [{ "binding": "BACKEND", "service": "spacecontext-backend-staging" }],
+      "ratelimits": [
+        { "name": "RATE_LIMIT_REGISTER", "namespace_id": "4001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "RATE_LIMIT_AUTHORIZE", "namespace_id": "4002", "simple": { "limit": 60, "period": 60 } }
+      ]
     }
   }
 }

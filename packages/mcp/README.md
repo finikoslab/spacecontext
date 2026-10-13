@@ -67,7 +67,7 @@ No tool reaches the open web. Space content is returned as data, never as instru
 
 ## Deploy your own
 
-The server is a Cloudflare Worker that talks to a Space Context API (`…/v1`, with `API_V1_ENABLED = "true"`). It signs people in through the API's own sign-in endpoints and creates one API key per connection. Everything it keeps is in KV: OAuth clients, grants and tokens (grants carry the connection's API key and are encrypted by the OAuth library), and sign-ins in progress, for ten minutes.
+The server is a Cloudflare Worker that talks to a Space Context API (`…/v1`, with `API_V1_ENABLED = "true"`). It signs people in through the API's own sign-in endpoints and creates one API key per connection. Everything it keeps is in KV: OAuth clients, grants and tokens (grants carry the connection's API key and are encrypted by the OAuth library), and sign-ins in progress, for ten minutes, encrypted with a key that only the user's browser holds.
 
 **1. Install and build the SDK** (the server imports it), from the repository root:
 
@@ -116,7 +116,8 @@ Keep these settings from `wrangler.jsonc`:
 
 - `global_fetch_strictly_public` stays on. The server fetches client metadata documents from URLs that clients choose, so a plain `fetch` must never reach private addresses. The API is reached through the `BACKEND` binding.
 - With `workers_dev` and `preview_urls` off, the server answers only on its custom domain.
-- Access tokens last one hour. A grant lives for 90 days after its last refresh.
+- `ratelimits` limit each client IP to 10 registrations (`/register`) and 60 sign-in page requests (`/authorize…`) a minute, answered with `429` and `Retry-After: 60` beyond. Rate limits aren't inherited by environments, and each `namespace_id` must be unique in your Cloudflare account. Without the bindings (as in `dev`) nothing is limited.
+- Access tokens last one hour. A grant lives for 90 days after its last refresh. A client registered dynamically is deleted after 180 days without a token request.
 
 `wrangler.jsonc` also defines `dev` (local, see below) and `staging` (Space Context's own staging deployment).
 

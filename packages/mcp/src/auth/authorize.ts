@@ -41,14 +41,14 @@ async function describe(env: Env, request: Request, oauth: string): Promise<{ au
 }
 
 /**
- * A request the library refused. Back to the client when its redirect URI is
- * validated, otherwise on this page. Anything else (a KV outage, a bug) is not
- * the user's doing and surfaces as a 500.
+ * A request the library refused, shown on this page. Never sent back to the
+ * client, even when its redirect URI is validated: anyone can register a client
+ * with any redirect URI, so an error redirect would make this server an open
+ * redirector (RFC 9700 §4.11.2). Deny still goes back to the client, through
+ * `denyConsent`. Anything else (a KV outage, a bug) is not the user's doing and
+ * surfaces as a 500.
  */
 function refused(error: unknown): Response {
-  if (error instanceof AuthorizationError && error.redirectTo) {
-    return new Response(null, { status: 302, headers: { Location: error.redirectTo } });
-  }
   if (error instanceof AuthorizationError) return errorPage('Invalid request', error.description, 400);
   if (error instanceof CimdFetchError) return errorPage('Unknown app', 'This app could not be verified. Start again from your assistant.', 400);
   throw error;
@@ -120,14 +120,22 @@ export async function keysOfReplacedGrants(env: Env, userId: string, request: Pi
 
 // ---------------------------------------------------------------- Google and Apple
 
-/** A sign-in started with a provider: what to come back to, for ten minutes, once. */
-type PendingLogin = { provider: 'google' | 'apple'; handle: string; oauth: string; nonce: string };
+/**
+ * A sign-in started with a provider: what to come back to, for ten minutes,
+ * once. `browser` is the SHA-256 of the binding cookie's value.
+ */
+type PendingLogin = { provider: 'google' | 'apple'; handle: string; oauth: string; nonce: string; browser: string };
 /**
  * An identity verified by a provider, waiting for the user's consent on this
  * server's page; or one verified by an emailed code, kept when the consent has
- * to be given again (scanning asked for without a card on file).
+ * to be given again (scanning asked for without a card on file). `handle` is
+ * the SHA-256 of the consent handle it was issued for: it works with no other.
+ * Every way of using a ticket ends its console session unless a new ticket
+ * takes it over; a ticket never used expires with its record, and its session,
+ * which nobody holds any more, lasts until the API ends it (30 days): the API
+ * has no shorter session to offer.
  */
-type Ticket = { sessionToken: string; userId: string; email: string; provider: 'google' | 'apple' | 'email' };
+type Ticket = { sessionToken: string; userId: string; email: string; provider: 'google' | 'apple' | 'email'; handle: string };
 
 const LOGIN_TTL_SECONDS = 600;
 const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -142,8 +150,7 @@ function signInProviders(env: Env): SignInProviders {
 }
 
 function randomToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  return base64url(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 async function sha256Hex(text: string): Promise<string> {
@@ -155,18 +162,123 @@ function callbackUrl(env: Env, provider: 'google' | 'apple'): string {
   return new URL(`/authorize/${provider}/callback`, env.PUBLIC_URL).toString();
 }
 
-/** Reads a value of OAUTH_KV once: it is deleted as it is read. */
-async function takeOnce<T>(env: Env, key: string): Promise<T | null> {
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(key.split(':')[1] ?? '')) return null;
-  const value = await env.OAUTH_KV.get(key);
-  if (value === null) return null;
-  await env.OAUTH_KV.delete(key);
+/** Compares two hex hashes without telling, by its timing, how much of them matched. */
+function sameHash(a: string, b: string): boolean {
+  const left = new TextEncoder().encode(a);
+  const right = new TextEncoder().encode(b);
+  return left.byteLength === right.byteLength && crypto.subtle.timingSafeEqual(left, right);
+}
+
+function readCookie(request: Request, name: string): string | null {
+  for (const part of (request.headers.get('Cookie') ?? '').split(';')) {
+    const separator = part.indexOf('=');
+    if (separator !== -1 && part.slice(0, separator).trim() === name) return part.slice(separator + 1).trim() || null;
+  }
+  return null;
+}
+
+type RecordKind = 'sc-login' | 'sc-ticket';
+
+function base64url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
+function fromBase64url(text: string): Uint8Array {
+  const binary = atob(text.replaceAll('-', '+').replaceAll('_', '/'));
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+/** The AES-GCM key of a record, derived from its id: only the browser holding the id can open it. */
+async function recordKey(kind: RecordKind, id: string): Promise<CryptoKey> {
+  const material = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${kind}-key:${id}`));
+  return crypto.subtle.importKey('raw', material, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+/**
+ * Keeps a sign-in record in OAUTH_KV for ten minutes. Records hold a console
+ * session and a consent handle: each is stored under the hash of its one-time
+ * id and sealed with a key derived from the id, which only the browser holds
+ * (in the provider's callback URL or in the page's form), so KV alone reveals
+ * neither. The OAuth library keeps its own consent transactions the same way.
+ */
+async function putRecord(env: Env, kind: RecordKind, id: string, value: PendingLogin | Ticket): Promise<void> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await recordKey(kind, id), new TextEncoder().encode(JSON.stringify(value))));
+  await env.OAUTH_KV.put(`${kind}:${await sha256Hex(id)}`, `${base64url(iv)}.${base64url(sealed)}`, { expirationTtl: LOGIN_TTL_SECONDS });
+}
+
+/**
+ * Reads a sign-in record without using it up. The caller checks that it belongs
+ * to this request (browser, consent handle) and only then consumes it, so a
+ * stranger presenting a leaked id cannot spend the record of its owner.
+ */
+async function openRecord<T>(env: Env, kind: RecordKind, id: string): Promise<{ value: T; consume: () => Promise<void> } | null> {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(id)) return null;
+  const key = `${kind}:${await sha256Hex(id)}`;
+  const stored = await env.OAUTH_KV.get(key);
+  if (stored === null) return null;
   try {
-    return JSON.parse(value) as T;
+    const [iv, sealed] = stored.split('.');
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64url(iv ?? '') }, await recordKey(kind, id), fromBase64url(sealed ?? ''));
+    return { value: JSON.parse(new TextDecoder().decode(plain)) as T, consume: () => env.OAUTH_KV.delete(key) };
   } catch {
     return null;
   }
 }
+
+/** Keeps a signed-in identity for the consent form of one handle, under a new one-time ticket. */
+async function issueTicket(env: Env, identity: Omit<Ticket, 'handle'>, handle: string): Promise<string> {
+  const ticket = randomToken();
+  await putRecord(env, 'sc-ticket', ticket, { ...identity, handle: await sha256Hex(handle) });
+  return ticket;
+}
+
+/**
+ * The identity behind a ticket, once, and only next to the consent handle it
+ * was issued for. That handle works only in the browser that opened the consent
+ * page, so a ticket taken anywhere else (a leaked page, a leaked callback) can
+ * never approve another request, for another client, with this account.
+ */
+async function takeTicket(env: Env, ticket: string, handle: string): Promise<Ticket | null> {
+  const record = await openRecord<Ticket>(env, 'sc-ticket', ticket);
+  if (!record || typeof record.value.handle !== 'string' || !sameHash(record.value.handle, await sha256Hex(handle))) return null;
+  await record.consume();
+  return record.value;
+}
+
+/**
+ * The cookie that binds a provider sign-in to the browser that started it. Its
+ * value is random and only its hash is stored, so whoever learns the callback
+ * URL (state and code) cannot finish the sign-in elsewhere: knowing the state
+ * is not enough. Named after the state, so sign-ins in two tabs keep their own.
+ * SameSite=None for Apple only: it comes back with a cross-site form post,
+ * which never carries a Lax cookie; Google comes back with a top-level GET.
+ */
+async function loginCookieName(state: string): Promise<string> {
+  return `__Host-sc-login-${(await sha256Hex(state)).slice(0, 16)}`;
+}
+
+function loginCookie(name: string, value: string, provider: 'google' | 'apple', maxAge: number): string {
+  return `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=${provider === 'apple' ? 'None' : 'Lax'}; Max-Age=${maxAge}`;
+}
+
+/**
+ * The sign-in a provider came back for: once, and only in the browser that
+ * started it. Returns the header that clears the binding cookie.
+ */
+async function takeLogin(request: Request, env: Env, provider: 'google' | 'apple', state: string): Promise<{ pending: PendingLogin; headers: Headers } | null> {
+  const name = await loginCookieName(state);
+  const browser = readCookie(request, name);
+  if (!browser) return null;
+  const record = await openRecord<PendingLogin>(env, 'sc-login', state);
+  if (!record || record.value.provider !== provider || typeof record.value.browser !== 'string' || !sameHash(record.value.browser, await sha256Hex(browser))) return null;
+  await record.consume();
+  return { pending: record.value, headers: new Headers({ 'Set-Cookie': loginCookie(name, '', provider, 0) }) };
+}
+
+const SIGN_IN_EXPIRED = 'This sign-in expired, was already used, or was started in another browser. Start again from your assistant.';
 
 /** POST /authorize/{google|apple}: from the email page, off to the provider. */
 async function startProviderSignIn(request: Request, env: Env, provider: 'google' | 'apple'): Promise<Response> {
@@ -179,8 +291,9 @@ async function startProviderSignIn(request: Request, env: Env, provider: 'google
   if (!signInProviders(env)[provider]) return errorPage('Not available', 'This sign-in method is not available.', 404);
   const state = randomToken();
   const nonce = randomToken();
-  const pending: PendingLogin = { provider, handle: form.handle ?? '', oauth: form.oauth ?? '', nonce };
-  await env.OAUTH_KV.put(`sc-login:${state}`, JSON.stringify(pending), { expirationTtl: LOGIN_TTL_SECONDS });
+  const browser = randomToken();
+  const pending: PendingLogin = { provider, handle: form.handle ?? '', oauth: form.oauth ?? '', nonce, browser: await sha256Hex(browser) };
+  await putRecord(env, 'sc-login', state, pending);
 
   const target =
     provider === 'google'
@@ -207,7 +320,9 @@ async function startProviderSignIn(request: Request, env: Env, provider: 'google
             nonce: await sha256Hex(nonce),
           })}`
         );
-  return new Response(null, { status: 302, headers: { Location: target.toString(), 'Cache-Control': 'no-store' } });
+  const headers = new Headers({ Location: target.toString(), 'Cache-Control': 'no-store' });
+  headers.append('Set-Cookie', loginCookie(await loginCookieName(state), browser, provider, LOGIN_TTL_SECONDS));
+  return new Response(null, { status: 302, headers });
 }
 
 /**
@@ -216,7 +331,8 @@ async function startProviderSignIn(request: Request, env: Env, provider: 'google
  * Consent is given on this server's page (same origin, bound to the browser),
  * never on the provider's callback, which another site can post.
  */
-async function providerSignedIn(request: Request, env: Env, pending: PendingLogin, idToken: string, name: string | null): Promise<Response> {
+async function providerSignedIn(request: Request, env: Env, login: { pending: PendingLogin; headers: Headers }, idToken: string, name: string | null): Promise<Response> {
+  const { pending, headers } = login;
   let described;
   try {
     described = await describe(env, request, pending.oauth);
@@ -234,20 +350,18 @@ async function providerSignedIn(request: Request, env: Env, pending: PendingLogi
     });
   } catch (error) {
     const message = error instanceof BackendError && error.status === 429 ? 'Too many attempts. Wait a few minutes and try again.' : `Sign-in with ${label} failed. Try again, or use your email.`;
-    return emailPage({ consent: described.consent, handle: pending.handle, oauth: pending.oauth, error: message, providers: signInProviders(env) });
+    return emailPage({ consent: described.consent, handle: pending.handle, oauth: pending.oauth, error: message, providers: signInProviders(env) }, headers);
   }
-  const ticket = randomToken();
-  const value: Ticket = { sessionToken: session.session_token, userId: session.user.id, email: session.user.email, provider: pending.provider };
-  await env.OAUTH_KV.put(`sc-ticket:${ticket}`, JSON.stringify(value), { expirationTtl: LOGIN_TTL_SECONDS });
-  return consentPage({ consent: described.consent, handle: pending.handle, oauth: pending.oauth, email: session.user.email, ticket, signedInWith: label });
+  const ticket = await issueTicket(env, { sessionToken: session.session_token, userId: session.user.id, email: session.user.email, provider: pending.provider }, pending.handle);
+  return consentPage({ consent: described.consent, handle: pending.handle, oauth: pending.oauth, email: session.user.email, ticket, signedInWith: label }, headers);
 }
 
 async function googleCallback(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const pending = await takeOnce<PendingLogin>(env, `sc-login:${url.searchParams.get('state') ?? ''}`);
-  if (!pending || pending.provider !== 'google') return errorPage('Request expired', 'This sign-in expired or was already used. Start again from your assistant.', 400);
+  const login = await takeLogin(request, env, 'google', url.searchParams.get('state') ?? '');
+  if (!login) return errorPage('Request expired', SIGN_IN_EXPIRED, 400);
   const code = url.searchParams.get('code');
-  if (!code) return providerCancelled(request, env, pending);
+  if (!code) return providerCancelled(request, env, login);
   let idToken: string | undefined;
   try {
     const response = await fetch(GOOGLE_TOKEN, {
@@ -266,15 +380,15 @@ async function googleCallback(request: Request, env: Env): Promise<Response> {
   } catch {
     idToken = undefined;
   }
-  if (!idToken) return providerCancelled(request, env, pending, 'Sign-in with Google failed. Try again, or use your email.');
-  return providerSignedIn(request, env, pending, idToken, null);
+  if (!idToken) return providerCancelled(request, env, login, 'Sign-in with Google failed. Try again, or use your email.');
+  return providerSignedIn(request, env, login, idToken, null);
 }
 
 async function appleCallback(request: Request, env: Env): Promise<Response> {
   const form = await readForm(request);
-  const pending = await takeOnce<PendingLogin>(env, `sc-login:${form.state ?? ''}`);
-  if (!pending || pending.provider !== 'apple') return errorPage('Request expired', 'This sign-in expired or was already used. Start again from your assistant.', 400);
-  if (!form.id_token) return providerCancelled(request, env, pending);
+  const login = await takeLogin(request, env, 'apple', form.state ?? '');
+  if (!login) return errorPage('Request expired', SIGN_IN_EXPIRED, 400);
+  if (!form.id_token) return providerCancelled(request, env, login);
   // Apple sends the name once, on the first sign-in, outside the token.
   let name: string | null = null;
   try {
@@ -283,15 +397,16 @@ async function appleCallback(request: Request, env: Env): Promise<Response> {
   } catch {
     name = null;
   }
-  return providerSignedIn(request, env, pending, form.id_token, name);
+  return providerSignedIn(request, env, login, form.id_token, name);
 }
 
 /** The user went back from the provider, or it refused: the email page again. */
-async function providerCancelled(request: Request, env: Env, pending: PendingLogin, error?: string): Promise<Response> {
+async function providerCancelled(request: Request, env: Env, login: { pending: PendingLogin; headers: Headers }, error?: string): Promise<Response> {
+  const { pending, headers } = login;
   try {
     const described = await describe(env, request, pending.oauth);
     const label = pending.provider === 'google' ? 'Google' : 'Apple';
-    return emailPage({ consent: described.consent, handle: pending.handle, oauth: pending.oauth, error: error ?? `Sign-in with ${label} was cancelled.`, providers: signInProviders(env) });
+    return emailPage({ consent: described.consent, handle: pending.handle, oauth: pending.oauth, error: error ?? `Sign-in with ${label} was cancelled.`, providers: signInProviders(env) }, headers);
   } catch (cause) {
     return refused(cause);
   }
@@ -342,9 +457,10 @@ async function sendCode(request: Request, env: Env): Promise<Response> {
 async function approve(request: Request, env: Env): Promise<Response> {
   const form = await readForm(request);
   const handle = form.handle ?? '';
-  // Signed in with Google or Apple: the identity was verified on the callback.
-  const ticket = form.ticket ? await takeOnce<Ticket>(env, `sc-ticket:${form.ticket}`) : null;
-  if (form.ticket && !ticket) return errorPage('Request expired', 'This sign-in expired or was already used. Start again from your assistant.', 400);
+  // Signed in with Google or Apple: the identity was verified on the callback,
+  // for this consent handle only.
+  const ticket = form.ticket ? await takeTicket(env, form.ticket, handle) : null;
+  if (form.ticket && !ticket) return errorPage('Request expired', SIGN_IN_EXPIRED, 400);
   if (form.action === 'deny') {
     if (ticket) {
       await backendJson(env, '/auth/session', { method: 'DELETE', sessionToken: ticket.sessionToken, clientIp: clientIp(request) }).catch(() => undefined);
@@ -361,6 +477,10 @@ async function approve(request: Request, env: Env): Promise<Response> {
   try {
     described = await describe(env, request, form.oauth ?? '');
   } catch (error) {
+    // The ticket is spent: its console session is of no use to anyone now.
+    if (ticket) {
+      await backendJson(env, '/auth/session', { method: 'DELETE', sessionToken: ticket.sessionToken, clientIp: clientIp(request) }).catch(() => undefined);
+    }
     return refused(error);
   }
   const email = ticket ? ticket.email : validEmail(form.email);
@@ -391,6 +511,8 @@ async function approve(request: Request, env: Env): Promise<Response> {
   let key: CreatedKey | null = null;
   // Kept only when the consent is asked again (see below): a one-time ticket then holds it.
   let keepSession = false;
+  const revokeKey = (keyId: string) =>
+    backendJson(env, `/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
   try {
     // 2. Consent: the handle works once and only in the browser that opened the page.
     const sensitive = form.sensitive === '1';
@@ -406,14 +528,33 @@ async function approve(request: Request, env: Env): Promise<Response> {
     const scopes = [...KEY_SCOPES, ...(sensitive ? ['spaces:sensitive'] : []), ...(scanning ? ['scans:write'] : [])];
 
     // 3. A key for this grant only, labelled as such in the console.
-    try {
-      key = await backendJson<CreatedKey>(env, '/keys', {
+    const createKey = () =>
+      backendJson<CreatedKey>(env, '/keys', {
         method: 'POST',
         sessionToken: session.session_token,
         clientIp: clientIp(request),
         body: { name: `MCP · ${described.consent.clientName}`.slice(0, 60), mode: 'live', scopes, source: 'oauth' },
-      });
-    } catch (error) {
+      }).then(
+        (created) => ({ created }),
+        (error: unknown) => ({ error })
+      );
+    let attempt = await createKey();
+    // Keys of the grants this one replaces, revoked before it is complete.
+    let revokedFirst: string[] = [];
+    if ('error' in attempt && isKeyLimit(attempt.error)) {
+      // At the limit, connecting the same client again would be refused although
+      // completing it revokes the key of the grant it replaces: that key goes
+      // first, to make room, and the key is asked for once more. The user is
+      // replacing that connection anyway; its grant, if this one is not
+      // completed, ends on its next call, when the API refuses the key.
+      revokedFirst = await keysOfReplacedGrants(env, session.user.id, approved.request);
+      if (revokedFirst.length > 0) {
+        for (const keyId of revokedFirst) await revokeKey(keyId);
+        attempt = await createKey();
+      }
+    }
+    if ('error' in attempt) {
+      const { error } = attempt;
       // Nothing was created: a key revoked in the console makes room. The used
       // handle's cookie is cleared.
       if (isKeyLimit(error)) return keyLimitPage(approved.headers);
@@ -423,15 +564,15 @@ async function approve(request: Request, env: Env): Promise<Response> {
       // browser like the first, with the signed-in user under a one-time ticket:
       // read-only now, or with scanning once a card is added.
       const transaction = await env.OAUTH_PROVIDER.beginConsent(approved.request);
-      const ticketId = randomToken();
-      const value: Ticket = { sessionToken: session.session_token, userId: session.user.id, email: session.user.email, provider: ticket?.provider ?? 'email' };
-      await env.OAUTH_KV.put(`sc-ticket:${ticketId}`, JSON.stringify(value), { expirationTtl: LOGIN_TTL_SECONDS });
+      const identity = { sessionToken: session.session_token, userId: session.user.id, email: session.user.email, provider: ticket?.provider ?? 'email' } as const;
+      const ticketId = await issueTicket(env, identity, transaction.handle);
       keepSession = true;
       const headers = new Headers(transaction.headers);
       // The used handle's cookie is cleared, the new one set.
       for (const cookie of approved.headers.getSetCookie()) headers.append('Set-Cookie', cookie);
       return cardRequiredPage({ consent: described.consent, handle: transaction.handle, oauth: form.oauth ?? '', email: session.user.email, ticket: ticketId, sensitive }, headers);
     }
+    key = attempt.created;
 
     if (typeof key?.key !== 'string' || !/^sc_live_[A-Za-z0-9_-]+$/.test(key.key) || !Array.isArray(key.scopes)) {
       throw new Error('The API did not return a usable key');
@@ -448,17 +589,13 @@ async function approve(request: Request, env: Env): Promise<Response> {
       scope: approved.request.scope,
       props,
     });
-    for (const keyId of replaced) {
-      await backendJson(env, `/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
-    }
+    for (const keyId of replaced) if (!revokedFirst.includes(keyId)) await revokeKey(keyId);
     const headers = new Headers(approved.headers);
     headers.set('Location', redirectTo);
     return new Response(null, { status: 302, headers });
   } catch {
     // A key without a grant would be a credential nobody holds: revoke it.
-    if (key) {
-      await backendJson(env, `/keys/${encodeURIComponent(key.id)}`, { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
-    }
+    if (key) await revokeKey(key.id);
     return errorPage('Something went wrong', 'The connection could not be completed. Start again from your assistant.', 502);
   } finally {
     // The console session was only needed to create the key.

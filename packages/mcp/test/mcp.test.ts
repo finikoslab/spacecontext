@@ -3,12 +3,14 @@ import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import type { Env } from '../src/env';
-import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/auth/html';
+import { emailPage, redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/auth/html';
 import { CARD_TOOLS } from '../src/server/card';
 import { keysOfReplacedGrants } from '../src/auth/authorize';
 
 const ORIGIN = 'https://mcp.example.test';
 const REDIRECT = 'https://claude.example/api/mcp/auth_callback';
+/** Where an attacker's own client wants access sent. */
+const EVIL_REDIRECT = 'https://evil.example/cb';
 const API_KEY = `sc_live_${'k'.repeat(43)}`;
 const USER_IP = '203.0.113.7';
 const CODE = '123456';
@@ -144,12 +146,12 @@ function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
-async function registerClient(name = 'Claude') {
+async function registerClient(name = 'Claude', redirect = REDIRECT) {
   const response = await call(
     new Request(`${ORIGIN}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ redirect_uris: [REDIRECT], client_name: name, token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }),
+      body: JSON.stringify({ redirect_uris: [redirect], client_name: name, token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }),
     })
   );
   expect(response.status).toBe(201);
@@ -157,13 +159,13 @@ async function registerClient(name = 'Claude') {
 }
 
 /** Opens the consent page like a browser: returns its handle, the OAuth query and the binding cookie. */
-async function openAuthorize(clientId: string) {
+async function openAuthorize(clientId: string, redirect = REDIRECT) {
   const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
   const query = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
-    redirect_uri: REDIRECT,
+    redirect_uri: redirect,
     scope: 'spaces:read',
     state: 'state-123',
     code_challenge: challenge,
@@ -192,6 +194,18 @@ function post(path: string, form: Record<string, string>, cookie: string, header
       redirect: 'manual',
     })
   );
+}
+
+/** The cookies a browser keeps after a response: set ones replace, cleared ones go. */
+function browserCookies(before: string, response: Response): string {
+  const jar = new Map(before.split('; ').filter(Boolean).map((pair) => [pair.split('=')[0]!, pair] as const));
+  for (const header of response.headers.getSetCookie()) {
+    const pair = header.split(';')[0]!;
+    const name = pair.split('=')[0]!;
+    if (/Max-Age=0/i.test(header)) jar.delete(name);
+    else jar.set(name, pair);
+  }
+  return [...jar.values()].join('; ');
 }
 
 /** The whole browser flow, up to the access token. */
@@ -323,18 +337,6 @@ describe('authorization', () => {
       return state;
     }
 
-    /** The cookies a browser keeps after a response: set ones replace, cleared ones go. */
-    function browserCookies(before: string, response: Response): string {
-      const jar = new Map(before.split('; ').filter(Boolean).map((pair) => [pair.split('=')[0]!, pair] as const));
-      for (const header of response.headers.getSetCookie()) {
-        const pair = header.split(';')[0]!;
-        const name = pair.split('=')[0]!;
-        if (/Max-Age=0/i.test(header)) jar.delete(name);
-        else jar.set(name, pair);
-      }
-      return [...jar.values()].join('; ');
-    }
-
     async function askToScan(options: { sensitive?: boolean } = {}) {
       const clientId = await registerClient();
       const page = await openAuthorize(clientId);
@@ -453,6 +455,23 @@ describe('authorization', () => {
       expect(elsewhere.status).toBe(400);
       expect(backend.calls.filter((entry) => entry.path === '/keys')).toHaveLength(1);
     });
+
+    it('takes the ticket of that page only with the handle it was issued for', async () => {
+      backendWithoutCard();
+      const asked = await askToScan({ sensitive: true });
+      // Someone holding the ticket pairs it with a consent of their own client, in their own browser.
+      const attacker = await openAuthorize(await registerClient('Evil', EVIL_REDIRECT), EVIL_REDIRECT);
+      const paired = await post('/authorize/approve', { handle: attacker.handle, oauth: attacker.oauth, ticket: asked.ticket, sensitive: '1', scans: '0' }, attacker.cookie);
+      expect(paired.status).toBe(400);
+      expect(await paired.text()).toContain('Request expired');
+      expect(paired.headers.get('Location')).toBeNull();
+      expect(backend.calls.filter((entry) => entry.path === '/keys')).toHaveLength(1);
+
+      // The ticket was not spent: its owner still connects.
+      const connected = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, sensitive: '1', scans: '0' }, asked.cookie);
+      expect(connected.status).toBe(302);
+      expect(connected.headers.get('Location')!.startsWith(REDIRECT)).toBe(true);
+    });
   });
 
   it('lets the user retry a wrong code, and deny', async () => {
@@ -544,6 +563,30 @@ describe('authorization', () => {
     expect(page.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
   });
 
+  it('leads with where the access goes, and shows the name a client chose capped and marked as not verified', async () => {
+    const page = await openAuthorize(await registerClient(`Claude ${'A'.repeat(200)}`));
+    const who = /<div class="who">([\s\S]*?)<\/div>/.exec(page.html)![1]!;
+    expect(who.startsWith('<p>The assistant will receive access at <strong class="host">claude.example</strong></p>')).toBe(true);
+    expect(who).toContain(`It calls itself <strong>Claude ${'A'.repeat(52)}…</strong> (name not verified).`);
+    expect(who).not.toContain('A'.repeat(53));
+
+    // Capped by characters before escaping, and never through the middle of an emoji.
+    const escaped = await openAuthorize(await registerClient('<'.repeat(100)));
+    expect(escaped.html).toContain(`<strong>${'&#60;'.repeat(59)}…</strong>`);
+    expect(escaped.html).not.toContain('&#60;'.repeat(60));
+    const emoji = await openAuthorize(await registerClient('😀'.repeat(70)));
+    expect(emoji.html).toContain(`<strong>${'😀'.repeat(59)}…</strong>`);
+
+    // A client known by its metadata URL has its name checked against its domain.
+    const cimd = await emailPage({
+      consent: { clientId: 'https://claude.ai/oauth/mcp-client.json', clientName: 'Claude', clientDomain: 'claude.ai', redirectUri: 'https://claude.ai/api/mcp/auth_callback', redirectHost: 'claude.ai', redirectIsLoopback: false, scope: ['spaces:read'] },
+      handle: 'h',
+      oauth: 'o',
+    }).text();
+    expect(cimd).toContain('It is <strong>Claude</strong>, as published by <strong>claude.ai</strong>.');
+    expect(cimd).not.toContain('not verified');
+  });
+
   it('revokes the key when the authorization cannot be completed', async () => {
     backend = fakeBackend({ 'POST /keys': () => new Response('{"id":"key_1"}', { status: 201, headers: { 'Content-Type': 'application/json' } }) });
     const clientId = await registerClient();
@@ -591,6 +634,43 @@ describe('authorization', () => {
     expect(old.status).toBe(401);
   });
 
+  it('reconnects the same client at the key limit, revoking the key it replaces first', async () => {
+    // An account at its limit (here 1 key): the key of the grant being replaced makes room.
+    let active = 0;
+    let created = 0;
+    const atLimit = () => new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'API key limit reached', request_id: 'r' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    backend = fakeBackend({
+      'POST /keys': (call) => {
+        if (active >= 1) return atLimit();
+        active += 1;
+        created += 1;
+        return new Response(JSON.stringify({ id: `key_${created}`, key: API_KEY, scopes: (call.body as { scopes: string[] }).scopes, source: 'oauth' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      },
+      'DELETE /keys/key_1': () => {
+        active -= 1;
+        return new Response(null, { status: 204 });
+      },
+    });
+    const first = await connect();
+    const second = await connect({ clientId: first.clientId });
+    expect(second.accessToken).toBeTruthy();
+    const keyCalls = backend.calls.filter((entry) => entry.path.startsWith('/keys')).map((entry) => `${entry.method} ${entry.path}`);
+    // Refused once, the replaced key revoked (once), then created.
+    expect(keyCalls).toEqual(['POST /keys', 'POST /keys', 'DELETE /keys/key_1', 'POST /keys']);
+    expect(backend.calls.find((entry) => entry.method === 'DELETE' && entry.path === '/keys/key_1')!.headers.get('Authorization')).toBe('Bearer scs_session');
+    // The first grant is gone with its key.
+    const old = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${first.accessToken}`, 'Content-Type': 'application/json', Host: new URL(ORIGIN).host }, body: '{}' }));
+    expect(old.status).toBe(401);
+
+    // Another client replaces nothing: the limit is said as before, and nothing is revoked.
+    const other = await openAuthorize(await registerClient('Cursor'));
+    await post('/authorize/code', { handle: other.handle, oauth: other.oauth, email: 'owner@example.com' }, other.cookie);
+    const refused = await post('/authorize/approve', { handle: other.handle, oauth: other.oauth, email: 'owner@example.com', code: CODE, action: 'approve' }, other.cookie);
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain('Too many API keys');
+    expect(backend.calls.filter((entry) => entry.method === 'DELETE' && entry.path.startsWith('/keys/'))).toHaveLength(1);
+  });
+
   it('revokes only the keys of the grants the library replaces: same client, same resource, same installation', async () => {
     const RESOURCE = `${ORIGIN}/mcp`;
     const CIMD = 'https://assistant.example/oauth/client.json';
@@ -626,6 +706,95 @@ describe('authorization', () => {
     const response = await call(new Request(`${ORIGIN}/authorize?response_type=code&client_id=nope&redirect_uri=${encodeURIComponent(REDIRECT)}`));
     expect(response.status).toBe(400);
     expect(response.headers.get('Location')).toBeNull();
+  });
+
+  it('shows a refused request on its own page, never redirecting to the URI a client registered', async () => {
+    // Registration is anonymous: anyone can register any redirect URI, so an
+    // error redirect to it would be an open redirect through this server.
+    const clientId = await registerClient('Anything', 'https://evil.example/landing');
+    // Without PKCE the library refuses the request, with a redirect it deems safe.
+    const query = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: 'https://evil.example/landing', state: 'x' });
+    const response = await call(new Request(`${ORIGIN}/authorize?${query}`, { redirect: 'manual' }));
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Location')).toBeNull();
+    const html = await response.text();
+    expect(html).toContain('Invalid request');
+    expect(html).not.toContain('evil.example');
+  });
+});
+
+describe('abuse limits', () => {
+  /** A Workers Rate Limiting binding, faked: `allowed` requests per key, then refused. */
+  function fakeLimiter(allowed: number) {
+    const keys: string[] = [];
+    const binding = {
+      limit: async ({ key }: { key: string }) => {
+        keys.push(key);
+        return { success: keys.filter((seen) => seen === key).length <= allowed };
+      },
+    };
+    return { binding: binding as RateLimit, keys };
+  }
+
+  function register(ip: string, origin?: string) {
+    return call(
+      new Request(`${ORIGIN}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, ...(origin ? { Origin: origin } : {}) },
+        body: JSON.stringify({ redirect_uris: [REDIRECT], client_name: 'Claude', token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }),
+      })
+    );
+  }
+
+  it('limits client registration per IP, with Retry-After', async () => {
+    const limiter = fakeLimiter(2);
+    extraEnv = { RATE_LIMIT_REGISTER: limiter.binding };
+    expect((await register('198.51.100.1')).status).toBe(201);
+    expect((await register('198.51.100.1')).status).toBe(201);
+    const refused = await register('198.51.100.1', 'https://inspector.example');
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('Retry-After')).toBe('60');
+    expect(((await refused.json()) as { error: string }).error).toBe('too_many_requests');
+    // A client registering from a browser can read why.
+    expect(refused.headers.get('Access-Control-Allow-Origin')).toBe('https://inspector.example');
+    expect(refused.headers.get('Access-Control-Expose-Headers')).toContain('Retry-After');
+    // Another address has its own budget.
+    expect((await register('198.51.100.2')).status).toBe(201);
+    expect(limiter.keys).toEqual(['198.51.100.1', '198.51.100.1', '198.51.100.1', '198.51.100.2']);
+  });
+
+  it('forgets a registered client after 180 days without a token request, twice the idle life of a grant', async () => {
+    const clientId = await registerClient();
+    const stored = (await (env as unknown as Env).OAUTH_KV.get(`client:${clientId}`, 'json')) as { registrationDate: number; registrationExpiresAt: number };
+    // Renewed by the library on a token request past half of it: a grant (90 idle days) never outlives it.
+    expect(stored.registrationExpiresAt - stored.registrationDate).toBe(180 * 86_400);
+  });
+
+  it('limits the sign-in pages per IP, before anything reaches the API, and nothing else', async () => {
+    const limiter = fakeLimiter(2);
+    const registration = fakeLimiter(100);
+    const clientId = await registerClient();
+    extraEnv = { RATE_LIMIT_AUTHORIZE: limiter.binding, RATE_LIMIT_REGISTER: registration.binding };
+    const page = await openAuthorize(clientId);
+    await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    await call(new Request(`${ORIGIN}/authorize/google/callback?state=${'x'.repeat(43)}&code=c`, { headers: { 'CF-Connecting-IP': USER_IP } }));
+    // The page was opened without the header Cloudflare sets: one shared bucket.
+    expect(limiter.keys).toEqual(['unknown', USER_IP, USER_IP]);
+    const sendsBefore = backend.calls.filter((entry) => entry.path === '/auth/email/send').length;
+
+    const refused = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('Retry-After')).toBe('60');
+    expect(refused.headers.get('Content-Type')).toContain('text/html');
+    expect(await refused.text()).toContain('Too many requests');
+    expect(backend.calls.filter((entry) => entry.path === '/auth/email/send')).toHaveLength(sendsBefore);
+
+    // Discovery, the token endpoint and the MCP endpoint are not these limits' business.
+    const counted = limiter.keys.length + registration.keys.length;
+    await call(new Request(`${ORIGIN}/.well-known/oauth-authorization-server`));
+    await call(new Request(`${ORIGIN}/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=x' }));
+    await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }));
+    expect(limiter.keys.length + registration.keys.length).toBe(counted);
   });
 });
 
@@ -938,8 +1107,14 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     await initialize(accessToken);
     const listed = (await rpc(accessToken, 'tools/list')).result.tools as Array<{ name: string; description: string; inputSchema: any }>;
     const createScan = listed.find((entry) => entry.name === 'create_scan')!;
-    expect(createScan.description).toContain('Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes on api.spacecontext.app, the API states its own limit in GET /v1)');
-    expect(createScan.inputSchema.properties.video.description).toBe('With source video: up to 4 GB and 10 minutes on api.spacecontext.app (the API states its limit in GET /v1).');
+    // 4 GB on the hosted API, and the limit that holds is the one the API states, and says when it refuses.
+    expect(createScan.description).toContain(
+      'Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes on api.spacecontext.app; the limit that holds is the one the API states in GET /v1, limits.max_video_bytes, and a bigger video is refused when the scan is created, with the limit in the error)'
+    );
+    expect(createScan.inputSchema.properties.video.description).toBe(
+      'With source video: up to 4 GB and 10 minutes on api.spacecontext.app. The limit that holds is limits.max_video_bytes of GET /v1; a bigger video is refused when the scan is created, with the limit in the error.'
+    );
+    expect(createScan.inputSchema.properties.video.properties.content_length.description).toContain('The limit that holds is the one the API states in GET /v1 (limits.max_video_bytes)');
     // A browser's WebM fails only where the API has no ffmpeg of its own.
     expect(createScan.inputSchema.properties.video.properties.content_type.description).toContain('where the API reads videos with its own ffmpeg (limits.max_video_bytes of GET /v1 above 100 MiB) it is measured and read; elsewhere it fails with VIDEO_UNREADABLE');
     expect(createScan.inputSchema.properties.video.properties.content_length.maximum).toBe(4 * GB);
@@ -1105,9 +1280,15 @@ describe('sign-in with Google and Apple', () => {
     expect(google.searchParams.get('client_id')).toBe('web.apps.googleusercontent.com');
     expect(google.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/authorize/google/callback`);
     const state = google.searchParams.get('state')!;
+    // The sign-in is bound to this browser by a cookie of its own, sent back on Google's GET.
+    const binding = start.headers.getSetCookie().find((cookie) => cookie.startsWith('__Host-sc-login-'))!;
+    expect(binding).toMatch(/; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);
+    const browser = browserCookies(page.cookie, start);
 
-    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`, { headers: { Cookie: page.cookie } }));
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`, { headers: { Cookie: browser } }));
     expect(back.status).toBe(200);
+    // Its work done, the binding cookie is cleared.
+    expect(back.headers.getSetCookie().some((cookie) => cookie.startsWith(binding.split('=')[0]!) && /Max-Age=0/.test(cookie))).toBe(true);
     const consent = await back.text();
     expect(consent).toContain('Signed in with Google as <strong>relay@privaterelay.appleid.com</strong>');
     expect(consent).not.toContain('name="code"');
@@ -1116,8 +1297,8 @@ describe('sign-in with Google and Apple', () => {
     expect(backend.calls.find((entry) => entry.path === '/auth/google')!.body).toEqual({ id_token: 'google.id.token' });
     const ticket = /name="ticket" value="([^"]+)"/.exec(consent)![1]!;
 
-    // The state works once.
-    const replayed = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`));
+    // The state works once, even in the browser that started it.
+    const replayed = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`, { headers: { Cookie: browser } }));
     expect(replayed.status).toBe(400);
 
     const approved = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
@@ -1142,12 +1323,14 @@ describe('sign-in with Google and Apple', () => {
     expect(apple.searchParams.get('response_mode')).toBe('form_post');
     expect(apple.searchParams.get('client_id')).toBe('it.example.web');
     const hashedNonce = apple.searchParams.get('nonce')!;
+    // Apple comes back with a cross-site form post, which carries no Lax cookie.
+    expect(start.headers.getSetCookie().find((cookie) => cookie.startsWith('__Host-sc-login-'))).toMatch(/; Secure; HttpOnly; SameSite=None; Max-Age=600$/);
 
-    // Posted by Apple's page: another origin, no cookie.
+    // Posted by Apple's page: another origin, with only the binding cookie of the sign-in.
     const back = await call(
       new Request(`${ORIGIN}/authorize/apple/callback`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://appleid.apple.com' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://appleid.apple.com', Cookie: browserCookies('', start) },
         body: new URLSearchParams({ state: apple.searchParams.get('state')!, code: 'c', id_token: 'apple.id.token', user: JSON.stringify({ name: { firstName: 'Grace', lastName: 'Hopper' } }) }).toString(),
       })
     );
@@ -1160,6 +1343,119 @@ describe('sign-in with Google and Apple', () => {
     expect(await sha256Hex(sent.nonce)).toBe(hashedNonce);
   });
 
+  it('finishes a sign-in only in the browser that started it, so a leaked callback URL signs no one in', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    let exchanged = 0;
+    vi.stubGlobal('fetch', async () => {
+      exchanged += 1;
+      return json({ id_token: 'google.id.token' });
+    });
+    const page = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+    const callbackUrl = `${ORIGIN}/authorize/google/callback?state=${state}&code=victim-code`;
+    const binding = browserCookies('', start);
+
+    // Another browser opens the victim's callback URL first: without the cookie, or with a made-up value.
+    const elsewhere = await call(new Request(callbackUrl));
+    expect(elsewhere.status).toBe(400);
+    expect(await elsewhere.text()).toContain('started in another browser');
+    const forged = await call(new Request(callbackUrl, { headers: { Cookie: `${binding.split('=')[0]}=${'z'.repeat(43)}` } }));
+    expect(forged.status).toBe(400);
+    expect(await forged.text()).not.toContain('name="ticket"');
+    // Nothing was exchanged or signed in.
+    expect(exchanged).toBe(0);
+    expect(backend.calls.some((entry) => entry.path === '/auth/google')).toBe(false);
+
+    // The sign-in was not spent: the browser that started it finishes it.
+    const back = await call(new Request(callbackUrl, { headers: { Cookie: browserCookies(page.cookie, start) } }));
+    expect(back.status).toBe(200);
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+    const approved = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
+    expect(approved.status).toBe(302);
+    expect(approved.headers.get('Location')!.startsWith(REDIRECT)).toBe(true);
+  });
+
+  it('refuses a provider ticket next to any consent handle but its own: no grant for another client with this account', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    vi.stubGlobal('fetch', async () => json({ id_token: 'google.id.token' }));
+    // The account owner signs in with Google to connect Claude.
+    const victim = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: victim.handle, oauth: victim.oauth }, victim.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=c`, { headers: { Cookie: browserCookies(victim.cookie, start) } }));
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+
+    // Someone who got hold of the ticket pairs it with a consent handle of their own
+    // client, bound to their own browser: the reviewer's attack.
+    const attacker = await openAuthorize(await registerClient('Evil', EVIL_REDIRECT), EVIL_REDIRECT);
+    for (const action of ['approve', 'deny']) {
+      const paired = await post('/authorize/approve', { handle: attacker.handle, oauth: attacker.oauth, ticket, action, sensitive: '1' }, attacker.cookie);
+      expect(paired.status).toBe(400);
+      expect(await paired.text()).toContain('Request expired');
+      expect(paired.headers.get('Location')).toBeNull();
+    }
+    expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session')).toBe(false);
+
+    // The ticket still works for the request it was issued for.
+    const approved = await post('/authorize/approve', { handle: victim.handle, oauth: victim.oauth, ticket, action: 'approve' }, victim.cookie);
+    expect(approved.status).toBe(302);
+    expect(approved.headers.get('Location')!.startsWith(REDIRECT)).toBe(true);
+    expect(backend.calls.find((entry) => entry.path === '/keys')!.headers.get('Authorization')).toBe('Bearer scs_social');
+  });
+
+  it('keeps sign-ins in progress sealed in KV, under a hash of the id only the browser holds', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    vi.stubGlobal('fetch', async () => json({ id_token: 'google.id.token' }));
+    const kv = (env as unknown as Env).OAUTH_KV;
+    const page = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+
+    // The pending sign-in: named by the state's hash, and neither the consent handle nor the request readable.
+    expect(await kv.get(`sc-login:${state}`)).toBeNull();
+    const login = (await kv.get(`sc-login:${await sha256Hex(state)}`))!;
+    expect(login).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(login).not.toContain(page.handle);
+    expect(login).not.toContain('client_id');
+
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=c`, { headers: { Cookie: browserCookies(page.cookie, start) } }));
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+    expect(await kv.get(`sc-login:${await sha256Hex(state)}`)).toBeNull();
+    // The ticket: the console session it holds is not in KV in the clear, nor is the account.
+    expect(await kv.get(`sc-ticket:${ticket}`)).toBeNull();
+    const sealed = (await kv.get(`sc-ticket:${await sha256Hex(ticket)}`))!;
+    expect(sealed).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    for (const secret of [SESSION.session_token, SESSION.user.email, SESSION.user.id, page.handle]) expect(sealed).not.toContain(secret);
+
+    // Only the ticket opens it.
+    const approved = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
+    expect(approved.status).toBe(302);
+    expect(backend.calls.find((entry) => entry.path === '/keys')!.headers.get('Authorization')).toBe('Bearer scs_social');
+    expect(await kv.get(`sc-ticket:${await sha256Hex(ticket)}`)).toBeNull();
+  });
+
+  it('ends the console session of a spent ticket when the request cannot be completed', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    vi.stubGlobal('fetch', async () => json({ id_token: 'google.id.token' }));
+    const page = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=c`, { headers: { Cookie: browserCookies(page.cookie, start) } }));
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+
+    // The form comes back with a request the library refuses.
+    const broken = await post('/authorize/approve', { handle: page.handle, oauth: 'response_type=code&client_id=nope', ticket, action: 'approve' }, page.cookie);
+    expect(broken.status).toBe(400);
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session' && entry.headers.get('Authorization') === 'Bearer scs_social')).toBe(true);
+    expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
+  });
+
   it('goes back to the email page when the provider is cancelled or refused, and ends the session on deny', async () => {
     extraEnv = PROVIDERS;
     backend = fakeBackend({ 'POST /auth/google': () => json({ error: { code: 'INVALID_CREDENTIALS', message: 'no', request_id: 'r' } }, 401), 'POST /auth/apple': () => json(SESSION) });
@@ -1168,19 +1464,19 @@ describe('sign-in with Google and Apple', () => {
 
     const cancelled = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
     const cancelState = new URL(cancelled.headers.get('Location')!).searchParams.get('state')!;
-    const backFromCancel = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${cancelState}&error=access_denied`));
+    const backFromCancel = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${cancelState}&error=access_denied`, { headers: { Cookie: browserCookies(page.cookie, cancelled) } }));
     expect(await backFromCancel.text()).toContain('Sign-in with Google was cancelled.');
 
     const refusedStart = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
     const refusedState = new URL(refusedStart.headers.get('Location')!).searchParams.get('state')!;
-    const refusedBack = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${refusedState}&code=x`));
+    const refusedBack = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${refusedState}&code=x`, { headers: { Cookie: browserCookies(page.cookie, refusedStart) } }));
     expect(await refusedBack.text()).toContain('Sign-in with Google failed');
     expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
 
     const appleStart = await post('/authorize/apple', { handle: page.handle, oauth: page.oauth }, page.cookie);
     const appleState = new URL(appleStart.headers.get('Location')!).searchParams.get('state')!;
     const consent = await (
-      await call(new Request(`${ORIGIN}/authorize/apple/callback`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ state: appleState, id_token: 'apple.id.token' }).toString() }))
+      await call(new Request(`${ORIGIN}/authorize/apple/callback`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: browserCookies('', appleStart) }, body: new URLSearchParams({ state: appleState, id_token: 'apple.id.token' }).toString() }))
     ).text();
     const ticket = /name="ticket" value="([^"]+)"/.exec(consent)![1]!;
     const denied = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'deny' }, page.cookie);
