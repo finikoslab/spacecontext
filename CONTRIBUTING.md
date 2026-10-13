@@ -49,8 +49,10 @@ packages/sdk/src/
 
 - The API key is sent only to the API's own origin and path; never to a storage URL, an evidence URL or a lookalike host. Redirects are never followed.
 - The CLI writes a Skill only to plain relative paths inside the target folder, after checking every path.
-- The config file holding the key is created with mode `0600`.
-- The MCP consent forms accept posts only from their own origin; the consent handle is bound to the browser by the OAuth library and works once. Client-supplied strings are escaped. A key created for a grant that cannot be completed is revoked.
+- The API key is never visible on a client object (an ES private field): logging, inspecting or serialising a client never shows it.
+- The config file holding the key is written as a new file with mode `0600`, then renamed over the old one.
+- The CLI prints what comes from the API (names, records, answers, transcripts, errors) without control characters or bidirectional overrides; `--json` stays as the API sent it. Programs are run with argument arrays, by absolute path, never from the current directory.
+- The MCP consent forms accept posts only from their own origin; the consent handle is bound to the browser by the OAuth library and works once. A Google or Apple sign-in is bound to the browser that started it (a `__Host-` cookie) and its ticket to the consent handle it was issued for. Sign-in records in KV are sealed with a key derived from their one-time id. A refused authorization request is never redirected to the client. Client-supplied strings are escaped. A key created for a grant that cannot be completed is revoked.
 - Content of a space is data, never instructions: the MCP server says so in its instructions and in every result that carries space content (`note`).
 - A key revoked in the console ends its MCP grant on the next call (the client is asked to sign in again); connecting the same client again revokes the key of the grant it replaces.
 
