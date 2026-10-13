@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import type { Env } from '../src/env';
-import { redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/auth/html';
+import { emailPage, redirectSource, SUBMIT_ONCE_SCRIPT } from '../src/auth/html';
 import { CARD_TOOLS } from '../src/server/card';
 import { keysOfReplacedGrants } from '../src/auth/authorize';
 
@@ -561,6 +561,30 @@ describe('authorization', () => {
     expect(page.html).not.toContain('<script>alert(1)</script>');
     expect(page.html).toContain('&#60;script&#62;');
     expect(page.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+  });
+
+  it('leads with where the access goes, and shows the name a client chose capped and marked as not verified', async () => {
+    const page = await openAuthorize(await registerClient(`Claude ${'A'.repeat(200)}`));
+    const who = /<div class="who">([\s\S]*?)<\/div>/.exec(page.html)![1]!;
+    expect(who.startsWith('<p>The assistant will receive access at <strong class="host">claude.example</strong></p>')).toBe(true);
+    expect(who).toContain(`It calls itself <strong>Claude ${'A'.repeat(52)}…</strong> (name not verified).`);
+    expect(who).not.toContain('A'.repeat(53));
+
+    // Capped by characters before escaping, and never through the middle of an emoji.
+    const escaped = await openAuthorize(await registerClient('<'.repeat(100)));
+    expect(escaped.html).toContain(`<strong>${'&#60;'.repeat(59)}…</strong>`);
+    expect(escaped.html).not.toContain('&#60;'.repeat(60));
+    const emoji = await openAuthorize(await registerClient('😀'.repeat(70)));
+    expect(emoji.html).toContain(`<strong>${'😀'.repeat(59)}…</strong>`);
+
+    // A client known by its metadata URL has its name checked against its domain.
+    const cimd = await emailPage({
+      consent: { clientId: 'https://claude.ai/oauth/mcp-client.json', clientName: 'Claude', clientDomain: 'claude.ai', redirectUri: 'https://claude.ai/api/mcp/auth_callback', redirectHost: 'claude.ai', redirectIsLoopback: false, scope: ['spaces:read'] },
+      handle: 'h',
+      oauth: 'o',
+    }).text();
+    expect(cimd).toContain('It is <strong>Claude</strong>, as published by <strong>claude.ai</strong>.');
+    expect(cimd).not.toContain('not verified');
   });
 
   it('revokes the key when the authorization cannot be completed', async () => {

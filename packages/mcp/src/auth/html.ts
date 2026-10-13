@@ -17,7 +17,7 @@ label{display:block;margin:16px 0 6px;font-weight:600}input[type=email],input[ty
 .actions{display:flex;gap:10px;margin-top:20px}.decide{flex-direction:row-reverse}button{flex:1;padding:11px;border-radius:10px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}code{font-size:.9em}
 button.link{flex:none;padding:0;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;background:none}.resend{margin-top:8px}
-.who{border:1px solid var(--line);border-radius:10px;padding:12px;margin:16px 0}.warn{color:var(--error);font-size:.9rem}
+.who{border:1px solid var(--line);border-radius:10px;padding:12px;margin:16px 0}.who p{margin:4px 0;overflow-wrap:anywhere}.host{font-size:1.1rem}.warn{color:var(--error);font-size:.9rem}
 .providers{display:grid;gap:10px;margin:18px 0 6px}.providers form{margin:0}.providers button{width:100%;font-weight:600}
 .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.85rem;margin:14px 0 0}.or:before,.or:after{content:"";flex:1;border-top:1px solid var(--line)}`;
 
@@ -60,13 +60,31 @@ export function page(title: string, body: string, status = 200, headers?: Header
   return new Response(html, { status, headers: responseHeaders });
 }
 
-/** Who is asking and where the access goes: the facts a consent page must show. */
+/** The most of a client's name a page shows: a long name could crowd out the facts around it. */
+const MAX_CLIENT_NAME = 60;
+
+/** The name capped by characters, not UTF-16 units, so an emoji is never cut in half. */
+function shownName(name: string): string {
+  const chars = Array.from(name.trim());
+  return chars.length > MAX_CLIENT_NAME ? `${chars.slice(0, MAX_CLIENT_NAME - 1).join('').trimEnd()}…` : chars.join('');
+}
+
+/**
+ * Who is asking and where the access goes: the facts a consent page must show.
+ * Where the access goes leads: it is the one fact a client cannot make up. The
+ * name is whatever the client chose to call itself, checked against a domain
+ * only for a client known by its metadata URL (CIMD), so any other is marked
+ * as not verified.
+ */
 function requester(consent: ConsentDescription): string {
-  const domain = consent.clientDomain ? ` <span class="muted">(${escapeHtml(consent.clientDomain)})</span>` : '';
+  const name = `<strong>${escapeHtml(shownName(consent.clientName))}</strong>`;
+  const who = consent.clientDomain
+    ? `It is ${name}, as published by <strong>${escapeHtml(consent.clientDomain)}</strong>.`
+    : `It calls itself ${name} (name not verified).`;
   const loopback = consent.redirectIsLoopback
     ? '<p class="warn">The access goes to a program on this computer. Approve only if you started this connection yourself.</p>'
     : '';
-  return `<div class="who"><strong>${escapeHtml(consent.clientName)}</strong>${domain}<br><span class="muted">will receive access at ${escapeHtml(consent.redirectHost)}</span>${loopback}</div>`;
+  return `<div class="who"><p>The assistant will receive access at <strong class="host">${escapeHtml(consent.redirectHost)}</strong></p><p class="muted">${who}</p>${loopback}</div>`;
 }
 
 function hidden(fields: Record<string, string>): string {
