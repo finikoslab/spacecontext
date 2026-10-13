@@ -16,6 +16,13 @@ export interface Env {
   GOOGLE_WEB_CLIENT_SECRET?: string;
   /** Sign in with Apple: the Services ID (return URL `${PUBLIC_URL}/authorize/apple/callback`). */
   APPLE_SERVICES_ID?: string;
+  /**
+   * Workers Rate Limiting, per client IP: client registration, and the sign-in
+   * pages. Declared in production and staging; without them (local, tests)
+   * nothing is limited.
+   */
+  RATE_LIMIT_REGISTER?: RateLimit;
+  RATE_LIMIT_AUTHORIZE?: RateLimit;
 }
 
 /** What a grant carries, encrypted by the OAuth library with the token. */

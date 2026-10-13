@@ -699,6 +699,81 @@ describe('authorization', () => {
   });
 });
 
+describe('abuse limits', () => {
+  /** A Workers Rate Limiting binding, faked: `allowed` requests per key, then refused. */
+  function fakeLimiter(allowed: number) {
+    const keys: string[] = [];
+    const binding = {
+      limit: async ({ key }: { key: string }) => {
+        keys.push(key);
+        return { success: keys.filter((seen) => seen === key).length <= allowed };
+      },
+    };
+    return { binding: binding as RateLimit, keys };
+  }
+
+  function register(ip: string, origin?: string) {
+    return call(
+      new Request(`${ORIGIN}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, ...(origin ? { Origin: origin } : {}) },
+        body: JSON.stringify({ redirect_uris: [REDIRECT], client_name: 'Claude', token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }),
+      })
+    );
+  }
+
+  it('limits client registration per IP, with Retry-After', async () => {
+    const limiter = fakeLimiter(2);
+    extraEnv = { RATE_LIMIT_REGISTER: limiter.binding };
+    expect((await register('198.51.100.1')).status).toBe(201);
+    expect((await register('198.51.100.1')).status).toBe(201);
+    const refused = await register('198.51.100.1', 'https://inspector.example');
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('Retry-After')).toBe('60');
+    expect(((await refused.json()) as { error: string }).error).toBe('too_many_requests');
+    // A client registering from a browser can read why.
+    expect(refused.headers.get('Access-Control-Allow-Origin')).toBe('https://inspector.example');
+    expect(refused.headers.get('Access-Control-Expose-Headers')).toContain('Retry-After');
+    // Another address has its own budget.
+    expect((await register('198.51.100.2')).status).toBe(201);
+    expect(limiter.keys).toEqual(['198.51.100.1', '198.51.100.1', '198.51.100.1', '198.51.100.2']);
+  });
+
+  it('forgets a registered client after 180 days without a token request, twice the idle life of a grant', async () => {
+    const clientId = await registerClient();
+    const stored = (await (env as unknown as Env).OAUTH_KV.get(`client:${clientId}`, 'json')) as { registrationDate: number; registrationExpiresAt: number };
+    // Renewed by the library on a token request past half of it: a grant (90 idle days) never outlives it.
+    expect(stored.registrationExpiresAt - stored.registrationDate).toBe(180 * 86_400);
+  });
+
+  it('limits the sign-in pages per IP, before anything reaches the API, and nothing else', async () => {
+    const limiter = fakeLimiter(2);
+    const registration = fakeLimiter(100);
+    const clientId = await registerClient();
+    extraEnv = { RATE_LIMIT_AUTHORIZE: limiter.binding, RATE_LIMIT_REGISTER: registration.binding };
+    const page = await openAuthorize(clientId);
+    await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    await call(new Request(`${ORIGIN}/authorize/google/callback?state=${'x'.repeat(43)}&code=c`, { headers: { 'CF-Connecting-IP': USER_IP } }));
+    // The page was opened without the header Cloudflare sets: one shared bucket.
+    expect(limiter.keys).toEqual(['unknown', USER_IP, USER_IP]);
+    const sendsBefore = backend.calls.filter((entry) => entry.path === '/auth/email/send').length;
+
+    const refused = await post('/authorize/code', { handle: page.handle, oauth: page.oauth, email: 'owner@example.com' }, page.cookie);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('Retry-After')).toBe('60');
+    expect(refused.headers.get('Content-Type')).toContain('text/html');
+    expect(await refused.text()).toContain('Too many requests');
+    expect(backend.calls.filter((entry) => entry.path === '/auth/email/send')).toHaveLength(sendsBefore);
+
+    // Discovery, the token endpoint and the MCP endpoint are not these limits' business.
+    const counted = limiter.keys.length + registration.keys.length;
+    await call(new Request(`${ORIGIN}/.well-known/oauth-authorization-server`));
+    await call(new Request(`${ORIGIN}/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=x' }));
+    await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }));
+    expect(limiter.keys.length + registration.keys.length).toBe(counted);
+  });
+});
+
 describe('MCP tools', () => {
   it('needs a token, and points clients to the authorization server', async () => {
     const response = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }));

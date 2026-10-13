@@ -2,6 +2,7 @@ import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { iconResponse } from './brand.js';
 import { createMcpHandler } from 'agents/mcp/server';
 import { authHandler, REQUIRED_SCOPES, SCOPES_SUPPORTED } from './auth/authorize.js';
+import { errorPage } from './auth/html.js';
 import { apiClient } from './api/backend.js';
 import type { Env, GrantProps } from './env.js';
 import { serverCard } from './server/card.js';
@@ -53,7 +54,38 @@ function provider(publicUrl: string): OAuthProvider<Env> {
     // A grant lives while it is used: three months after its last refresh.
     refreshTokenTTL: 90 * 86_400,
     refreshTokenIdleTTL: 90 * 86_400,
+    // A client registered dynamically (anonymously) is deleted once unused. The
+    // library renews a registration on a token request only past half its life,
+    // so it lasts twice a grant's idle life: a client still holding a live grant
+    // never finds its registration gone.
+    clientRegistrationTTL: 180 * 86_400,
   });
+}
+
+/**
+ * Requests per minute and client IP (`ratelimits` in wrangler.jsonc): client
+ * registration is anonymous, and every sign-in page writes to KV and calls the
+ * API, so neither may be driven in a loop. Without a binding, no limit.
+ */
+async function rateLimited(request: Request, env: Env): Promise<Response | null> {
+  const { pathname } = new URL(request.url);
+  const registering = request.method === 'POST' && pathname === '/register';
+  const limiter = registering ? env.RATE_LIMIT_REGISTER : pathname === '/authorize' || pathname.startsWith('/authorize/') ? env.RATE_LIMIT_AUTHORIZE : undefined;
+  if (!limiter) return null;
+  // Cloudflare sets it on every request to the custom domain; an IPv6 address
+  // fits the limiter's 64-character key.
+  const ip = (request.headers.get('CF-Connecting-IP') ?? 'unknown').slice(0, 64);
+  if ((await limiter.limit({ key: ip })).success) return null;
+  const headers = new Headers({ 'Retry-After': '60', 'Cache-Control': 'no-store' });
+  if (!registering) return errorPage('Too many requests', 'Too many requests from your network. Wait a minute and try again.', 429, headers);
+  // Readable by a client registering from a browser, like the library's own answers.
+  const origin = request.headers.get('Origin');
+  if (origin) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Expose-Headers', 'Retry-After');
+    headers.set('Vary', 'Origin');
+  }
+  return Response.json({ error: 'too_many_requests', error_description: 'Too many registrations from this address. Try again in a minute.' }, { status: 429, headers });
 }
 
 const providers = new Map<string, OAuthProvider<Env>>();
@@ -61,20 +93,20 @@ const providers = new Map<string, OAuthProvider<Env>>();
 const SERVER_CARD_PATH = '/.well-known/mcp/server-card.json';
 
 export default {
-  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // The Space Context mark, for clients and browsers that show the server's icon.
     if (request.method === 'GET') {
       const icon = iconResponse(new URL(request.url).pathname);
-      if (icon) return Promise.resolve(icon);
+      if (icon) return icon;
     }
     // The MCP Server Card: public discovery, before any sign-in.
     if (request.method === 'GET' && new URL(request.url).pathname === SERVER_CARD_PATH) {
-      return Promise.resolve(
-        Response.json(serverCard(new URL(env.PUBLIC_URL).origin), {
-          headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' },
-        })
-      );
+      return Response.json(serverCard(new URL(env.PUBLIC_URL).origin), {
+        headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' },
+      });
     }
+    const limited = await rateLimited(request, env);
+    if (limited) return limited;
     let current = providers.get(env.PUBLIC_URL);
     if (!current) {
       current = provider(env.PUBLIC_URL);
