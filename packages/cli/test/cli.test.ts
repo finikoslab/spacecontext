@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, truncate, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -117,6 +117,59 @@ describe('spacecontext CLI', () => {
     expect(h.stderr()).toContain('Unknown command "fly"');
   });
 
+  it('refuses arguments it would ignore, and never echoes a key typed in the wrong place', async () => {
+    const h = harness([]);
+    expect(await main(['cancel', SCAN_ID, `scn_${'e'.repeat(32)}`], h.io)).toBe(2);
+    expect(h.stderr()).toContain('Unexpected argument');
+    expect(await main(['delete-space', SPACE_ID, 'other'], h.io)).toBe(2);
+    expect(await main(['scan', 'a.jpg', 'b.jpg', '--name', 'Flat'], h.io)).toBe(2);
+    expect(h.stderr()).toContain('put them in a folder');
+    expect(await main(['whoami', 'extra'], h.io)).toBe(2);
+    expect(await main(['login', KEY], h.io)).toBe(2);
+    expect(h.stderr()).toContain('--key');
+    expect(await main([KEY], h.io)).toBe(2);
+    expect(h.stderr()).toContain('it looks like an API key');
+    // Nothing reached the API, and the key is nowhere in the output.
+    expect(h.calls).toEqual([]);
+    expect(h.stderr()).not.toContain(KEY);
+
+    const video = path.join(directory, 'v.mp4');
+    await writeFile(video, 'x');
+    const keyed = harness([], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scan', video, '--space', SPACE_ID, '--type', 'apartment'], keyed.io)).toBe(2);
+    expect(keyed.stderr()).toContain('--type sets the type of a new space');
+    expect(await main(['scan', video, '--space', SPACE_ID, '--out', 'x'], keyed.io)).toBe(2);
+    expect(keyed.stderr()).toContain('--format markdown');
+    expect(await main(['scan', video, '--space', SPACE_ID, '--no-wait', '--format', 'markdown'], keyed.io)).toBe(2);
+    expect(keyed.calls).toEqual([]);
+  });
+
+  it('removes escape sequences from what the API sends before printing it at a terminal, and keeps --json as sent', async () => {
+    const hostile = 'Flat\u001b]52;c;cGF5bG9hZA==\u0007\u001b]8;;https://evil.example/\u001b\\link\u001b]8;;\u001b\\\u001b[2J\u009b31m\u202eredli\u2066';
+    const space = { ...document, space: { ...document.space, name: hostile }, items: [{ id: 'itm_1', area_id: 'area_1', name: `Oven${'\u001b'}[H` }] };
+    const h = harness([
+      (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(space) : undefined),
+      (call) =>
+        call.method === 'GET' && call.path === '/spaces'
+          ? json({ object: 'list', data: [{ id: SPACE_ID, name: hostile, source: 'api', latest_scan: null }], next_cursor: null })
+          : undefined,
+      (call) =>
+        call.method === 'GET' && call.path === '/me'
+          ? json({ error: { code: 'INVALID_TOKEN', message: 'bad\u001b]0;pwned\u0007', request_id: 'req\u001b[2J' } }, 401)
+          : undefined,
+    ], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID], h.io)).toBe(0);
+    expect(await main(['spaces'], h.io)).toBe(0);
+    expect(await main(['whoami'], h.io)).toBe(1);
+    const printed = h.stdout() + h.stderr();
+    expect(printed).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/);
+    expect(h.stdout()).toContain('Flat]52;c;cGF5bG9hZA==');
+
+    const raw = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID, '--json'], raw.io)).toBe(0);
+    expect(JSON.parse(raw.stdout()).space.name).toBe(hostile);
+  });
+
   it('logs in with a key it has checked, stores it for the owner only, and logs out', async () => {
     const h = harness([me]);
     expect(await main(['whoami'], h.io)).toBe(2);
@@ -212,6 +265,19 @@ describe('spacecontext CLI', () => {
     await expect(readFile(path.join(directory, 'config', 'config.json'))).rejects.toThrow();
   });
 
+  it('replaces a key file left readable by others, rather than writing the key into it', async () => {
+    const configDir = path.join(directory, 'config');
+    await mkdir(configDir, { recursive: true });
+    const file = path.join(configDir, 'config.json');
+    await writeFile(file, '{}', { mode: 0o644 });
+    const h = harness([me]);
+    expect(await main(['login', '--key', KEY], h.io)).toBe(0);
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(await readFile(file, 'utf8')).apiKey).toBe(KEY);
+    // No temporary file is left next to it.
+    expect(await readdir(configDir)).toEqual(['config.json']);
+  });
+
   it('does not save a key the API refuses', async () => {
     const h = harness([() => json({ error: { code: 'INVALID_TOKEN', message: 'Invalid token', request_id: 'req_9' } }, 401)]);
     expect(await main(['login', '--key', KEY], h.io)).toBe(1);
@@ -303,6 +369,10 @@ describe('spacecontext CLI', () => {
     await writeFile(path.join(frames, 'frame-10.jpg'), new Uint8Array([0xff, 0xd8, 10]));
     await writeFile(path.join(frames, 'frame-2.png'), new Uint8Array([0x89, 0x50, 2]));
     await writeFile(path.join(frames, 'notes.txt'), 'ignored');
+    // Not photos: a resource file of another system, and a link that could point anywhere.
+    await writeFile(path.join(frames, '._frame-2.png'), 'resource fork');
+    await symlink(path.join(directory, 'secret.jpg'), path.join(frames, 'frame-1.jpg'));
+    await writeFile(path.join(directory, 'secret.jpg'), 'not to be sent');
 
     const h = harness([
       (call) => (call.method === 'POST' && call.path === '/spaces' ? json({ object: 'space', id: SPACE_ID, name: JSON.parse(String(call.body)).name }, 201) : undefined),
@@ -380,6 +450,14 @@ describe('spacecontext CLI', () => {
     expect(await main(['markdown', SPACE_ID, '--transcript', '--out', 'flat.md'], h.io)).toBe(0);
     expect(await readFile(path.join(directory, 'flat.md'), 'utf8')).toBe('# Flat transcript\n');
     expect(h.stderr()).toContain('Written to ');
+
+    // --json: only JSON on stdout, the page or the file written.
+    const asJson = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['markdown', SPACE_ID, '--json'], asJson.io)).toBe(0);
+    expect(JSON.parse(asJson.stdout())).toEqual({ markdown: '# Flat \n' });
+    expect(await main(['markdown', SPACE_ID, '--json', '--out', 'flat.md'], asJson.io)).toBe(0);
+    expect(JSON.parse(asJson.stdout().slice(asJson.stdout().indexOf('}\n') + 2))).toEqual({ file: path.join(directory, 'flat.md') });
+    expect(asJson.stderr()).toBe('');
 
     const following = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
     expect(await main(['scan-status', SCAN_ID, '--follow'], following.io)).toBe(0);

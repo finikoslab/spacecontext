@@ -57,6 +57,12 @@ export function hints(error: SpaceContextError, context: ErrorContext): string[]
       if (error.details.daily_limit !== undefined) return [`A daily limit: it resets at midnight UTC (${LIMITS_URL})`];
       return [`Too many requests: try again in ${wait(error)}`];
     case 'SCANS_IN_PROGRESS':
+      // At creation: too many scans created and never started (an upload stopped half way leaves one).
+      if (typeof error.details.max_open_scans === 'number') {
+        return [
+          `${error.details.max_open_scans} scans of the account were created and never started: cancel them\n(\`spacecontext cancel <scan-id>\`), or wait: they are removed a day after they were created`,
+        ];
+      }
       return ['Ten scans of the account are already running: start again when one finishes'];
     case 'NOT_FOUND':
       if (context.keyMode === 'test') return ['A test key sees only the demo (spc_demo) and its own test spaces: `spacecontext spaces`'];

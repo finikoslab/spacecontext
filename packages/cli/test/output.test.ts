@@ -194,6 +194,13 @@ describe('errors say what to do next', () => {
     }
   });
 
+  it('tells scans waiting for their upload from scans running, when the account has too many', () => {
+    const open = new SpaceContextError('waiting', 429, 'SCANS_IN_PROGRESS', 'req_1', { max_open_scans: 20 });
+    expect(hints(open, { command: 'scan' }).join('\n')).toContain('20 scans of the account were created and never started');
+    const running = new SpaceContextError('running', 429, 'SCANS_IN_PROGRESS', 'req_1', {});
+    expect(hints(running, { command: 'scan' })).toEqual(['Ten scans of the account are already running: start again when one finishes']);
+  });
+
   it('tells how to follow a scan that goes on after Ctrl+C', async () => {
     const handlers: Array<() => void> = [];
     const h = harness(scanRoutes, {

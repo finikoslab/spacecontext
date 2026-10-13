@@ -55,7 +55,12 @@ export async function scanSource(input: string): Promise<ScanSource> {
     if (!contentType) throw new UsageError(`${input}: expected a video (${VIDEO_EXTENSIONS}) or a directory of frames`);
     return { kind: 'video', file: input, contentType, size: info.size };
   }
-  const names = (await readdir(input)).filter((name) => FRAME_TYPES[path.extname(name).toLowerCase()]);
+  // Regular files only, and no hidden ones: a symlink can point anywhere (it is
+  // never followed out of the folder), and a volume formatted on another system
+  // brings `._IMG_0001.jpg` resource files that are not photos.
+  const names = (await readdir(input, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && !entry.name.startsWith('.') && FRAME_TYPES[path.extname(entry.name).toLowerCase()])
+    .map((entry) => entry.name);
   names.sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   if (names.length === 0) throw new UsageError(`${input}: no .jpg, .png or .webp frames found`);
   if (names.length > MAX_FRAMES) throw new UsageError(`${input}: ${names.length} frames, at most ${MAX_FRAMES} are accepted`);

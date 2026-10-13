@@ -154,6 +154,33 @@ export function stripAnsi(text: string): string {
   return text.replace(ANSI, '');
 }
 
+/**
+ * Control characters (C0 but tab and newline, DEL, C1) and the bidirectional
+ * overrides and isolates. A terminal runs escape sequences it is given: a
+ * space's name or a transcript written by any client with a `scans:write` key
+ * could set the clipboard (OSC 52), hide where a link goes (OSC 8), retitle the
+ * window or clear the screen and draw something else over the real output.
+ */
+const UNPRINTABLE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/g;
+
+/** Text from the API or from a file name, made safe to print at a terminal. */
+export function safe(text: string): string {
+  return text.replace(UNPRINTABLE, '');
+}
+
+/**
+ * A copy of an API response with every string made `safe`, for human output
+ * (JSON output is escaped by `JSON.stringify` and stays as the API sent it).
+ */
+export function printable<T>(value: T): T {
+  if (typeof value === 'string') return safe(value) as T;
+  if (Array.isArray(value)) return value.map((entry) => printable(entry)) as T;
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, printable(entry)])) as T;
+  }
+  return value;
+}
+
 /** Columns a string takes, colours excluded (one per code point: good enough for names and ids). */
 export function visibleWidth(text: string): number {
   return [...stripAnsi(text)].length;

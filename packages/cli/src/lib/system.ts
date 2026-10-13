@@ -10,7 +10,11 @@ import path from 'node:path';
  * from the API: on Windows it never goes through cmd, which reads `&`, `^` and
  * `%` in it as commands and variables.
  */
-export function browserCommand(url: string, platform: NodeJS.Platform = process.platform): [string, string[]] | null {
+export function browserCommand(
+  url: string,
+  platform: NodeJS.Platform = process.platform,
+  env: Record<string, string | undefined> = process.env
+): [string, string[]] | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -19,17 +23,25 @@ export function browserCommand(url: string, platform: NodeJS.Platform = process.
   }
   const local = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local)) return null;
-  if (platform === 'darwin') return ['open', [parsed.href]];
-  if (platform === 'win32') return ['rundll32', ['url.dll,FileProtocolHandler', parsed.href]];
+  // Absolute paths: Windows looks for a bare program name in the current
+  // directory first, so a `rundll32.exe` in a cloned repository would run.
+  if (platform === 'darwin') return ['/usr/bin/open', [parsed.href]];
+  if (platform === 'win32') {
+    const system = path.win32.join(env.SystemRoot ?? env.SYSTEMROOT ?? 'C:\\Windows', 'System32', 'rundll32.exe');
+    return [system, ['url.dll,FileProtocolHandler', parsed.href]];
+  }
+  // Resolved on PATH by `openUrl` (its place differs between distributions).
   return ['xdg-open', [parsed.href]];
 }
 
 /** Opens a URL in the person's browser, best effort: a failure only means they open it themselves. */
-export function openUrl(url: string): void {
+export async function openUrl(url: string): Promise<void> {
   const command = browserCommand(url);
   if (!command) return;
+  const program = path.isAbsolute(command[0]) ? command[0] : await findExecutable(command[0], process.env);
+  if (!program) return;
   try {
-    spawn(command[0], command[1], { stdio: 'ignore', detached: true }).on('error', () => undefined).unref();
+    spawn(program, command[1], { stdio: 'ignore', detached: true }).on('error', () => undefined).unref();
   } catch {
     // Nothing: the link is printed anyway.
   }

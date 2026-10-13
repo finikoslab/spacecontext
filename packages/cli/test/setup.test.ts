@@ -673,11 +673,14 @@ describe('setup system helpers', () => {
 
   it('opens web pages only, and on Windows without cmd, whatever the URL holds', () => {
     const page = 'https://spacecontext.app/developers/console/authorize/';
-    expect(browserCommand(page, 'darwin')).toEqual(['open', [page]]);
+    // Absolute paths: Windows would run a rundll32.exe found in the current directory first.
+    const rundll32 = 'C:\\Windows\\System32\\rundll32.exe';
+    expect(browserCommand(page, 'darwin')).toEqual(['/usr/bin/open', [page]]);
     expect(browserCommand(page, 'linux')).toEqual(['xdg-open', [page]]);
-    expect(browserCommand(page, 'win32')).toEqual(['rundll32', ['url.dll,FileProtocolHandler', page]]);
+    expect(browserCommand(page, 'win32', { SystemRoot: 'C:\\Windows' })).toEqual([rundll32, ['url.dll,FileProtocolHandler', page]]);
+    expect(browserCommand(page, 'win32', {})![0]).toBe(rundll32);
     // cmd would run what follows & in the URL; rundll32 receives it as one argument.
-    expect(browserCommand('https://example.com/?a=1&calc', 'win32')).toEqual(['rundll32', ['url.dll,FileProtocolHandler', 'https://example.com/?a=1&calc']]);
+    expect(browserCommand('https://example.com/?a=1&calc', 'win32', {})).toEqual([rundll32, ['url.dll,FileProtocolHandler', 'https://example.com/?a=1&calc']]);
     expect(browserCommand('http://localhost:8788/authorize', 'win32')![1][1]).toBe('http://localhost:8788/authorize');
     expect(browserCommand('http://127.0.0.1:3000/', 'linux')).toEqual(['xdg-open', ['http://127.0.0.1:3000/']]);
     for (const url of ['http://spacecontext.app/', 'file:///etc/passwd', 'javascript:alert(1)', 'ms-settings:', 'calc.exe', '\\\\server\\share', '-a Calculator']) {

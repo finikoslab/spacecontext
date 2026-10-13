@@ -3,12 +3,13 @@ import { deviceSignIn, type DeviceToken } from '@spacecontext/sdk';
 import type { Io } from '../cli.js';
 import { configDirectory, setting, signedInConfig, writeConfig } from '../lib/config.js';
 import { openUrl } from '../lib/system.js';
-import { Status, styleFor } from '../terminal/ui.js';
+import { safe, Status, styleFor } from '../terminal/ui.js';
 
 /** Opens a URL unless the caller said never (`openBrowser: null`); undefined uses the system opener. */
 export function openInBrowser(io: Io, url: string): void {
   if (io.openBrowser === null) return;
-  (io.openBrowser ?? openUrl)(url);
+  // Best effort: the link is printed anyway.
+  void Promise.resolve((io.openBrowser ?? openUrl)(url)).catch(() => undefined);
 }
 
 /**
@@ -34,8 +35,8 @@ export async function deviceLogin(
       onCode: ({ userCode, verificationUrl, expiresIn }) => {
         const lines = [
           '',
-          `  ${s.dim('1. Open ')}  ${s.cyan(verificationUrl)}`,
-          `  ${s.dim('2. Enter')}  ${s.bold(s.brand(userCode))}`,
+          `  ${s.dim('1. Open ')}  ${s.cyan(safe(verificationUrl))}`,
+          `  ${s.dim('2. Enter')}  ${s.bold(s.brand(safe(userCode)))}`,
           '',
           `  ${s.dim(`The code is valid for ${Math.round(expiresIn / 60)} minutes. Approve only a code you see here.`)}`,
         ];

@@ -1,4 +1,5 @@
-import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { DEFAULT_API_URL } from './links.js';
@@ -47,13 +48,26 @@ export async function readConfig(directory: string): Promise<StoredConfig> {
   }
 }
 
-/** Written readable by the owner only: the file holds an API key. */
+/**
+ * Written readable by the owner only, the file holds an API key: a new file
+ * with mode 0600 is written next to it, then renamed over it. A crash never
+ * leaves half a file, and the key is never in a file someone else can read
+ * (an existing config.json restored with looser permissions is replaced, not
+ * rewritten).
+ */
 export async function writeConfig(directory: string, config: StoredConfig): Promise<string> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const file = configFile(directory);
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-  // `mode` applies only when the file is created.
-  await chmod(file, 0o600);
+  const temporary = path.join(directory, `.config.json.${process.pid}.${randomUUID().slice(0, 8)}.tmp`);
+  try {
+    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+    // The umask can take bits away from `mode`, never add them; this is for the record.
+    await chmod(temporary, 0o600);
+    await rename(temporary, file);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
   return file;
 }
 

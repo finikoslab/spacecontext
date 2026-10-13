@@ -22,20 +22,27 @@ async function prompt(question: string): Promise<string> {
   }
 }
 
-/** What a command wants said on Ctrl+C (a scan that goes on without the terminal). */
+/**
+ * What a command wants said or cleaned up when it is stopped (a scan that goes
+ * on without the terminal, a compressed copy of a video): on Ctrl+C, and when
+ * the terminal is closed (SIGHUP) or the process is killed (SIGTERM).
+ */
 const interruptHandlers: Array<() => void> = [];
-process.on('SIGINT', () => {
-  // A spinner's line is cleared before anything else is said.
-  if (process.stderr.isTTY) process.stderr.write('\r\u001b[2K');
-  for (const handler of [...interruptHandlers].reverse()) {
-    try {
-      handler();
-    } catch {
-      // Exiting anyway.
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGHUP: 129, SIGTERM: 143 } as const;
+for (const [signal, exitCode] of Object.entries(SIGNAL_EXIT_CODES)) {
+  process.on(signal, () => {
+    // A spinner's line is cleared before anything else is said.
+    if (process.stderr.isTTY) process.stderr.write('\r\u001b[2K');
+    for (const handler of [...interruptHandlers].reverse()) {
+      try {
+        handler();
+      } catch {
+        // Exiting anyway.
+      }
     }
-  }
-  process.exit(130);
-});
+    process.exit(exitCode);
+  });
+}
 
 // Piped into `head` and the like: the reader leaving early is not an error.
 for (const stream of [process.stdout, process.stderr]) {
