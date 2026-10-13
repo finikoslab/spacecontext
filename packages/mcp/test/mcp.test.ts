@@ -1265,6 +1265,55 @@ describe('sign-in with Google and Apple', () => {
     expect(backend.calls.find((entry) => entry.path === '/keys')!.headers.get('Authorization')).toBe('Bearer scs_social');
   });
 
+  it('keeps sign-ins in progress sealed in KV, under a hash of the id only the browser holds', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    vi.stubGlobal('fetch', async () => json({ id_token: 'google.id.token' }));
+    const kv = (env as unknown as Env).OAUTH_KV;
+    const page = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+
+    // The pending sign-in: named by the state's hash, and neither the consent handle nor the request readable.
+    expect(await kv.get(`sc-login:${state}`)).toBeNull();
+    const login = (await kv.get(`sc-login:${await sha256Hex(state)}`))!;
+    expect(login).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(login).not.toContain(page.handle);
+    expect(login).not.toContain('client_id');
+
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=c`, { headers: { Cookie: browserCookies(page.cookie, start) } }));
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+    expect(await kv.get(`sc-login:${await sha256Hex(state)}`)).toBeNull();
+    // The ticket: the console session it holds is not in KV in the clear, nor is the account.
+    expect(await kv.get(`sc-ticket:${ticket}`)).toBeNull();
+    const sealed = (await kv.get(`sc-ticket:${await sha256Hex(ticket)}`))!;
+    expect(sealed).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    for (const secret of [SESSION.session_token, SESSION.user.email, SESSION.user.id, page.handle]) expect(sealed).not.toContain(secret);
+
+    // Only the ticket opens it.
+    const approved = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
+    expect(approved.status).toBe(302);
+    expect(backend.calls.find((entry) => entry.path === '/keys')!.headers.get('Authorization')).toBe('Bearer scs_social');
+    expect(await kv.get(`sc-ticket:${await sha256Hex(ticket)}`)).toBeNull();
+  });
+
+  it('ends the console session of a spent ticket when the request cannot be completed', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    vi.stubGlobal('fetch', async () => json({ id_token: 'google.id.token' }));
+    const page = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=c`, { headers: { Cookie: browserCookies(page.cookie, start) } }));
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+
+    // The form comes back with a request the library refuses.
+    const broken = await post('/authorize/approve', { handle: page.handle, oauth: 'response_type=code&client_id=nope', ticket, action: 'approve' }, page.cookie);
+    expect(broken.status).toBe(400);
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session' && entry.headers.get('Authorization') === 'Bearer scs_social')).toBe(true);
+    expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
+  });
+
   it('goes back to the email page when the provider is cancelled or refused, and ends the session on deny', async () => {
     extraEnv = PROVIDERS;
     backend = fakeBackend({ 'POST /auth/google': () => json({ error: { code: 'INVALID_CREDENTIALS', message: 'no', request_id: 'r' } }, 401), 'POST /auth/apple': () => json(SESSION) });

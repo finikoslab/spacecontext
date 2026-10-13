@@ -130,6 +130,10 @@ type PendingLogin = { provider: 'google' | 'apple'; handle: string; oauth: strin
  * server's page; or one verified by an emailed code, kept when the consent has
  * to be given again (scanning asked for without a card on file). `handle` is
  * the SHA-256 of the consent handle it was issued for: it works with no other.
+ * Every way of using a ticket ends its console session unless a new ticket
+ * takes it over; a ticket never used expires with its record, and its session,
+ * which nobody holds any more, lasts until the API ends it (30 days): the API
+ * has no shorter session to offer.
  */
 type Ticket = { sessionToken: string; userId: string; email: string; provider: 'google' | 'apple' | 'email'; handle: string };
 
@@ -146,8 +150,7 @@ function signInProviders(env: Env): SignInProviders {
 }
 
 function randomToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  return base64url(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 async function sha256Hex(text: string): Promise<string> {
@@ -176,9 +179,34 @@ function readCookie(request: Request, name: string): string | null {
 
 type RecordKind = 'sc-login' | 'sc-ticket';
 
-/** Keeps a sign-in record in OAUTH_KV for ten minutes, under its one-time id. */
+function base64url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
+function fromBase64url(text: string): Uint8Array {
+  const binary = atob(text.replaceAll('-', '+').replaceAll('_', '/'));
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+/** The AES-GCM key of a record, derived from its id: only the browser holding the id can open it. */
+async function recordKey(kind: RecordKind, id: string): Promise<CryptoKey> {
+  const material = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${kind}-key:${id}`));
+  return crypto.subtle.importKey('raw', material, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+/**
+ * Keeps a sign-in record in OAUTH_KV for ten minutes. Records hold a console
+ * session and a consent handle: each is stored under the hash of its one-time
+ * id and sealed with a key derived from the id, which only the browser holds
+ * (in the provider's callback URL or in the page's form), so KV alone reveals
+ * neither. The OAuth library keeps its own consent transactions the same way.
+ */
 async function putRecord(env: Env, kind: RecordKind, id: string, value: PendingLogin | Ticket): Promise<void> {
-  await env.OAUTH_KV.put(`${kind}:${id}`, JSON.stringify(value), { expirationTtl: LOGIN_TTL_SECONDS });
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await recordKey(kind, id), new TextEncoder().encode(JSON.stringify(value))));
+  await env.OAUTH_KV.put(`${kind}:${await sha256Hex(id)}`, `${base64url(iv)}.${base64url(sealed)}`, { expirationTtl: LOGIN_TTL_SECONDS });
 }
 
 /**
@@ -188,11 +216,13 @@ async function putRecord(env: Env, kind: RecordKind, id: string, value: PendingL
  */
 async function openRecord<T>(env: Env, kind: RecordKind, id: string): Promise<{ value: T; consume: () => Promise<void> } | null> {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(id)) return null;
-  const key = `${kind}:${id}`;
+  const key = `${kind}:${await sha256Hex(id)}`;
   const stored = await env.OAUTH_KV.get(key);
   if (stored === null) return null;
   try {
-    return { value: JSON.parse(stored) as T, consume: () => env.OAUTH_KV.delete(key) };
+    const [iv, sealed] = stored.split('.');
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64url(iv ?? '') }, await recordKey(kind, id), fromBase64url(sealed ?? ''));
+    return { value: JSON.parse(new TextDecoder().decode(plain)) as T, consume: () => env.OAUTH_KV.delete(key) };
   } catch {
     return null;
   }
@@ -447,6 +477,10 @@ async function approve(request: Request, env: Env): Promise<Response> {
   try {
     described = await describe(env, request, form.oauth ?? '');
   } catch (error) {
+    // The ticket is spent: its console session is of no use to anyone now.
+    if (ticket) {
+      await backendJson(env, '/auth/session', { method: 'DELETE', sessionToken: ticket.sessionToken, clientIp: clientIp(request) }).catch(() => undefined);
+    }
     return refused(error);
   }
   const email = ticket ? ticket.email : validEmail(form.email);

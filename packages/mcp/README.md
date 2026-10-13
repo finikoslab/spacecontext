@@ -67,7 +67,7 @@ No tool reaches the open web. Space content is returned as data, never as instru
 
 ## Deploy your own
 
-The server is a Cloudflare Worker that talks to a Space Context API (`…/v1`, with `API_V1_ENABLED = "true"`). It signs people in through the API's own sign-in endpoints and creates one API key per connection. Everything it keeps is in KV: OAuth clients, grants and tokens (grants carry the connection's API key and are encrypted by the OAuth library), and sign-ins in progress, for ten minutes.
+The server is a Cloudflare Worker that talks to a Space Context API (`…/v1`, with `API_V1_ENABLED = "true"`). It signs people in through the API's own sign-in endpoints and creates one API key per connection. Everything it keeps is in KV: OAuth clients, grants and tokens (grants carry the connection's API key and are encrypted by the OAuth library), and sign-ins in progress, for ten minutes, encrypted with a key that only the user's browser holds.
 
 **1. Install and build the SDK** (the server imports it), from the repository root:
 
