@@ -47,7 +47,7 @@ packages/sdk/src/
 
 ## Security invariants (tested)
 
-- The API key is sent only to the API's own origin and path; never to a storage URL, an evidence URL or a lookalike host. Redirects are never followed.
+- The API key is sent only to the API's own origin and path; never to a storage URL, an evidence URL or a lookalike host, and not with the public capture profiles (`GET /capture-profiles`). Redirects are never followed.
 - The CLI writes a Skill only to plain relative paths inside the target folder, after checking every path.
 - The API key is never visible on a client object (an ES private field): logging, inspecting or serialising a client never shows it.
 - The config file holding the key is written as a new file with mode `0600`, then renamed over the old one.

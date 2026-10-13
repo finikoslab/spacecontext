@@ -21,7 +21,7 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 | `areas`, `items`, `issues`, `key_locations`, `instructions`, `facts`, `qa` | The records, below |
 | `frames` | The evidence frames, with signed URLs |
 | `continuity` | How this scan was checked against the previous one, or `null`: `previous_scan_id`, `absent_items` and `resolved_issues` (each with the frame of this scan that shows the place). See [Compare two scans](skills-and-diff.md#gone-or-just-not-filmed) |
-| `coverage` | `warnings` (weak coverage, unreadable labels, withheld text), `not_documented` (what a reader would expect but the video did not show) and `checklist`: the key locations every frame was checked for (`electrical_panel`, `water_shutoff`, `water_heater`, `smoke_detector`, `fire_extinguisher`, `router`, `heating_control`, `gas_meter`), each `seen` or not, with its `probability` and best frames. Not seen means not filmed: a hint for the next recording. Empty for scans whose frames were not checked. |
+| `coverage` | `warnings` (weak coverage, unreadable labels, withheld text), `not_documented` (what a reader would expect but the video did not show) and `checklist`: the key locations every frame was checked for, those of the space's type in their order (a flat: `electrical_panel`, `water_shutoff`, `water_heater`…; a car: `identification_plate`, `instrument_panel`, `engine_bay`…; see [Guided capture](../guides/guided-capture.md#what-to-film-for-each-type-of-space)), each `seen` or not, with its `probability` and best frames. Not seen means not filmed: a hint for the next recording. Empty for scans whose frames were not checked. |
 | `transcript` | Only with `include=transcript` and `spaces:sensitive` |
 
 ## Records
@@ -31,12 +31,14 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 | **Area** | `id`, `name`, `type` (`kitchen`, `bathroom`, `bedroom`, …), `level`, `condition` (`code`, `notes`), `description`, `orientation` (one sentence from where one comes in: "Coming in from the hallway: window ahead, bed on the left"), `features`, `access_from`, `item_ids`, `issue_ids` |
 | **Item** | `id`, `area_id`, `name`, `canonical_name`, `category`, `subcategory`, `quantity`, `description` (one paragraph: what it is, where it is, what was said about it, its condition), `location` (where in the area, as a sentence), `placement` (see below), `condition`, `brand`, `model`, `attributes`, `visible_text`, `aliases`, `note`, `issue_ids` (its issues), `previous_item_id` (the same object in the previous scan) |
 | **Issue** | `id`, `area_id`, `item_id`, `title`, `description`, `category`, `severity` (`low`, `medium`, `high`, `critical`), `suggested_action`, `previous_issue_id` |
-| **Key location** | `id`, `kind` (`water_shutoff`, `electrical_panel`, `gas_shutoff`, `water_heater`, `heating_control`, `router`, `fire_extinguisher`, `smoke_detector`, `emergency_exit`, `keys`, meters, `alarm_panel`, …), `label`, `area_id`, `description`, `location`, `placement`, `notes` |
+| **Key location** | `id`, `kind` (`water_shutoff`, `electrical_panel`, `gas_shutoff`, `water_heater`, `heating_control`, `router`, `fire_extinguisher`, `smoke_detector`, `emergency_exit`, `keys`, meters, `alarm_panel`, and for vehicles, boats, campers and appliances `identification_plate`, `instrument_panel`, `engine_bay`, `spare_wheel`, `safety_equipment`, `battery_isolator`, `bilge_pump`, `seacock`, `fuel_shutoff`, `water_tank`, `sprinkler_valve`, `control_panel`, `filter`, `utility_connections`, …), `label`, `area_id`, `description`, `location`, `placement`, `notes` |
 | **Instruction** | `id`, `title`, `area_id`, `item_id`, `steps`, `source_quote` (what was said) |
 | **Fact** | `id`, `kind` (`access`, `wifi`, `rule`, `contact`, `schedule`, `quirk`, `measurement`, `history`, `other`), `statement`, `value`, `sensitive`, `redacted` |
 | **Q&A** | `question`, `answer`, `source` (`owner` or `generated`) |
 
 Every record that comes from the video carries `evidence`: a list of `{ frame_id, timestamp_ms }` pointing into `frames`, and a `confidence` between 0 and 1. Condition codes are `new`, `excellent`, `good`, `fair`, `poor`, `damaged`, `not_working` and `unknown`.
+
+Items, issues and key locations also carry `verification`: a second, independent check of the record on the frames it cites, `{ status, probability, frame_id }` with `status` `verified` (a frame clearly shows it), `unconfirmed` (its frames were checked and none clearly shows it) or `not_visual` (it cites no frame, or it is a fault or an absence no photo can show). `frame_id` is the frame that shows it best, also the first of its `evidence`. `null` where it was not computed. See [Verified evidence](../guides/verified-evidence.md).
 
 ## Evidence frames
 

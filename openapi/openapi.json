@@ -1551,10 +1551,34 @@
       "post": {
         "operationId": "checkFrame",
         "summary": "Check one frame while filming",
-        "description": "For apps that capture a space: is this frame usable, and which key locations (electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter) does it show. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`; a live check needs a card on file, like a live scan. Errors: 402 `PAYMENT_METHOD_REQUIRED` (live, no card on file: added in the console, nothing charged), 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`, 503 `PAYMENTS_UNAVAILABLE` (live, where payments are not configured).",
+        "description": "For apps that capture a space and guide the person filming: is this frame usable, which key locations does it show and, with `space_type`, which area. With `space_type` the key locations are those of that type of space (`GET /capture-profiles`: a car is checked for its VIN plate and dashboard, a boat for its seacocks), and `area` says where the frame was taken; without it, a home's: electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter, and no area. A key location is `seen` from a probability of 0.7. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`; a live check needs a card on file, like a live scan. Errors: 400 `VALIDATION_ERROR` (unknown `space_type`), 402 `PAYMENT_METHOD_REQUIRED` (live, no card on file: added in the console, nothing charged), 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`, 503 `PAYMENTS_UNAVAILABLE` (live, where payments are not configured).",
         "security": [
           {
             "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "space_type",
+            "in": "query",
+            "required": false,
+            "description": "The type of space being filmed: its key locations, and the area question.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "apartment",
+                "house",
+                "office",
+                "warehouse",
+                "vehicle",
+                "boat",
+                "camper",
+                "shop",
+                "garage",
+                "appliance",
+                "other"
+              ]
+            }
           }
         ],
         "requestBody": {
@@ -1620,6 +1644,132 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/capture-profiles": {
+      "get": {
+        "operationId": "listCaptureProfiles",
+        "security": [],
+        "summary": "What to film, for every type of space",
+        "description": "For each type of space, its key locations (what people and agents ask about first: the fuse box of a flat, the VIN plate of a car, the seacocks of a boat), each with a one-line hint of what to film and whether it is usually there (`expected`), and its areas. The same for everyone: no key, cacheable. Use it to show a checklist while filming, with `POST /frames/check?space_type=`.",
+        "parameters": [
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "The language of the labels and hints: `en`, `it`, `es`, `fr`, `de`, `pt`, `nl` (default `en`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en",
+                "it",
+                "es",
+                "fr",
+                "de",
+                "pt",
+                "nl"
+              ],
+              "default": "en"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every capture profile",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureProfileList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/capture-profiles/{space_type}": {
+      "get": {
+        "operationId": "getCaptureProfile",
+        "security": [],
+        "summary": "What to film, for one type of space",
+        "description": "One type of space: its key locations with a hint each, and its areas. Errors: 400 `VALIDATION_ERROR` (unknown language), 404 `NOT_FOUND` (unknown type).",
+        "parameters": [
+          {
+            "name": "space_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "apartment",
+                "house",
+                "office",
+                "warehouse",
+                "vehicle",
+                "boat",
+                "camper",
+                "shop",
+                "garage",
+                "appliance",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "The language of the labels and hints: `en`, `it`, `es`, `fr`, `de`, `pt`, `nl` (default `en`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en",
+                "it",
+                "es",
+                "fr",
+                "de",
+                "pt",
+                "nl"
+              ],
+              "default": "en"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capture profile",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
             "$ref": "#/components/responses/ErrorResponse"
           }
         }
@@ -2163,6 +2313,20 @@
           "water_meter",
           "alarm_panel",
           "spare_supplies",
+          "identification_plate",
+          "instrument_panel",
+          "engine_bay",
+          "spare_wheel",
+          "safety_equipment",
+          "battery_isolator",
+          "bilge_pump",
+          "seacock",
+          "fuel_shutoff",
+          "water_tank",
+          "sprinkler_valve",
+          "control_panel",
+          "filter",
+          "utility_connections",
           "other"
         ]
       },
@@ -2277,6 +2441,41 @@
               "integer",
               "null"
             ]
+          }
+        }
+      },
+      "SpaceVerification": {
+        "type": "object",
+        "description": "The record checked again on the frames it cites, by a second model that answers closed questions with probabilities and never writes text. `verified`: one of its frames clearly shows it (probability 0.7 or more); `unconfirmed`: its frames were checked and none clearly does, so treat it as uncertain; `not_visual`: nothing a photo could confirm (it comes from the narration, or states a fault or something missing).",
+        "required": [
+          "status",
+          "probability",
+          "frame_id"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "unconfirmed",
+              "not_visual"
+            ]
+          },
+          "probability": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Best probability over the frames checked. Null for `not_visual`."
+          },
+          "frame_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The frame that shows it best; it is also the first of the record's `evidence`."
           }
         }
       },
@@ -2470,6 +2669,7 @@
           "issue_ids",
           "previous_item_id",
           "evidence",
+          "verification",
           "confidence"
         ],
         "properties": {
@@ -2601,6 +2801,17 @@
               "$ref": "#/components/schemas/SpaceEvidenceRef"
             }
           },
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaceVerification"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Checked again on its frames. Null at the base level, on documents made before verification existed, and where it could not be computed."
+          },
           "confidence": {
             "type": [
               "number",
@@ -2624,6 +2835,7 @@
           "suggested_action",
           "previous_issue_id",
           "evidence",
+          "verification",
           "confidence"
         ],
         "properties": {
@@ -2690,6 +2902,17 @@
               "$ref": "#/components/schemas/SpaceEvidenceRef"
             }
           },
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaceVerification"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Checked again on its frames. Null at the base level, on documents made before verification existed, and where it could not be computed."
+          },
           "confidence": {
             "type": [
               "number",
@@ -2712,6 +2935,7 @@
           "placement",
           "notes",
           "evidence",
+          "verification",
           "confidence"
         ],
         "properties": {
@@ -2766,6 +2990,17 @@
             "items": {
               "$ref": "#/components/schemas/SpaceEvidenceRef"
             }
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaceVerification"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Checked again on its frames. Null at the base level, on documents made before verification existed, and where it could not be computed."
           },
           "confidence": {
             "type": [
@@ -3369,7 +3604,7 @@
               },
               "checklist": {
                 "type": "array",
-                "description": "Key locations every frame was checked for, seen or not; empty when the frames were not checked.",
+                "description": "Key locations every frame was checked for, seen or not: those of the space's type (`GET /capture-profiles`), in their order. Empty when the frames were not checked.",
                 "items": {
                   "$ref": "#/components/schemas/SpaceCoverageCheck"
                 }
@@ -5391,6 +5626,7 @@
               "fusing",
               "enriching",
               "saving",
+              "verifying",
               null
             ]
           },
@@ -5596,9 +5832,11 @@
         "required": [
           "object",
           "livemode",
+          "space_type",
           "usable",
           "quality",
           "shows_space",
+          "area",
           "key_locations"
         ],
         "properties": {
@@ -5611,9 +5849,30 @@
           "livemode": {
             "type": "boolean"
           },
+          "space_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "apartment",
+              "house",
+              "office",
+              "warehouse",
+              "vehicle",
+              "boat",
+              "camper",
+              "shop",
+              "garage",
+              "appliance",
+              "other",
+              null
+            ],
+            "description": "The `space_type` asked, or null."
+          },
           "usable": {
             "type": "boolean",
-            "description": "Sharp, lit and showing a place: worth keeping in a scan."
+            "description": "Sharp, lit and showing the space: worth keeping in a scan."
           },
           "quality": {
             "type": "object",
@@ -5643,10 +5902,74 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "description": "Probability that the frame shows a real place (not a drawing, document or screen)."
+            "description": "Probability that the frame shows the real thing being filmed (a place, a vehicle, a boat, an appliance), not a drawing, document or screen."
+          },
+          "area": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The most likely area of the space (`GET /capture-profiles`), with its probability: show it from about 0.6. Null without `space_type`, for a type with no areas (appliance), or when the frame shows none of them.",
+            "required": [
+              "value",
+              "probability"
+            ],
+            "properties": {
+              "value": {
+                "type": "string",
+                "enum": [
+                  "entrance",
+                  "hallway",
+                  "living_room",
+                  "kitchen",
+                  "dining_room",
+                  "bedroom",
+                  "bathroom",
+                  "laundry",
+                  "storage",
+                  "balcony",
+                  "garden",
+                  "garage",
+                  "stairs",
+                  "exterior",
+                  "reception",
+                  "open_space",
+                  "office_room",
+                  "meeting_room",
+                  "server_room",
+                  "sales_floor",
+                  "checkout",
+                  "fitting_room",
+                  "stockroom",
+                  "loading_dock",
+                  "storage_area",
+                  "mezzanine",
+                  "cab",
+                  "living_area",
+                  "deck",
+                  "cockpit",
+                  "cabin",
+                  "galley",
+                  "engine_room",
+                  "exterior_front",
+                  "exterior_rear",
+                  "exterior_side",
+                  "interior_front",
+                  "interior_rear",
+                  "trunk",
+                  "engine_compartment"
+                ]
+              },
+              "probability": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
           },
           "key_locations": {
             "type": "array",
+            "description": "Every key location of the type of space, in its order.",
             "items": {
               "type": "object",
               "required": [
@@ -5668,6 +5991,163 @@
                   "description": "Probability of at least 0.7."
                 }
               }
+            }
+          }
+        }
+      },
+      "CaptureProfile": {
+        "type": "object",
+        "required": [
+          "object",
+          "space_type",
+          "language",
+          "key_locations",
+          "areas"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "capture_profile"
+            ]
+          },
+          "space_type": {
+            "type": "string",
+            "enum": [
+              "apartment",
+              "house",
+              "office",
+              "warehouse",
+              "vehicle",
+              "boat",
+              "camper",
+              "shop",
+              "garage",
+              "appliance",
+              "other"
+            ]
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "it",
+              "es",
+              "fr",
+              "de",
+              "pt",
+              "nl"
+            ]
+          },
+          "key_locations": {
+            "type": "array",
+            "description": "In the order to show them.",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "label",
+                "hint",
+                "expected"
+              ],
+              "properties": {
+                "kind": {
+                  "$ref": "#/components/schemas/KeyLocationKind"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string",
+                  "description": "What to film, in one line."
+                },
+                "expected": {
+                  "type": "boolean",
+                  "description": "Usually there: worth a reminder when not filmed. Otherwise: if there is one."
+                }
+              }
+            }
+          },
+          "areas": {
+            "type": "array",
+            "description": "The areas `POST /frames/check?space_type=` can answer. Empty for an appliance.",
+            "items": {
+              "type": "object",
+              "required": [
+                "value",
+                "label"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "enum": [
+                    "entrance",
+                    "hallway",
+                    "living_room",
+                    "kitchen",
+                    "dining_room",
+                    "bedroom",
+                    "bathroom",
+                    "laundry",
+                    "storage",
+                    "balcony",
+                    "garden",
+                    "garage",
+                    "stairs",
+                    "exterior",
+                    "reception",
+                    "open_space",
+                    "office_room",
+                    "meeting_room",
+                    "server_room",
+                    "sales_floor",
+                    "checkout",
+                    "fitting_room",
+                    "stockroom",
+                    "loading_dock",
+                    "storage_area",
+                    "mezzanine",
+                    "cab",
+                    "living_area",
+                    "deck",
+                    "cockpit",
+                    "cabin",
+                    "galley",
+                    "engine_room",
+                    "exterior_front",
+                    "exterior_rear",
+                    "exterior_side",
+                    "interior_front",
+                    "interior_rear",
+                    "trunk",
+                    "engine_compartment"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CaptureProfileList": {
+        "type": "object",
+        "required": [
+          "object",
+          "data"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "list"
+            ]
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaptureProfile"
             }
           }
         }

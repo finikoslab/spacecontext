@@ -848,7 +848,7 @@ describe('MCP tools', () => {
     expect(names).toEqual(
       [
         'ask_space', 'compare_scans', 'get_evidence_photo', 'get_scan_status', 'get_space', 'list_scans', 'list_spaces', 'search_spaces',
-        'get_space_markdown', 'check_frame', 'wallet', 'create_scan', 'upload_frame', 'start_scan', 'follow_scan', 'cancel_scan',
+        'get_space_markdown', 'check_frame', 'capture_checklist', 'wallet', 'create_scan', 'upload_frame', 'start_scan', 'follow_scan', 'cancel_scan',
       ].sort()
     );
     const annotations = Object.fromEntries(tools.map((entry) => [entry.name, entry.annotations]));
@@ -1528,5 +1528,97 @@ describe('sign-in with Google and Apple', () => {
     const forgedTicket = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket: 'y'.repeat(43), email: 'owner@example.com', code: CODE, action: 'approve' }, page.cookie);
     expect(forgedTicket.status).toBe(400);
     expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
+  });
+});
+
+describe('guided capture and verified evidence', () => {
+  const respond = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const VEHICLE = {
+    object: 'capture_profile',
+    space_type: 'vehicle',
+    language: 'it',
+    key_locations: [
+      { kind: 'identification_plate', label: 'Targhetta identificativa', hint: 'La targhetta del telaio, leggibile', expected: true },
+      { kind: 'spare_wheel', label: 'Ruota di scorta', hint: 'Nel bagagliaio', expected: false },
+    ],
+    areas: [{ value: 'trunk', label: 'Bagagliaio' }],
+  };
+
+  it('tells what to film on a read-only connection, without sending the key', async () => {
+    backend = fakeBackend({ 'GET /capture-profiles/vehicle': () => respond(VEHICLE) });
+    const { accessToken } = await connect();
+    await initialize(accessToken);
+    const result = await tool(accessToken, 'capture_checklist', { space_type: 'vehicle', language: 'it' });
+    expect(result.isError).toBeFalsy();
+    const body = JSON.parse(result.content[0]!.text!);
+    expect(body).toMatchObject({
+      space_type: 'vehicle',
+      language: 'it',
+      usually_there: [{ kind: 'identification_plate', label: 'Targhetta identificativa', hint: 'La targhetta del telaio, leggibile' }],
+      if_there_is_one: [{ kind: 'spare_wheel', label: 'Ruota di scorta', hint: 'Nel bagagliaio' }],
+      areas: ['Bagagliaio'],
+    });
+    expect(body.next).toContain('check_frame');
+    const sent = backend.calls.find((entry) => entry.path === '/capture-profiles/vehicle')!;
+    expect(sent.search.get('language')).toBe('it');
+    expect(sent.headers.get('Authorization')).toBeNull();
+    const refused = await tool(accessToken, 'capture_checklist', { space_type: 'castle' });
+    expect(refused.isError).toBe(true);
+  });
+
+  it('checks a photo for a type of space: its key locations and the area, shown from 0.6', async () => {
+    let probability = 0.83;
+    backend = fakeBackend({
+      'POST /frames/check': (call) =>
+        respond({
+          object: 'frame_check',
+          livemode: true,
+          space_type: call.search.get('space_type'),
+          usable: true,
+          quality: { score: 2.1, level: 'good' },
+          shows_space: 0.97,
+          area: { value: 'trunk', probability },
+          key_locations: [{ kind: 'spare_wheel', probability: 0.92, seen: true }, { kind: 'identification_plate', probability: 0.1, seen: false }],
+        }),
+    });
+    const { accessToken } = await connect({ scans: true });
+    await initialize(accessToken);
+    const image = btoa(String.fromCharCode(0xff, 0xd8, 0xff, 0xe0));
+    const checked = JSON.parse((await tool(accessToken, 'check_frame', { image_base64: image, mime_type: 'image/jpeg', space_type: 'vehicle' })).content[0]!.text!);
+    expect(checked).toMatchObject({ space_type: 'vehicle', area: { value: 'trunk', probability: 0.83 }, key_locations_seen: ['spare_wheel'], key_locations_not_seen: ['identification_plate'] });
+    expect(backend.calls.find((entry) => entry.path === '/frames/check')!.search.get('space_type')).toBe('vehicle');
+    probability = 0.4;
+    const vague = JSON.parse((await tool(accessToken, 'check_frame', { image_base64: image, mime_type: 'image/jpeg', space_type: 'vehicle' })).content[0]!.text!);
+    expect(vague.area).toBeUndefined();
+  });
+
+  it('reads each record with its verification, and counts them', async () => {
+    const document = await (await fakeBackend().backend.fetch('https://api.example.test/v1/spaces/app_p1')).json() as Record<string, any>;
+    const verified = {
+      ...document,
+      items: [
+        { ...document.items[0], verification: { status: 'verified', probability: 0.96, frame_id: 'frame-0' } },
+        { ...document.items[0], id: 'itm_2', name: 'Radiator', verification: { status: 'unconfirmed', probability: 0.31, frame_id: 'frame-0' } },
+      ],
+      key_locations: [{ ...document.key_locations[0], verification: { status: 'not_visual', probability: null, frame_id: null } }],
+    };
+    backend = fakeBackend({ 'GET /spaces/app_p1': () => respond(verified) });
+    const { accessToken } = await connect();
+    const init = await initialize(accessToken);
+    expect(init.instructions).toContain('unconfirmed');
+    expect(init.instructions).toContain('capture_checklist');
+    const full = JSON.parse((await tool(accessToken, 'get_space', { space_id: 'app_p1' })).content[0]!.text!);
+    expect(full.items.map((item: { verification?: string }) => item.verification)).toEqual(['verified', 'unconfirmed']);
+    expect(full.key_locations[0].verification).toBe('not_visual');
+    expect(full.evidence_check).toEqual({ verified: 1, unconfirmed: 1, not_visual: 1 });
+  });
+
+  it('says nothing of verification on a document made before it existed', async () => {
+    backend = fakeBackend();
+    const { accessToken } = await connect();
+    await initialize(accessToken);
+    const full = JSON.parse((await tool(accessToken, 'get_space', { space_id: 'app_p1' })).content[0]!.text!);
+    expect(full.evidence_check).toBeUndefined();
+    expect(full.items[0].verification).toBeUndefined();
   });
 });

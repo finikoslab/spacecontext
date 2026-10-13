@@ -397,9 +397,49 @@ export interface paths {
         put?: never;
         /**
          * Check one frame while filming
-         * @description For apps that capture a space: is this frame usable, and which key locations (electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter) does it show. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`; a live check needs a card on file, like a live scan. Errors: 402 `PAYMENT_METHOD_REQUIRED` (live, no card on file: added in the console, nothing charged), 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`, 503 `PAYMENTS_UNAVAILABLE` (live, where payments are not configured).
+         * @description For apps that capture a space and guide the person filming: is this frame usable, which key locations does it show and, with `space_type`, which area. With `space_type` the key locations are those of that type of space (`GET /capture-profiles`: a car is checked for its VIN plate and dashboard, a boat for its seacocks), and `area` says where the frame was taken; without it, a home's: electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter, and no area. A key location is `seen` from a probability of 0.7. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`; a live check needs a card on file, like a live scan. Errors: 400 `VALIDATION_ERROR` (unknown `space_type`), 402 `PAYMENT_METHOD_REQUIRED` (live, no card on file: added in the console, nothing charged), 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`, 503 `PAYMENTS_UNAVAILABLE` (live, where payments are not configured).
          */
         post: operations["checkFrame"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/capture-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What to film, for every type of space
+         * @description For each type of space, its key locations (what people and agents ask about first: the fuse box of a flat, the VIN plate of a car, the seacocks of a boat), each with a one-line hint of what to film and whether it is usually there (`expected`), and its areas. The same for everyone: no key, cacheable. Use it to show a checklist while filming, with `POST /frames/check?space_type=`.
+         */
+        get: operations["listCaptureProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/capture-profiles/{space_type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What to film, for one type of space
+         * @description One type of space: its key locations with a hint each, and its areas. Errors: 400 `VALIDATION_ERROR` (unknown language), 404 `NOT_FOUND` (unknown type).
+         */
+        get: operations["getCaptureProfile"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -542,7 +582,7 @@ export interface components {
         /** @enum {string} */
         IssueSeverity: "low" | "medium" | "high" | "critical";
         /** @enum {string} */
-        KeyLocationKind: "electrical_panel" | "water_shutoff" | "gas_shutoff" | "water_heater" | "heating_control" | "air_conditioning_control" | "router" | "fire_extinguisher" | "smoke_detector" | "first_aid" | "emergency_exit" | "keys" | "waste_recycling" | "electricity_meter" | "gas_meter" | "water_meter" | "alarm_panel" | "spare_supplies" | "other";
+        KeyLocationKind: "electrical_panel" | "water_shutoff" | "gas_shutoff" | "water_heater" | "heating_control" | "air_conditioning_control" | "router" | "fire_extinguisher" | "smoke_detector" | "first_aid" | "emergency_exit" | "keys" | "waste_recycling" | "electricity_meter" | "gas_meter" | "water_meter" | "alarm_panel" | "spare_supplies" | "identification_plate" | "instrument_panel" | "engine_bay" | "spare_wheel" | "safety_equipment" | "battery_isolator" | "bilge_pump" | "seacock" | "fuel_shutoff" | "water_tank" | "sprinkler_valve" | "control_panel" | "filter" | "utility_connections" | "other";
         /** @enum {string} */
         FactKind: "access" | "wifi" | "rule" | "contact" | "schedule" | "quirk" | "measurement" | "history" | "other";
         /**
@@ -567,6 +607,15 @@ export interface components {
         SpaceEvidenceRef: {
             frame_id: string;
             timestamp_ms: number | null;
+        };
+        /** @description The record checked again on the frames it cites, by a second model that answers closed questions with probabilities and never writes text. `verified`: one of its frames clearly shows it (probability 0.7 or more); `unconfirmed`: its frames were checked and none clearly does, so treat it as uncertain; `not_visual`: nothing a photo could confirm (it comes from the narration, or states a fault or something missing). */
+        SpaceVerification: {
+            /** @enum {string} */
+            status: "verified" | "unconfirmed" | "not_visual";
+            /** @description Best probability over the frames checked. Null for `not_visual`. */
+            probability: number | null;
+            /** @description The frame that shows it best; it is also the first of the record's `evidence`. */
+            frame_id: string | null;
         };
         SpaceFrame: {
             id: string;
@@ -625,6 +674,8 @@ export interface components {
             /** @description The same object in the previous scan (`continuity.previous_scan_id`), when this scan was checked against it. */
             previous_item_id: string | null;
             evidence: components["schemas"]["SpaceEvidenceRef"][];
+            /** @description Checked again on its frames. Null at the base level, on documents made before verification existed, and where it could not be computed. */
+            verification: components["schemas"]["SpaceVerification"] | null;
             confidence: number | null;
         };
         SpaceIssue: {
@@ -639,6 +690,8 @@ export interface components {
             /** @description The same issue in the previous scan, still there. */
             previous_issue_id: string | null;
             evidence: components["schemas"]["SpaceEvidenceRef"][];
+            /** @description Checked again on its frames. Null at the base level, on documents made before verification existed, and where it could not be computed. */
+            verification: components["schemas"]["SpaceVerification"] | null;
             confidence: number | null;
         };
         SpaceKeyLocation: {
@@ -654,6 +707,8 @@ export interface components {
             placement: components["schemas"]["SpacePlacement"] | null;
             notes: string | null;
             evidence: components["schemas"]["SpaceEvidenceRef"][];
+            /** @description Checked again on its frames. Null at the base level, on documents made before verification existed, and where it could not be computed. */
+            verification: components["schemas"]["SpaceVerification"] | null;
             confidence: number | null;
         };
         SpaceInstruction: {
@@ -776,7 +831,7 @@ export interface components {
             coverage: {
                 warnings: string[];
                 not_documented: string[];
-                /** @description Key locations every frame was checked for, seen or not; empty when the frames were not checked. */
+                /** @description Key locations every frame was checked for, seen or not: those of the space's type (`GET /capture-profiles`), in their order. Empty when the frames were not checked. */
                 checklist: components["schemas"]["SpaceCoverageCheck"][];
             };
         };
@@ -1214,7 +1269,7 @@ export interface components {
             /** @enum {string} */
             status: "awaiting_upload" | "queued" | "processing" | "complete" | "failed" | "cancelled";
             /** @enum {string|null} */
-            stage: "ingesting" | "screening" | "observing" | "fusing" | "enriching" | "saving" | null;
+            stage: "ingesting" | "screening" | "observing" | "fusing" | "enriching" | "saving" | "verifying" | null;
             input: {
                 /** @enum {string} */
                 kind: "frames" | "video";
@@ -1279,7 +1334,12 @@ export interface components {
             /** @enum {string} */
             object: "frame_check";
             livemode: boolean;
-            /** @description Sharp, lit and showing a place: worth keeping in a scan. */
+            /**
+             * @description The `space_type` asked, or null.
+             * @enum {string|null}
+             */
+            space_type: "apartment" | "house" | "office" | "warehouse" | "vehicle" | "boat" | "camper" | "shop" | "garage" | "appliance" | "other" | null;
+            /** @description Sharp, lit and showing the space: worth keeping in a scan. */
             usable: boolean;
             quality: {
                 /** @description Expected level, 0 (unusable) to 3 (excellent). */
@@ -1287,14 +1347,49 @@ export interface components {
                 /** @enum {string} */
                 level: "unusable" | "poor" | "good" | "excellent";
             };
-            /** @description Probability that the frame shows a real place (not a drawing, document or screen). */
+            /** @description Probability that the frame shows the real thing being filmed (a place, a vehicle, a boat, an appliance), not a drawing, document or screen. */
             shows_space: number;
+            /** @description The most likely area of the space (`GET /capture-profiles`), with its probability: show it from about 0.6. Null without `space_type`, for a type with no areas (appliance), or when the frame shows none of them. */
+            area: {
+                /** @enum {string} */
+                value: "entrance" | "hallway" | "living_room" | "kitchen" | "dining_room" | "bedroom" | "bathroom" | "laundry" | "storage" | "balcony" | "garden" | "garage" | "stairs" | "exterior" | "reception" | "open_space" | "office_room" | "meeting_room" | "server_room" | "sales_floor" | "checkout" | "fitting_room" | "stockroom" | "loading_dock" | "storage_area" | "mezzanine" | "cab" | "living_area" | "deck" | "cockpit" | "cabin" | "galley" | "engine_room" | "exterior_front" | "exterior_rear" | "exterior_side" | "interior_front" | "interior_rear" | "trunk" | "engine_compartment";
+                probability: number;
+            } | null;
+            /** @description Every key location of the type of space, in its order. */
             key_locations: {
                 kind: components["schemas"]["KeyLocationKind"];
                 probability: number;
                 /** @description Probability of at least 0.7. */
                 seen: boolean;
             }[];
+        };
+        CaptureProfile: {
+            /** @enum {string} */
+            object: "capture_profile";
+            /** @enum {string} */
+            space_type: "apartment" | "house" | "office" | "warehouse" | "vehicle" | "boat" | "camper" | "shop" | "garage" | "appliance" | "other";
+            /** @enum {string} */
+            language: "en" | "it" | "es" | "fr" | "de" | "pt" | "nl";
+            /** @description In the order to show them. */
+            key_locations: {
+                kind: components["schemas"]["KeyLocationKind"];
+                label: string;
+                /** @description What to film, in one line. */
+                hint: string;
+                /** @description Usually there: worth a reminder when not filmed. Otherwise: if there is one. */
+                expected: boolean;
+            }[];
+            /** @description The areas `POST /frames/check?space_type=` can answer. Empty for an appliance. */
+            areas: {
+                /** @enum {string} */
+                value: "entrance" | "hallway" | "living_room" | "kitchen" | "dining_room" | "bedroom" | "bathroom" | "laundry" | "storage" | "balcony" | "garden" | "garage" | "stairs" | "exterior" | "reception" | "open_space" | "office_room" | "meeting_room" | "server_room" | "sales_floor" | "checkout" | "fitting_room" | "stockroom" | "loading_dock" | "storage_area" | "mezzanine" | "cab" | "living_area" | "deck" | "cockpit" | "cabin" | "galley" | "engine_room" | "exterior_front" | "exterior_rear" | "exterior_side" | "interior_front" | "interior_rear" | "trunk" | "engine_compartment";
+                label: string;
+            }[];
+        };
+        CaptureProfileList: {
+            /** @enum {string} */
+            object: "list";
+            data: components["schemas"]["CaptureProfile"][];
         };
         SpaceCoverageCheck: {
             kind: components["schemas"]["KeyLocationKind"];
@@ -2195,7 +2290,10 @@ export interface operations {
     };
     checkFrame: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The type of space being filmed: its key locations, and the area question. */
+                space_type?: "apartment" | "house" | "office" | "warehouse" | "vehicle" | "boat" | "camper" | "shop" | "garage" | "appliance" | "other";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2226,6 +2324,59 @@ export interface operations {
             415: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
             503: components["responses"]["ErrorResponse"];
+        };
+    };
+    listCaptureProfiles: {
+        parameters: {
+            query?: {
+                /** @description The language of the labels and hints: `en`, `it`, `es`, `fr`, `de`, `pt`, `nl` (default `en`). */
+                language?: "en" | "it" | "es" | "fr" | "de" | "pt" | "nl";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every capture profile */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureProfileList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+        };
+    };
+    getCaptureProfile: {
+        parameters: {
+            query?: {
+                /** @description The language of the labels and hints: `en`, `it`, `es`, `fr`, `de`, `pt`, `nl` (default `en`). */
+                language?: "en" | "it" | "es" | "fr" | "de" | "pt" | "nl";
+            };
+            header?: never;
+            path: {
+                space_type: "apartment" | "house" | "office" | "warehouse" | "vehicle" | "boat" | "camper" | "shop" | "garage" | "appliance" | "other";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The capture profile */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureProfile"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
         };
     };
     startDeviceSignIn: {

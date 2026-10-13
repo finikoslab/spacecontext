@@ -23,8 +23,32 @@ export type ScanUpload = Schemas['ScanUpload'];
 export type Wallet = Schemas['Wallet'];
 export type MeResponse = Schemas['MeResponse'];
 export type FrameCheck = Schemas['FrameCheck'];
+/** The area a frame most likely shows, with its probability (`frames.check` with a `spaceType`). */
+export type FrameCheckArea = NonNullable<FrameCheck['area']>;
 export type SpaceCoverageCheck = Schemas['SpaceCoverageCheck'];
 export type SpaceType = NonNullable<SpaceCreateRequest['space_type']>;
+export type KeyLocationKind = Schemas['KeyLocationKind'];
+/** What to film for one type of space: its key locations (with a hint each) and its areas. */
+export type CaptureProfile = Schemas['CaptureProfile'];
+export type CaptureProfileList = Schemas['CaptureProfileList'];
+/** A record checked again on the frames it cites: `verified`, `unconfirmed` or `not_visual`. */
+export type SpaceVerification = Schemas['SpaceVerification'];
+export type VerificationStatus = SpaceVerification['status'];
+
+/** The types of space, in the API's order. A space without a type uses `other`'s capture profile. */
+export const SPACE_TYPES = [
+  'apartment',
+  'house',
+  'office',
+  'warehouse',
+  'vehicle',
+  'boat',
+  'camper',
+  'shop',
+  'garage',
+  'appliance',
+  'other',
+] as const satisfies readonly SpaceType[];
 /** The language a scan's report is written in; the narration can be in any language. */
 export type ReportLanguage = NonNullable<ScanInput['language']>;
 
@@ -136,6 +160,15 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export interface FrameCheckOptions extends RequestOptions {
+  /**
+   * The type of space being filmed: its key locations (a car's VIN plate and
+   * dashboard, a boat's seacocks…), its own idea of a usable frame, and the
+   * area the frame shows. Without it: the eight key locations of a home, no area.
+   */
+  spaceType?: SpaceType;
+}
+
 type Query = Record<string, string | number | undefined | null>;
 
 type RequestSpec = {
@@ -153,6 +186,8 @@ type RequestSpec = {
   timeoutMs?: number;
   /** False: a 429 is thrown at once, never waited out (the caller has another way). */
   retryRateLimit?: boolean;
+  /** A public route: sent without the key. */
+  public?: boolean;
   signal?: AbortSignal | undefined;
 };
 
@@ -418,16 +453,49 @@ export class SpaceContext {
   readonly frames = {
     /**
      * Checks one frame while a space is being filmed: is it usable, and which key
-     * locations (fuse box, stopcock, boiler…) does it show. About half a second;
-     * nothing is stored. Free within a daily allowance; needs `scans:write`.
+     * locations (fuse box, stopcock, boiler…) does it show. With `spaceType`, the
+     * key locations of that type of space (`captureProfiles.get`) and the area the
+     * frame shows. About half a second; nothing is stored. Free within a daily
+     * allowance; needs `scans:write`.
      */
-    check: (data: UploadBody, contentType: FrameContentType, options: RequestOptions = {}) =>
+    check: (data: UploadBody, contentType: FrameContentType, options: FrameCheckOptions = {}) =>
       this.json<FrameCheck>({
         method: 'POST',
         path: '/frames/check',
+        query: { space_type: options.spaceType },
         body: data,
         headers: { 'Content-Type': contentType },
         idempotent: true,
+        signal: options.signal,
+      }),
+  };
+
+  // ---------------------------------------------------------------- capture profiles
+
+  /**
+   * What to film for each type of space: its key locations, each with a hint and
+   * whether it is usually there (`expected`), and its areas. Public and the same
+   * for everyone: the key is never sent with these requests. Without a client,
+   * `fetchCaptureProfile` and `fetchCaptureProfiles` read them with no key at all.
+   */
+  readonly captureProfiles = {
+    list: (params: { language?: ReportLanguage } = {}, options: RequestOptions = {}) =>
+      this.json<CaptureProfileList>({
+        method: 'GET',
+        path: '/capture-profiles',
+        query: { language: params.language },
+        idempotent: true,
+        public: true,
+        signal: options.signal,
+      }),
+
+    get: (spaceType: SpaceType, params: { language?: ReportLanguage } = {}, options: RequestOptions = {}) =>
+      this.json<CaptureProfile>({
+        method: 'GET',
+        path: `/capture-profiles/${encodeURIComponent(spaceType)}`,
+        query: { language: params.language },
+        idempotent: true,
+        public: true,
         signal: options.signal,
       }),
   };
@@ -952,7 +1020,7 @@ export class SpaceContext {
     read: (response: Response) => Promise<R | Response> = async (response) => response
   ): Promise<R | Response> {
     const headers: Record<string, string> = { Accept: 'application/json', ...spec.headers };
-    if (spec.withAuth !== false && this.isApiUrl(url)) headers.Authorization = `Bearer ${this.#apiKey}`;
+    if (spec.withAuth !== false && !spec.public && this.isApiUrl(url)) headers.Authorization = `Bearer ${this.#apiKey}`;
     let body: BodyInit | undefined;
     // A stream is opened anew for each attempt, with its length said: storage
     // refuses an upload without one.

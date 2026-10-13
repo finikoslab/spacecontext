@@ -27,7 +27,7 @@ The records that best answer a question, across all spaces or one. Any language:
 | `space_id` | string | Optional. Only this space. |
 | `limit` | integer, 1–25 | Optional, default 10. |
 
-Each result has `space_id`, `space_name`, `scan_id`, `record_type`, `record_id`, `title`, `area`, `text` and `score`.
+Each result has `space_id`, `space_name`, `scan_id`, `record_type`, `record_id`, `title`, `area`, `text` and `score`. The `text` of an item, issue or key location says its photo check ("Photo check: verified on its photo", "Photo check: unconfirmed…", "Photo check: from the narration, no photo"): an unconfirmed record is said as uncertain.
 
 ## `get_space`
 
@@ -37,7 +37,9 @@ The current document of a space, shaped for a model: area names instead of ids, 
 | --- | --- | --- |
 | `space_id` | string | `app_…` or `spc_…`. |
 | `sections` | array of `areas`, `items`, `issues`, `key_locations`, `instructions`, `facts`, `qa`, `coverage` | Optional. Omit for all. Ask only for what you need on large spaces. |
-| `include_evidence` | boolean | Optional. Adds to each record its frames, with signed URLs for `get_evidence_photo`. |
+| `include_evidence` | boolean | Optional. Adds to each record its frames, with signed URLs for `get_evidence_photo`, the one that shows it best first. |
+
+Items, issues and key locations carry `verification`: `verified` (a photo it cites clearly shows it), `unconfirmed` (its photos do not clearly show it: say it is uncertain) or `not_visual` (from the narration, or a fault or absence no photo can show). `evidence_check` counts them (`verified`, `unconfirmed`, `not_visual`). Both are left out on documents made before the check existed. See [Verified evidence](../guides/verified-evidence.md).
 
 ## `ask_space`
 
@@ -106,12 +108,22 @@ Waits for a running scan and returns where it is, in words (`label`, for example
 
 ## `check_frame`
 
-One photo checked as a scan would check it: `usable` (sharp, lit, showing a real place), `quality` (`score` 0–3 and `level`), `shows_space`, and the key locations it shows (`key_locations_seen`) or not (`key_locations_not_seen`): electrical panel, water shut-off, boiler, smoke detector, extinguisher, router, thermostat, gas meter. Nothing is stored. Use it on a photo the user sends, or from a camera, to say what is still missing before a scan. Needs the scanning access.
+One photo checked as a scan would check it: `usable` (sharp, lit, showing the space), `quality` (`score` 0–3 and `level`), `shows_space`, and the key locations it shows (`key_locations_seen`) or not (`key_locations_not_seen`). Without `space_type`, those of a home: electrical panel, water shut-off, boiler, smoke detector, extinguisher, router, thermostat, gas meter. With it, those of that type of space (`capture_checklist` lists them) and the `area` the photo shows, from a probability of 0.6. Nothing is stored. Use it on a photo the user sends, or from a camera, to say what is still missing before a scan. Needs the scanning access.
 
 | Argument | Type | |
 | --- | --- | --- |
 | `image_base64` | string | The image bytes (JPEG, PNG or WebP, at most 2 MB), base64 without a `data:` prefix. |
 | `mime_type` | `image/jpeg` \| `image/png` \| `image/webp` | |
+| `space_type` | `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance` or `other` | Optional. The type of space being filmed. |
+
+## `capture_checklist`
+
+What to film for a type of space, before a scan: its key locations, those usually there (`usually_there`) and those only if there is one (`if_there_is_one`), each with a `label` and a one-line `hint`, and its `areas`. Give it to the user before they film; `check_frame` with the same `space_type` then confirms each photo. Works on every connection; nothing is charged. See [Guided capture](../guides/guided-capture.md).
+
+| Argument | Type | |
+| --- | --- | --- |
+| `space_type` | `apartment`, `house`, `office`, `warehouse`, `vehicle`, `boat`, `camper`, `shop`, `garage`, `appliance` or `other` | |
+| `language` | `en`, `it`, `es`, `fr`, `de`, `pt` or `nl` | Optional, default `en`. Language of the labels and hints. |
 
 ## `wallet`
 

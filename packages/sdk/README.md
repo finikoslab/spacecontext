@@ -73,12 +73,14 @@ Each method maps to one documented operation, and the last argument is always op
 | `sc.scans.fromVideo(spaceId, { data, contentType })`, `sc.scans.fromFrames(spaceId, frames)` | Create, upload and start a scan; cancelled if an upload fails |
 | `sc.scans.events(id)`, `sc.scans.wait(id, { onProgress })` | Follow a scan live (async iterator), or wait for its final state |
 | `sc.scans.create`, `uploadFrame`, `uploadVideo`, `start`, `get`, `cancel` | The scan steps one by one |
-| `sc.frames.check(bytes, 'image/jpeg')` | Is this frame usable, and which key locations does it show (guided capture) |
+| `sc.frames.check(bytes, 'image/jpeg', { spaceType })` | Is this frame usable, which key locations does it show and, with a type of space, which area (guided capture) |
+| `sc.captureProfiles.list()`, `.get(type)`; `fetchCaptureProfile(type)` without a key | What to film for each type of space: key locations with a hint each, and areas |
+| `summarizeCoverage(document, profile)`, `summarizeVerification(document)` | Which key locations a scan filmed, and how many records were verified on their own photo |
 | `sc.me()`, `sc.wallet()` | The key's account, mode and scopes; the balance, free scans left and price |
 | `sc.limits()` | The largest and longest video and the most photos a scan takes here (kept an hour); the defaults (100 MB, 10 minutes, 120 photos) for an API that does not state them, `null` when they cannot be read |
 | `sc.evidenceFrame(url)` | Download an evidence frame from a signed URL of the API, without sending the key |
 
-`describeScan(scan)` turns a status and stage into a label ("Looking at the frames", "Extracting the context"…). The demo space's frames are public files on `https://spacecontext.app/demo/brisbane/`: fetch them directly, as `evidenceFrame` refuses them with `INVALID_URL`.
+`describeScan(scan)` turns a status and stage into a label ("Looking at the frames", "Extracting the context", "Verifying the evidence"…). The demo space's frames are public files on `https://spacecontext.app/demo/brisbane/`: fetch them directly, as `evidenceFrame` refuses them with `INVALID_URL`.
 
 ## Sign in from a tool
 

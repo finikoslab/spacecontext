@@ -128,7 +128,8 @@ When you're ready to scan your own spaces, add a card in the console (nothing is
 | **Compare** two scans: added, moved, changed, and "gone" only when a frame shows the empty place | `GET /v1/spaces/{id}/diff` | [Check-in and check-out](https://spacecontext.app/developers/docs/guides/check-in-check-out/) |
 | **Export** a space as an Agent Skill folder or one Markdown page | `GET /v1/spaces/{id}/skill`, `…/markdown` | [A space in Claude Code](https://spacecontext.app/developers/docs/guides/claude-code-skill/) |
 | **Follow** a scan live as Server-Sent Events | `GET /v1/scans/{id}/events` | [Scans](https://spacecontext.app/developers/docs/api/scans/) |
-| **Check frames** while filming: usable or not, which key locations are still missing | `POST /v1/frames/check` | [Guided capture](https://spacecontext.app/developers/docs/guides/guided-capture/) |
+| **Know what to film** for each type of space (a flat, an office, a warehouse, a car, a camper, a boat, an appliance), and **check frames** while filming: usable or not, which key locations are still missing | `GET /v1/capture-profiles`, `POST /v1/frames/check?space_type=` | [Guided capture](https://spacecontext.app/developers/docs/guides/guided-capture/) |
+| **Trust each record**: every item, issue and key location is checked again on its own photo by a second model that never writes text: verified, unconfirmed or from the narration | `verification` on every record | [Verified evidence](https://spacecontext.app/developers/docs/guides/verified-evidence/) |
 | **Webhooks** for `scan.completed`, `scan.failed`, `wallet.auto_recharge_failed` | Console → Webhooks | [Webhooks](https://spacecontext.app/developers/docs/api/webhooks/) |
 
 ## Pricing

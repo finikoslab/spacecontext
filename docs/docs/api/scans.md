@@ -133,7 +133,7 @@ curl -N $API/scans/scn_8a…/events -H "$AUTH"      # live, as Server-Sent Event
 curl $API/scans/scn_8a… -H "$AUTH"                 # or one look
 ```
 
-`status` moves through `queued`, `processing` (with `stage`: `ingesting`, `screening`, `observing`, `fusing`, `enriching`, `saving`) to `complete`, or `failed` with `error` and `charge.refunded: true`.
+`status` moves through `queued`, `processing` (with `stage`: `ingesting`, `screening`, `observing`, `fusing`, `enriching`, `saving`, `verifying`) to `complete`, or `failed` with `error` and `charge.refunded: true`.
 
 `GET /scans/{id}/events` is a `text/event-stream`: it sends the scan at once as an event named `scan` (the same JSON as `GET /scans/{id}`, without `upload`), then again at every change of status, stage or error, and closes after the final state. A `ping` event every 15 seconds keeps the connection alive; one stream lasts at most 30 minutes, after which you reconnect. Nothing to poll, nothing to miss:
 
@@ -151,7 +151,9 @@ An account holds at most 10 streams open at once, test and live together: the ne
 
 Polling `GET /scans/{id}` every few seconds works too, and so do the `scan.completed` and `scan.failed` [webhooks](webhooks.md) for servers that must not hold a connection.
 
-**Screening.** Before the analysis, every frame is checked once: is it usable, does it show a place, and which key locations does it show. Blurred, dark or covered frames are left out, and the sharpest frame of each part of the video is the one analysed. Footage with no usable frame at all fails with `FOOTAGE_UNUSABLE` and is refunded. What the frames showed becomes `coverage.checklist` in the document. To check frames while filming, before a scan, see [Guided capture](../guides/guided-capture.md).
+**Screening.** Before the analysis, every frame is checked once against the [capture profile](../guides/guided-capture.md#what-to-film-for-each-type-of-space) of the space's type: is it usable, does it show the space (a room, a vehicle, a boat, an appliance), and which of that type's key locations does it show. Blurred, dark or covered frames are left out, and the sharpest frame of each part of the video is the one analysed. Footage with no usable frame at all fails with `FOOTAGE_UNUSABLE` and is refunded. What the frames showed becomes `coverage.checklist` in the document. To check frames while filming, before a scan, see [Guided capture](../guides/guided-capture.md).
+
+**Verification.** After the analysis, every item, issue and key location is checked again on the frames it cites by a second model that answers closed questions and never writes text (`stage: verifying`, a few seconds): see [Verified evidence](../guides/verified-evidence.md).
 
 Then read the space: `GET /spaces/spc_3f…` returns its [Space Document](space-document.md).
 

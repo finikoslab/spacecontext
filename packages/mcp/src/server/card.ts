@@ -17,6 +17,7 @@ export const CARD_TOOLS: ReadonlyArray<{ name: string; title: string; descriptio
   { name: 'get_scan_status', title: 'Scan status', description: 'Where a scan is.' },
   { name: 'follow_scan', title: 'Follow a scan', description: 'Waits for a running scan and reports its progress.' },
   { name: 'wallet', title: 'Balance and price', description: 'The prepaid balance, the free scans left and the price of a scan.' },
+  { name: 'capture_checklist', title: 'What to film', description: 'The key locations to film for a type of space, each with a hint, before a scan.' },
   { name: 'check_frame', title: 'Check a photo', description: 'Whether a photo is usable for a scan, and which key locations it shows.', scans: true },
   { name: 'create_scan', title: 'Create a scan', description: 'Declares a scan and returns the upload instructions.', scans: true },
   { name: 'upload_frame', title: 'Upload a frame', description: 'Sends one image of a frames scan.', scans: true },

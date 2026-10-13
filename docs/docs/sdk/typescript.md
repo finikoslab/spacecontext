@@ -55,8 +55,21 @@ const skill = await sc.spaces.skill('spc_…');                      // { name, 
 const me = await sc.me();                                          // the account and the key's mode and scopes
 const wallet = await sc.wallet();                                  // balance_cents, free scans left, scan_price_cents
 const limits = await sc.limits();                                  // the largest and longest video, the most photos, on this API
-const check = await sc.frames.check(bytes, 'image/jpeg');          // usable? which key locations? (guided capture)
+const check = await sc.frames.check(bytes, 'image/jpeg', { spaceType: 'vehicle' }); // usable? which key locations? which area?
+const profile = await sc.captureProfiles.get('vehicle');           // what to film for a type of space (sent without the key)
 ```
+
+## Guided capture and verified evidence
+
+```ts
+import { fetchCaptureProfile, summarizeCoverage, summarizeVerification } from '@spacecontext/sdk';
+
+const profile = await fetchCaptureProfile('boat', { language: 'it' }); // public: no key, no client
+const coverage = summarizeCoverage(document, profile);  // seen, missingExpected, missingOptional
+const evidence = summarizeVerification(document);       // verified, unconfirmed, notVisual, unchecked
+```
+
+`fetchCaptureProfiles()` and `fetchCaptureProfile(type)` read the [capture profiles](../guides/guided-capture.md) with no key (from `SPACECONTEXT_BASE_URL` or the production API). `summarizeCoverage` reads the document's `coverage.checklist`; with the type's profile it splits what was not filmed into the key locations usually there and those only "if there is one". `summarizeVerification` counts the records [checked again on their own photo](../guides/verified-evidence.md). `SPACE_TYPES` lists the eleven types of space.
 
 ## Scanning
 
@@ -79,7 +92,7 @@ if (done.status !== 'complete') throw new Error(done.error?.message);
 for await (const current of sc.scans.events(scan.id)) console.log(describeScan(current).label);
 ```
 
-`wait` and `events` follow the API's event stream (`GET /scans/{id}/events`), reconnecting if it ends early or the connection drops. When no stream can be had (a proxy that does not stream, all 10 of the account's open streams in use, the stream failing), they poll `GET /scans/{id}` instead, every `intervalMs` (default 3 s) and less often, up to every 15 s, while nothing changes. At `timeoutMs` (default 20 minutes) they throw `TIMEOUT` with the last state in `details.scan`, even while the stream only sends pings, and close the stream. `describeScan(scan)` turns a status and stage into a label (`Looking at the frames`, `Extracting the context`…).
+`wait` and `events` follow the API's event stream (`GET /scans/{id}/events`), reconnecting if it ends early or the connection drops. When no stream can be had (a proxy that does not stream, all 10 of the account's open streams in use, the stream failing), they poll `GET /scans/{id}` instead, every `intervalMs` (default 3 s) and less often, up to every 15 s, while nothing changes. At `timeoutMs` (default 20 minutes) they throw `TIMEOUT` with the last state in `details.scan`, even while the stream only sends pings, and close the stream. `describeScan(scan)` turns a status and stage into a label (`Looking at the frames`, `Extracting the context`, `Verifying the evidence`…).
 
 If an upload fails, `fromVideo` and `fromFrames` cancel the scan (nothing is charged) and throw. The lower-level calls are there too: `scans.create`, `scans.uploadFrame`, `scans.uploadVideo`, `scans.start`, `scans.get`, `scans.cancel`.
 
@@ -143,4 +156,4 @@ See [all error codes](../api/errors.md).
 
 ## Types
 
-Every schema of the contract is exported: `SpaceDocument`, `SpaceSummary`, `Scan`, `SearchResults`, `SpaceAnswer`, `SkillBundle`, `SpaceDiff`, `Wallet`, `FrameCheck`, and the raw `components`, `paths` and `operations` from the OpenAPI document; `ScanSource`, `ScanOptions`, `ScanProgress` and `ScanResult` describe `scan()`.
+Every schema of the contract is exported: `SpaceDocument`, `SpaceSummary`, `Scan`, `SearchResults`, `SpaceAnswer`, `SkillBundle`, `SpaceDiff`, `Wallet`, `FrameCheck`, `CaptureProfile`, `SpaceVerification`, `KeyLocationKind`, and the raw `components`, `paths` and `operations` from the OpenAPI document; `ScanSource`, `ScanOptions`, `ScanProgress` and `ScanResult` describe `scan()`.

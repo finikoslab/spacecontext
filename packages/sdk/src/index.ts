@@ -2,6 +2,8 @@ export * from './client/client.js';
 export { SpaceContextError } from './errors.js';
 export { fileBody } from './client/body.js';
 export { describeScan } from './scans/scan.js';
+export { fetchCaptureProfile, fetchCaptureProfiles, summarizeCoverage, summarizeVerification } from './spaces/capture.js';
+export type { CoverageSummary, PublicRequestOptions, VerificationSummary } from './spaces/capture.js';
 export type { ScanFormat, ScanFrame, ScanOptions, ScanProgress, ScanResult, ScanSource, ScanStage } from './scans/scan.js';
 export { parseServerSentEvents } from './client/sse.js';
 export { deviceSignIn, startDeviceSignIn, waitForDeviceSignIn } from './auth/device.js';

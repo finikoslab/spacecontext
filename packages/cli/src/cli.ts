@@ -1,6 +1,25 @@
 import path from 'node:path';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
-import { describeScan, fileBody, REPORT_LANGUAGES, SpaceContext, SpaceContextError, type FrameCheck, type ReportLanguage, type Scan, type SpaceDiff, type SpaceDocument, type SpaceSummary, type SpaceType } from '@spacecontext/sdk';
+import {
+  describeScan,
+  fetchCaptureProfile,
+  fetchCaptureProfiles,
+  fileBody,
+  REPORT_LANGUAGES,
+  SpaceContext,
+  SpaceContextError,
+  summarizeCoverage,
+  summarizeVerification,
+  type CaptureProfile,
+  type FrameCheck,
+  type KeyLocationKind,
+  type ReportLanguage,
+  type Scan,
+  type SpaceDiff,
+  type SpaceDocument,
+  type SpaceSummary,
+  type SpaceType,
+} from '@spacecontext/sdk';
 import { rmSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -215,6 +234,27 @@ async function client(context: Context): Promise<SpaceContext> {
   });
 }
 
+/**
+ * The capture profile of a space's type, read without the key (a public route),
+ * in English like the rest of the CLI. Null when it cannot be read: the summary
+ * then lists what was not filmed without telling usual from optional.
+ */
+async function profileOf(sc: SpaceContext, spaceType: SpaceType | null | undefined): Promise<CaptureProfile | null> {
+  // Labels and hints come from the API: printed without control characters, like everything else it sends.
+  return sc.captureProfiles
+    .get(spaceType ?? 'other', {}, { signal: AbortSignal.timeout(10_000) })
+    .then((profile) => printable(profile))
+    .catch(() => null);
+}
+
+/** The API the capture profiles are read from, with no key: --base-url, SPACECONTEXT_BASE_URL, the API of the saved key, or the default. */
+async function publicApi(context: Context): Promise<string> {
+  const { io, values } = context;
+  const requested = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
+  if (requested !== undefined) return apiUrl(requested);
+  return apiUrl((await readConfig(configDirectory(io.env))).baseUrl);
+}
+
 /** `2026-10-05` from an ISO date. */
 function day(iso: string | null | undefined): string {
   return iso ? iso.slice(0, 10) : '—';
@@ -272,7 +312,47 @@ function clock(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-function documentSummary(s: Style, document: SpaceDocument, width: number | undefined): string {
+/** A key location's name: the profile's label when there is one, else its code in words. */
+function keyLocationName(kind: string, profile: CaptureProfile | null): string {
+  return profile?.key_locations.find((entry) => entry.kind === kind)?.label ?? kindLabel(kind);
+}
+
+/**
+ * Which key locations the recording showed, by the space type's profile: the
+ * missing ones usually there first (worth filming next time), then those only
+ * "if there is one". Without the profile, one list of what was not filmed.
+ */
+function coverageLines(document: SpaceDocument, profile: CaptureProfile | null): string[] {
+  const coverage = summarizeCoverage(document, profile);
+  if (!coverage.checked) return [];
+  const names = (kinds: KeyLocationKind[]) => kinds.map((kind) => keyLocationName(kind, profile)).join(', ');
+  const lines = [`Key locations filmed: ${names(coverage.seen) || 'none'}`];
+  if (!profile) {
+    if (coverage.missing.length > 0) lines.push(`Not filmed: ${names(coverage.missing)}`);
+    return lines;
+  }
+  if (coverage.missingExpected.length > 0) lines.push(`Not filmed, usually there: ${names(coverage.missingExpected)}`);
+  if (coverage.missingOptional.length > 0) lines.push(`Not filmed, if there is one: ${names(coverage.missingOptional)}`);
+  return lines;
+}
+
+/** "31 of 36 records verified on their photo · 3 unconfirmed · 2 not visual", or nothing before verification existed. */
+function verificationLine(s: Style, document: SpaceDocument): string | null {
+  const summary = summarizeVerification(document);
+  if (summary.total === 0 || summary.unchecked === summary.total) return null;
+  const parts = [`${summary.verified} of ${plural(summary.total, 'record')} verified on their photo`];
+  if (summary.unconfirmed > 0) parts.push(s.yellow(`${summary.unconfirmed} unconfirmed`));
+  if (summary.notVisual > 0) parts.push(`${summary.notVisual} not visual (from the narration, or a fault)`);
+  if (summary.unchecked > 0) parts.push(s.dim(`${summary.unchecked} not checked`));
+  return `Evidence: ${parts.join(' · ')}`;
+}
+
+/** A dim mark after a record its photos did not confirm. */
+function unconfirmedMark(s: Style, record: { verification?: { status: string } | null }): string {
+  return record.verification?.status === 'unconfirmed' ? s.dim(' (unconfirmed on its photo)') : '';
+}
+
+function documentSummary(s: Style, document: SpaceDocument, width: number | undefined, profile: CaptureProfile | null = null): string {
   const stats = document.stats;
   const lines = [
     `${s.bold(document.space.name)}  ${s.dim(`${document.space.id} · ${document.space.source}`)}`,
@@ -299,7 +379,7 @@ function documentSummary(s: Style, document: SpaceDocument, width: number | unde
     for (const location of keyLocations) {
       const area = location.area_id ? areaName.get(location.area_id) : undefined;
       const where = [location.location, area && area !== location.location ? area : null].filter(Boolean).join(', ');
-      lines.push(`  ${location.label}${where ? s.dim(` — ${where}`) : ''}`);
+      lines.push(`  ${location.label}${where ? s.dim(` — ${where}`) : ''}${unconfirmedMark(s, location)}`);
     }
   }
 
@@ -308,17 +388,14 @@ function documentSummary(s: Style, document: SpaceDocument, width: number | unde
     lines.push('', s.bold('Issues'));
     for (const issue of issues) {
       const area = issue.area_id ? areaName.get(issue.area_id) : undefined;
-      lines.push(`  ${severity(s, issue.severity)}${issue.title}${area ? s.dim(` — ${area}`) : ''}`);
+      lines.push(`  ${severity(s, issue.severity)}${issue.title}${area ? s.dim(` — ${area}`) : ''}${unconfirmedMark(s, issue)}`);
     }
   }
 
-  const checklist = document.coverage.checklist ?? [];
-  if (checklist.length > 0) {
-    const seen = checklist.filter((check) => check.seen).map((check) => kindLabel(check.kind));
-    const unseen = checklist.filter((check) => !check.seen).map((check) => kindLabel(check.kind));
-    lines.push('', `Key locations filmed: ${seen.join(', ') || 'none'}`);
-    if (unseen.length > 0) lines.push(`Not filmed: ${unseen.join(', ')}`);
-  }
+  const coverage = coverageLines(document, profile);
+  if (coverage.length > 0) lines.push('', ...coverage);
+  const evidence = verificationLine(s, document);
+  if (evidence) lines.push('', evidence);
   for (const warning of document.coverage.warnings) lines.push('', `${s.warn} ${warning}`);
 
   // Only with --transcript (and a key with spaces:sensitive): what was said, when.
@@ -529,7 +606,12 @@ async function space(context: Context): Promise<void> {
   const id = one(context.args, 'space id', SPACE_ID_HINT);
   const sc = await client(context);
   const document = await busy(context, 'Reading the space', () => sc.spaces.get(id, values.transcript ? { include: 'transcript' } : {}));
-  print(io, values, document, (document) => documentSummary(out, document, stdoutWidth(io)));
+  if (values.json) {
+    print(io, values, document, () => '');
+    return;
+  }
+  const profile = await profileOf(sc, document.space.space_type);
+  print(io, values, document, (document) => documentSummary(out, document, stdoutWidth(io), profile));
 }
 
 async function search(context: Context): Promise<void> {
@@ -682,24 +764,39 @@ async function scanStatus(context: Context): Promise<void> {
   }
 }
 
+/** The value of --type, checked: one of the types of space. */
+function spaceTypeOption(values: Values): SpaceType | undefined {
+  const spaceType = values.type;
+  if (spaceType !== undefined && !SPACE_TYPES.includes(spaceType as SpaceType)) {
+    throw new UsageError(`--type must be one of ${SPACE_TYPES.join(', ')}`);
+  }
+  return spaceType as SpaceType | undefined;
+}
+
+/** The area a frame shows, from 0.6 (below, the frame says too little to tell). */
+const AREA_SHOWN = 0.6;
+
 /**
  * Checks images before they are scanned: usable or not, and which key locations
- * they show, so what is missing can be filmed before paying for a scan.
+ * they show, so what is missing can be filmed before paying for a scan. With
+ * --type, the key locations of that type of space and the area each image shows.
  */
 async function check(context: Context): Promise<void> {
   const { io, values, out: s } = context;
+  const spaceType = spaceTypeOption(values);
   const files = await frameFiles(path.resolve(io.cwd, one(context.args, 'image or photos folder')));
   for (const frame of files) {
     if ((await stat(frame.file)).size > MAX_FRAME_BYTES) throw new UsageError(`${path.basename(frame.file)} is larger than ${MAX_FRAME_BYTES / 1_048_576} MB`);
   }
   const sc = await client(context);
+  const profile = spaceType && !values.json ? profileOf(sc, spaceType) : Promise.resolve(null);
   const checked: Array<{ file: string; check: FrameCheck }> = [];
   const status = values.json ? null : new Status(io);
   status?.step(`Checking ${plural(files.length, 'image')}`, { plain: files.length > 1 });
   try {
     for (const [index, frame] of files.entries()) {
       status?.update(`Checking image ${index + 1} of ${files.length}`);
-      checked.push({ file: path.basename(frame.file), check: await sc.frames.check(await fileBody(frame.file), frame.contentType) });
+      checked.push({ file: path.basename(frame.file), check: await sc.frames.check(await fileBody(frame.file), frame.contentType, spaceType ? { spaceType } : {}) });
     }
   } finally {
     status?.stop();
@@ -716,24 +813,86 @@ async function check(context: Context): Promise<void> {
   const notSeen = kinds.filter((kind) => !seen.some((entry) => entry.kind === kind));
   const usable = checked.filter(({ check }) => check.usable).length;
   const summary = { frames: checked.length, usable, seen, not_seen: notSeen };
+  const known = await profile;
 
   print(io, values, { frames: checked.map(({ file, check }) => ({ file, ...check })), summary }, () => {
+    const name = (kind: string) => keyLocationName(kind, known);
+    const areaName = (value: string) => known?.areas.find((area) => area.value === value)?.label ?? kindLabel(value);
     // File names are the person's own, but can still hold control characters.
     const rows = printable(checked).map(({ file, check }) => {
-      // A frame can be sharp and still show no place (a drawing, a document, a screen).
-      const quality = check.shows_space < 0.5 ? 'not a place' : `${check.quality.level}, ${check.quality.score.toFixed(2)}`;
-      const shows = check.key_locations.filter((entry) => entry.seen).map((entry) => kindLabel(entry.kind));
-      return [file, check.usable ? `${s.ok} yes` : `${s.fail} no`, quality, shows.join(', ')];
+      // A frame can be sharp and still show nothing of the space (a drawing, a document, a screen).
+      const quality = check.shows_space < 0.5 ? 'not the space' : `${check.quality.level}, ${check.quality.score.toFixed(2)}`;
+      const shows = check.key_locations.filter((entry) => entry.seen).map((entry) => name(entry.kind));
+      const row = [file, check.usable ? `${s.ok} yes` : `${s.fail} no`, quality];
+      if (spaceType) row.push(check.area && check.area.probability >= AREA_SHOWN ? areaName(check.area.value) : s.dim('—'));
+      return [...row, shows.join(', ')];
     });
-    const lines = [table(s, ['FILE', 'USABLE', 'QUALITY', 'SHOWS'], rows, { shrink: 0, width: stdoutWidth(io) }).trimEnd()];
+    const headers = spaceType ? ['FILE', 'USABLE', 'QUALITY', 'AREA', 'SHOWS'] : ['FILE', 'USABLE', 'QUALITY', 'SHOWS'];
+    const lines = [table(s, headers, rows, { shrink: 0, width: stdoutWidth(io) }).trimEnd()];
     lines.push('', `Usable: ${usable} of ${plural(checked.length, 'frame')}`);
-    lines.push(`Seen: ${seen.length > 0 ? printable(seen).map((entry) => `${kindLabel(entry.kind)} (${entry.file})`).join(', ') : 'none'}`);
+    lines.push(`Seen: ${seen.length > 0 ? printable(seen).map((entry) => `${name(entry.kind)} (${entry.file})`).join(', ') : 'none'}`);
     let text = `${lines.join('\n')}\n`;
     if (notSeen.length > 0) {
-      text += `Not seen yet: ${notSeen.map(kindLabel).join(', ')}.\n${nextLines(s, ['Film them before scanning, if the space has them'], '')}`;
+      const expected = new Set(known?.key_locations.filter((entry) => entry.expected).map((entry) => entry.kind) ?? []);
+      const usual = notSeen.filter((kind) => expected.has(kind));
+      const other = notSeen.filter((kind) => !expected.has(kind));
+      if (usual.length > 0) text += `Not seen yet, usually there: ${usual.map(name).join(', ')}.\n`;
+      if (other.length > 0) text += `Not seen yet${known ? ', if there is one' : ''}: ${other.map(name).join(', ')}.\n`;
+      text += nextLines(s, ['Film them before scanning, if the space has them'], '');
     }
     return text;
   });
+}
+
+/**
+ * What to film for a type of space (or every type): its key locations, those
+ * usually there first, each with a hint, and its areas. Public: no key needed.
+ */
+async function checklist(context: Context): Promise<void> {
+  const { io, values, out: s } = context;
+  none(context.args);
+  const spaceType = spaceTypeOption(values);
+  const language = (values.language ?? 'en') as ReportLanguage;
+  if (!REPORT_LANGUAGES.includes(language)) throw new UsageError(`--language must be one of ${REPORT_LANGUAGES.join(', ')}`);
+  const baseUrl = await publicApi(context);
+  if (baseUrl !== DEFAULT_API_URL) context.failure.baseUrl = baseUrl;
+  const options = { baseUrl, language, ...(io.fetch ? { fetch: io.fetch } : {}) };
+  if (spaceType) {
+    const profile = await busy(context, 'Reading the checklist', () => fetchCaptureProfile(spaceType, options));
+    print(io, values, profile, (profile) => profileText(s, profile, stdoutWidth(io)));
+    return;
+  }
+  const list = await busy(context, 'Reading the checklists', () => fetchCaptureProfiles(options));
+  print(io, values, list, (list) => {
+    const rows = list.data.map((profile) => [
+      profile.space_type,
+      profile.key_locations.map((entry) => (entry.expected ? entry.label : s.dim(entry.label))).join(', '),
+    ]);
+    return (
+      table(s, ['TYPE', 'KEY LOCATIONS TO FILM'], rows, { shrink: 1, width: stdoutWidth(io) }) +
+      s.dim('\nDimmed: only if there is one. spacecontext checklist --type <type> gives a hint for each.\n')
+    );
+  });
+}
+
+/** One capture profile as a list to film by. */
+function profileText(s: Style, profile: CaptureProfile, width: number | undefined): string {
+  const usual = profile.key_locations.filter((entry) => entry.expected);
+  const other = profile.key_locations.filter((entry) => !entry.expected);
+  const lines = [`${s.bold(`What to film: ${profile.space_type}`)}  ${s.dim(`(${profile.language})`)}`];
+  const block = (title: string, entries: CaptureProfile['key_locations']) => {
+    if (entries.length === 0) return;
+    lines.push('', s.bold(title));
+    for (const entry of entries) {
+      lines.push(`  ${s.cyan(entry.label)}`);
+      lines.push(wrap(entry.hint, width, '    '));
+    }
+  };
+  block('Usually there', usual);
+  block('If there is one', other);
+  if (profile.areas.length > 0) lines.push('', s.bold('Areas'), wrap(profile.areas.map((area) => area.label).join(', '), width, '  '));
+  lines.push('', s.dim('Film each one close and steady for a second or two: the scan checks every frame for them.'));
+  return `${lines.join('\n')}\n`;
 }
 
 async function scan(context: Context): Promise<void> {
@@ -750,10 +909,7 @@ async function scan(context: Context): Promise<void> {
   if (!REPORT_LANGUAGES.includes(language)) {
     throw new UsageError(`--language must be one of ${REPORT_LANGUAGES.join(', ')} (the language of the report; the narration can be in any language)`);
   }
-  const spaceType = values.type;
-  if (spaceType !== undefined && !SPACE_TYPES.includes(spaceType as SpaceType)) {
-    throw new UsageError(`--type must be one of ${SPACE_TYPES.join(', ')}`);
-  }
+  const spaceType = spaceTypeOption(values);
   const output = format(values);
   // Options that would otherwise be ignored without a word.
   if (values.type !== undefined && values.space) throw new UsageError('--type sets the type of a new space: use it with --name', [], true);
@@ -987,6 +1143,7 @@ async function scan(context: Context): Promise<void> {
     io.stdout(`${toJson(document, 2)}\n`);
     return;
   }
+  const profile = values.json ? null : await profileOf(sc, document.space.space_type);
   print(io, values, document, (document) => {
     const folder = slug(document.space.name);
     const next = nextLines(out, [
@@ -994,7 +1151,7 @@ async function scan(context: Context): Promise<void> {
       `Give it to your agent: \`spacecontext skill ${spaceId} --out ~/.claude/skills/${folder}\``,
       `Read it again: \`spacecontext space ${spaceId}\``,
     ]);
-    return `\n${documentSummary(out, document, stdoutWidth(io))}\n${out.bold('Next')}\n${next}`;
+    return `\n${documentSummary(out, document, stdoutWidth(io), profile)}\n${out.bold('Next')}\n${next}`;
   });
 }
 
@@ -1034,6 +1191,7 @@ const COMMANDS: Record<string, (context: Context) => Promise<void | number>> = {
   scan,
   'scan-status': scanStatus,
   check,
+  checklist,
   cancel,
   'delete-space': deleteSpace,
 };

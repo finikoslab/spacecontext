@@ -8,7 +8,7 @@
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Docs](https://img.shields.io/badge/docs-spacecontext.app-7C3AED)](https://spacecontext.app/developers/docs/mcp/tools/)
 
-A remote MCP server that gives Claude, ChatGPT, Codex, Cursor, VS Code or any MCP client access to your [Space Context](https://spacecontext.app/developers/) spaces. The assistant can list spaces, search them, read them by section or as one page, ask them questions, compare scans and show the photo evidence. If you allow it, it can also scan spaces for you.
+A remote MCP server that gives Claude, ChatGPT, Codex, Cursor, VS Code or any MCP client access to your [Space Context](https://spacecontext.app/developers/) spaces. The assistant can list spaces, search them, read them by section or as one page, ask them questions, compare scans and show the photo evidence. Every item, issue and key location says whether a second, independent check found it on its own photo (verified, unconfirmed or from the narration), so the assistant knows what to state and what to hedge. If you allow it, it can also scan spaces for you.
 
 ```text
 https://mcp.spacecontext.app/mcp
@@ -50,12 +50,13 @@ Reading tools, on every connection (annotated read-only and idempotent):
 | `get_evidence_photo` | The original video frame behind a record, as an image |
 | `get_scan_status`, `follow_scan` | Where a scan is; `follow_scan` waits on the event stream and reports progress |
 | `wallet` | Balance, free scans left, price of a scan |
+| `capture_checklist` | What to film for a type of space (a flat, a car, a boat, an appliance…), before a scan |
 
 These tools work only on a connection where the user ticked **let it scan spaces**. On any other connection the API refuses them with `INSUFFICIENT_SCOPE`:
 
 | Tool | |
 | --- | --- |
-| `check_frame` | Is this photo usable, and which key locations does it show; nothing is stored or charged |
+| `check_frame` | Is this photo usable, and which key locations does it show (with `space_type`, those of that type and the area); nothing is stored or charged |
 | `create_scan` | Declares a scan of an existing or a new space and returns the upload instructions |
 | `upload_frame` | Sends one image of a frames scan through the server, which holds the key |
 | `start_scan` | Starts and charges a scan: the free scan first, then $1.00 from the balance; refunded if it fails |

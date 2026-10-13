@@ -1,4 +1,4 @@
-import { describeScan, type Scan, type SpaceDocument } from '@spacecontext/sdk';
+import { describeScan, summarizeVerification, type Scan, type SpaceDocument } from '@spacecontext/sdk';
 
 /** Sent with every piece of space content: it came from a camera, not from the user. */
 export const DATA_NOTE =
@@ -53,6 +53,7 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
     enrichment: `${document.enrichment.level} (${document.enrichment.status})`,
     summary: document.summary,
     stats: document.stats,
+    evidence_check: evidenceCheck(document),
   };
 
   if (sections.has('areas')) {
@@ -88,6 +89,7 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
         visible_text: item.visible_text,
         aliases: item.aliases,
         note: item.note,
+        verification: item.verification?.status,
         evidence: evidence(item.evidence),
       })
     );
@@ -103,6 +105,7 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
         item_id: issue.item_id,
         description: issue.description,
         suggested_action: issue.suggested_action,
+        verification: issue.verification?.status,
         evidence: evidence(issue.evidence),
       })
     );
@@ -118,6 +121,7 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
         location: location.location,
         placement: placement(location.placement),
         notes: location.notes,
+        verification: location.verification?.status,
         evidence: evidence(location.evidence),
       })
     );
@@ -148,6 +152,16 @@ export function compactDocument(document: SpaceDocument, options: { sections?: r
     });
   }
   return compact(out);
+}
+
+/**
+ * How many records a second, independent check confirmed on their own photo;
+ * null on a document made before the check existed.
+ */
+function evidenceCheck(document: SpaceDocument): Json | null {
+  const summary = summarizeVerification(document);
+  if (summary.total === 0 || summary.unchecked === summary.total) return null;
+  return compact({ verified: summary.verified, unconfirmed: summary.unconfirmed, not_visual: summary.notVisual, not_checked: summary.unchecked || null });
 }
 
 /** A scan as a tool reports it: where it is, in words, and whether it is over. */

@@ -53,6 +53,7 @@ export type ScanStage =
   | 'fusing'
   | 'enriching'
   | 'saving'
+  | 'verifying'
   | 'processing'
   | 'complete'
   | 'failed'
@@ -70,6 +71,7 @@ export function describeScan(scan: Pick<Scan, 'status' | 'stage'>): { stage: Sca
     fusing: 'Writing the report',
     enriching: 'Extracting the context',
     saving: 'Saving',
+    verifying: 'Verifying the evidence',
     processing: 'Processing',
     complete: 'Complete',
     failed: 'Failed',

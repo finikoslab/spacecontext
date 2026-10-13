@@ -100,7 +100,8 @@ The API is meant to be called from servers, scripts and agents. Browser calls ar
 | `GET /scans/{id}/events` | Follow a scan live (Server-Sent Events) |
 | `PUT /scans/{id}/frames/{index}`, `PUT /scans/{id}/video` | Upload |
 | `POST /scans/{id}/start` | Start and charge |
-| `POST /frames/check` | Is this frame usable, which key locations does it show |
+| `POST /frames/check` | Is this frame usable, which key locations does it show (`?space_type=` for that type's, and the area) |
+| `GET /capture-profiles`, `GET /capture-profiles/{space_type}` | What to film for each type of space (public, no key) |
 | `GET /wallet` | Balance and free scans |
 | `POST /auth/device`, `POST /auth/device/token` | Sign in from a terminal (what `spacecontext login` does) |
 | `GET /media/{key}` | An evidence frame (signed URL) |

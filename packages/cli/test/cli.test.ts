@@ -559,7 +559,7 @@ describe('spacecontext CLI', () => {
       },
     };
     const h = harness([(call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(withChecklist) : undefined)], { SPACECONTEXT_API_KEY: KEY });
-    expect(await main(['space', SPACE_ID], h.io)).toBe(0);
+    expect(await main(['space', SPACE_ID], h.io), h.stderr()).toBe(0);
     expect(h.stdout()).toContain('Key locations filmed: electrical panel\nNot filmed: water heater');
   });
 
