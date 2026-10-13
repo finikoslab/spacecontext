@@ -117,16 +117,19 @@ ${input.error ? `<p class="error">${escapeHtml(input.error)}</p>` : ''}
  * The consent form. Approve is its first button, because Enter in the code field
  * submits the first one; `.decide` still shows it on the right, after Deny.
  */
-export function consentPage(input: {
-  consent: ConsentDescription;
-  handle: string;
-  oauth: string;
-  email: string;
-  error?: string;
-  /** Signed in with a provider: no code to type, the identity travels as a one-time ticket. */
-  ticket?: string;
-  signedInWith?: string;
-}): Response {
+export function consentPage(
+  input: {
+    consent: ConsentDescription;
+    handle: string;
+    oauth: string;
+    email: string;
+    error?: string;
+    /** Signed in with a provider: no code to type, the identity travels as a one-time ticket. */
+    ticket?: string;
+    signedInWith?: string;
+  },
+  headers?: Headers
+): Response {
   const signedIn = Boolean(input.ticket);
   return page(
     'Approve access',
@@ -162,7 +165,7 @@ ${hidden({ handle: input.handle, oauth: input.oauth, email: input.email })}
 </form>`
 }`,
     input.error ? 400 : 200,
-    undefined,
+    headers,
     // Approve and Deny both end with a redirect to the client.
     [redirectSource(input.consent.redirectUri)].filter((source): source is string => source !== null)
   );

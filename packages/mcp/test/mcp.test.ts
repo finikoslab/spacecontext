@@ -9,6 +9,8 @@ import { keysOfReplacedGrants } from '../src/auth/authorize';
 
 const ORIGIN = 'https://mcp.example.test';
 const REDIRECT = 'https://claude.example/api/mcp/auth_callback';
+/** Where an attacker's own client wants access sent. */
+const EVIL_REDIRECT = 'https://evil.example/cb';
 const API_KEY = `sc_live_${'k'.repeat(43)}`;
 const USER_IP = '203.0.113.7';
 const CODE = '123456';
@@ -157,13 +159,13 @@ async function registerClient(name = 'Claude', redirect = REDIRECT) {
 }
 
 /** Opens the consent page like a browser: returns its handle, the OAuth query and the binding cookie. */
-async function openAuthorize(clientId: string) {
+async function openAuthorize(clientId: string, redirect = REDIRECT) {
   const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
   const query = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
-    redirect_uri: REDIRECT,
+    redirect_uri: redirect,
     scope: 'spaces:read',
     state: 'state-123',
     code_challenge: challenge,
@@ -192,6 +194,18 @@ function post(path: string, form: Record<string, string>, cookie: string, header
       redirect: 'manual',
     })
   );
+}
+
+/** The cookies a browser keeps after a response: set ones replace, cleared ones go. */
+function browserCookies(before: string, response: Response): string {
+  const jar = new Map(before.split('; ').filter(Boolean).map((pair) => [pair.split('=')[0]!, pair] as const));
+  for (const header of response.headers.getSetCookie()) {
+    const pair = header.split(';')[0]!;
+    const name = pair.split('=')[0]!;
+    if (/Max-Age=0/i.test(header)) jar.delete(name);
+    else jar.set(name, pair);
+  }
+  return [...jar.values()].join('; ');
 }
 
 /** The whole browser flow, up to the access token. */
@@ -323,18 +337,6 @@ describe('authorization', () => {
       return state;
     }
 
-    /** The cookies a browser keeps after a response: set ones replace, cleared ones go. */
-    function browserCookies(before: string, response: Response): string {
-      const jar = new Map(before.split('; ').filter(Boolean).map((pair) => [pair.split('=')[0]!, pair] as const));
-      for (const header of response.headers.getSetCookie()) {
-        const pair = header.split(';')[0]!;
-        const name = pair.split('=')[0]!;
-        if (/Max-Age=0/i.test(header)) jar.delete(name);
-        else jar.set(name, pair);
-      }
-      return [...jar.values()].join('; ');
-    }
-
     async function askToScan(options: { sensitive?: boolean } = {}) {
       const clientId = await registerClient();
       const page = await openAuthorize(clientId);
@@ -452,6 +454,23 @@ describe('authorization', () => {
       const elsewhere = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, scans: '0' }, '');
       expect(elsewhere.status).toBe(400);
       expect(backend.calls.filter((entry) => entry.path === '/keys')).toHaveLength(1);
+    });
+
+    it('takes the ticket of that page only with the handle it was issued for', async () => {
+      backendWithoutCard();
+      const asked = await askToScan({ sensitive: true });
+      // Someone holding the ticket pairs it with a consent of their own client, in their own browser.
+      const attacker = await openAuthorize(await registerClient('Evil', EVIL_REDIRECT), EVIL_REDIRECT);
+      const paired = await post('/authorize/approve', { handle: attacker.handle, oauth: attacker.oauth, ticket: asked.ticket, sensitive: '1', scans: '0' }, attacker.cookie);
+      expect(paired.status).toBe(400);
+      expect(await paired.text()).toContain('Request expired');
+      expect(paired.headers.get('Location')).toBeNull();
+      expect(backend.calls.filter((entry) => entry.path === '/keys')).toHaveLength(1);
+
+      // The ticket was not spent: its owner still connects.
+      const connected = await post('/authorize/approve', { handle: asked.handle, oauth: asked.page.oauth, ticket: asked.ticket, sensitive: '1', scans: '0' }, asked.cookie);
+      expect(connected.status).toBe(302);
+      expect(connected.headers.get('Location')!.startsWith(REDIRECT)).toBe(true);
     });
   });
 
@@ -1119,9 +1138,15 @@ describe('sign-in with Google and Apple', () => {
     expect(google.searchParams.get('client_id')).toBe('web.apps.googleusercontent.com');
     expect(google.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/authorize/google/callback`);
     const state = google.searchParams.get('state')!;
+    // The sign-in is bound to this browser by a cookie of its own, sent back on Google's GET.
+    const binding = start.headers.getSetCookie().find((cookie) => cookie.startsWith('__Host-sc-login-'))!;
+    expect(binding).toMatch(/; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);
+    const browser = browserCookies(page.cookie, start);
 
-    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`, { headers: { Cookie: page.cookie } }));
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`, { headers: { Cookie: browser } }));
     expect(back.status).toBe(200);
+    // Its work done, the binding cookie is cleared.
+    expect(back.headers.getSetCookie().some((cookie) => cookie.startsWith(binding.split('=')[0]!) && /Max-Age=0/.test(cookie))).toBe(true);
     const consent = await back.text();
     expect(consent).toContain('Signed in with Google as <strong>relay@privaterelay.appleid.com</strong>');
     expect(consent).not.toContain('name="code"');
@@ -1130,8 +1155,8 @@ describe('sign-in with Google and Apple', () => {
     expect(backend.calls.find((entry) => entry.path === '/auth/google')!.body).toEqual({ id_token: 'google.id.token' });
     const ticket = /name="ticket" value="([^"]+)"/.exec(consent)![1]!;
 
-    // The state works once.
-    const replayed = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`));
+    // The state works once, even in the browser that started it.
+    const replayed = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=auth-code`, { headers: { Cookie: browser } }));
     expect(replayed.status).toBe(400);
 
     const approved = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
@@ -1156,12 +1181,14 @@ describe('sign-in with Google and Apple', () => {
     expect(apple.searchParams.get('response_mode')).toBe('form_post');
     expect(apple.searchParams.get('client_id')).toBe('it.example.web');
     const hashedNonce = apple.searchParams.get('nonce')!;
+    // Apple comes back with a cross-site form post, which carries no Lax cookie.
+    expect(start.headers.getSetCookie().find((cookie) => cookie.startsWith('__Host-sc-login-'))).toMatch(/; Secure; HttpOnly; SameSite=None; Max-Age=600$/);
 
-    // Posted by Apple's page: another origin, no cookie.
+    // Posted by Apple's page: another origin, with only the binding cookie of the sign-in.
     const back = await call(
       new Request(`${ORIGIN}/authorize/apple/callback`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://appleid.apple.com' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://appleid.apple.com', Cookie: browserCookies('', start) },
         body: new URLSearchParams({ state: apple.searchParams.get('state')!, code: 'c', id_token: 'apple.id.token', user: JSON.stringify({ name: { firstName: 'Grace', lastName: 'Hopper' } }) }).toString(),
       })
     );
@@ -1174,6 +1201,70 @@ describe('sign-in with Google and Apple', () => {
     expect(await sha256Hex(sent.nonce)).toBe(hashedNonce);
   });
 
+  it('finishes a sign-in only in the browser that started it, so a leaked callback URL signs no one in', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    let exchanged = 0;
+    vi.stubGlobal('fetch', async () => {
+      exchanged += 1;
+      return json({ id_token: 'google.id.token' });
+    });
+    const page = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+    const callbackUrl = `${ORIGIN}/authorize/google/callback?state=${state}&code=victim-code`;
+    const binding = browserCookies('', start);
+
+    // Another browser opens the victim's callback URL first: without the cookie, or with a made-up value.
+    const elsewhere = await call(new Request(callbackUrl));
+    expect(elsewhere.status).toBe(400);
+    expect(await elsewhere.text()).toContain('started in another browser');
+    const forged = await call(new Request(callbackUrl, { headers: { Cookie: `${binding.split('=')[0]}=${'z'.repeat(43)}` } }));
+    expect(forged.status).toBe(400);
+    expect(await forged.text()).not.toContain('name="ticket"');
+    // Nothing was exchanged or signed in.
+    expect(exchanged).toBe(0);
+    expect(backend.calls.some((entry) => entry.path === '/auth/google')).toBe(false);
+
+    // The sign-in was not spent: the browser that started it finishes it.
+    const back = await call(new Request(callbackUrl, { headers: { Cookie: browserCookies(page.cookie, start) } }));
+    expect(back.status).toBe(200);
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+    const approved = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'approve' }, page.cookie);
+    expect(approved.status).toBe(302);
+    expect(approved.headers.get('Location')!.startsWith(REDIRECT)).toBe(true);
+  });
+
+  it('refuses a provider ticket next to any consent handle but its own: no grant for another client with this account', async () => {
+    extraEnv = PROVIDERS;
+    backend = fakeBackend({ 'POST /auth/google': () => json(SESSION) });
+    vi.stubGlobal('fetch', async () => json({ id_token: 'google.id.token' }));
+    // The account owner signs in with Google to connect Claude.
+    const victim = await openAuthorize(await registerClient());
+    const start = await post('/authorize/google', { handle: victim.handle, oauth: victim.oauth }, victim.cookie);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+    const back = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${state}&code=c`, { headers: { Cookie: browserCookies(victim.cookie, start) } }));
+    const ticket = /name="ticket" value="([^"]+)"/.exec(await back.text())![1]!;
+
+    // Someone who got hold of the ticket pairs it with a consent handle of their own
+    // client, bound to their own browser: the reviewer's attack.
+    const attacker = await openAuthorize(await registerClient('Evil', EVIL_REDIRECT), EVIL_REDIRECT);
+    for (const action of ['approve', 'deny']) {
+      const paired = await post('/authorize/approve', { handle: attacker.handle, oauth: attacker.oauth, ticket, action, sensitive: '1' }, attacker.cookie);
+      expect(paired.status).toBe(400);
+      expect(await paired.text()).toContain('Request expired');
+      expect(paired.headers.get('Location')).toBeNull();
+    }
+    expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
+    expect(backend.calls.some((entry) => entry.method === 'DELETE' && entry.path === '/auth/session')).toBe(false);
+
+    // The ticket still works for the request it was issued for.
+    const approved = await post('/authorize/approve', { handle: victim.handle, oauth: victim.oauth, ticket, action: 'approve' }, victim.cookie);
+    expect(approved.status).toBe(302);
+    expect(approved.headers.get('Location')!.startsWith(REDIRECT)).toBe(true);
+    expect(backend.calls.find((entry) => entry.path === '/keys')!.headers.get('Authorization')).toBe('Bearer scs_social');
+  });
+
   it('goes back to the email page when the provider is cancelled or refused, and ends the session on deny', async () => {
     extraEnv = PROVIDERS;
     backend = fakeBackend({ 'POST /auth/google': () => json({ error: { code: 'INVALID_CREDENTIALS', message: 'no', request_id: 'r' } }, 401), 'POST /auth/apple': () => json(SESSION) });
@@ -1182,19 +1273,19 @@ describe('sign-in with Google and Apple', () => {
 
     const cancelled = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
     const cancelState = new URL(cancelled.headers.get('Location')!).searchParams.get('state')!;
-    const backFromCancel = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${cancelState}&error=access_denied`));
+    const backFromCancel = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${cancelState}&error=access_denied`, { headers: { Cookie: browserCookies(page.cookie, cancelled) } }));
     expect(await backFromCancel.text()).toContain('Sign-in with Google was cancelled.');
 
     const refusedStart = await post('/authorize/google', { handle: page.handle, oauth: page.oauth }, page.cookie);
     const refusedState = new URL(refusedStart.headers.get('Location')!).searchParams.get('state')!;
-    const refusedBack = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${refusedState}&code=x`));
+    const refusedBack = await call(new Request(`${ORIGIN}/authorize/google/callback?state=${refusedState}&code=x`, { headers: { Cookie: browserCookies(page.cookie, refusedStart) } }));
     expect(await refusedBack.text()).toContain('Sign-in with Google failed');
     expect(backend.calls.some((entry) => entry.path === '/keys')).toBe(false);
 
     const appleStart = await post('/authorize/apple', { handle: page.handle, oauth: page.oauth }, page.cookie);
     const appleState = new URL(appleStart.headers.get('Location')!).searchParams.get('state')!;
     const consent = await (
-      await call(new Request(`${ORIGIN}/authorize/apple/callback`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ state: appleState, id_token: 'apple.id.token' }).toString() }))
+      await call(new Request(`${ORIGIN}/authorize/apple/callback`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: browserCookies('', appleStart) }, body: new URLSearchParams({ state: appleState, id_token: 'apple.id.token' }).toString() }))
     ).text();
     const ticket = /name="ticket" value="([^"]+)"/.exec(consent)![1]!;
     const denied = await post('/authorize/approve', { handle: page.handle, oauth: page.oauth, ticket, action: 'deny' }, page.cookie);
