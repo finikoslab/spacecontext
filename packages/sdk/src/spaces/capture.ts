@@ -49,17 +49,26 @@ async function getPublic<T>(path: string, query: Record<string, string | undefin
   const url = publicUrl(path, query, options.baseUrl);
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
   const signals = [options.signal, AbortSignal.timeout(options.timeoutMs ?? 15_000)].filter((signal): signal is AbortSignal => signal !== undefined);
+  const failed = (error: unknown, reading: boolean): never => {
+    if (options.signal?.aborted) throw options.signal.reason;
+    const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    if (timedOut) throw new SpaceContextError(reading ? 'The answer timed out while it was being read' : 'The request timed out', 0, 'TIMEOUT', null);
+    throw new SpaceContextError(reading ? 'The answer could not be read' : 'The request failed', 0, 'NETWORK_ERROR', null);
+  };
   let response: Response;
   try {
     // No Authorization header: these routes are public, and no key is needed.
     response = await fetcher(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: AbortSignal.any(signals), redirect: 'manual' });
   } catch (error) {
-    if (options.signal?.aborted) throw options.signal.reason;
-    const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
-    throw new SpaceContextError(timedOut ? 'The request timed out' : 'The request failed', 0, timedOut ? 'TIMEOUT' : 'NETWORK_ERROR', null);
+    return failed(error, false);
   }
   if (!response.ok) throw await errorFromResponse(response);
-  return (await response.json()) as T;
+  // Read within the same timeout: a body cut short, too slow or not JSON is a failed answer, not a crash.
+  try {
+    return (await response.json()) as T;
+  } catch (error) {
+    return failed(error, true);
+  }
 }
 
 /** What to film for every type of space, with labels and hints in `language` (default `en`). No key needed. */
@@ -75,21 +84,28 @@ export function fetchCaptureProfile(spaceType: SpaceType, params: { language?: R
 export interface CoverageSummary {
   /** False when the scan's frames were not checked (the document has no checklist): nothing below is known. */
   checked: boolean;
+  /**
+   * True when the profile given matches the document's checklist (every kind of the
+   * checklist is in it): only then are the missing ones split by `expected`. A document
+   * checked before capture profiles, or against another type, gets one list.
+   */
+  byProfile: boolean;
   /** Key locations at least one frame shows. */
   seen: KeyLocationKind[];
   /** Every key location no frame shows. */
   missing: KeyLocationKind[];
-  /** Missing and usually there (`expected` in the profile): worth filming next time. Empty without a profile. */
+  /** Missing and usually there (`expected` in the profile): worth filming next time. Empty when `byProfile` is false. */
   missingExpected: KeyLocationKind[];
-  /** Missing and only "if there is one"; without a profile, every missing one. */
+  /** Missing and only "if there is one" in the profile; when `byProfile` is false, every missing one. */
   missingOptional: KeyLocationKind[];
 }
 
 /**
  * Which key locations the recording showed, from the document's
- * `coverage.checklist` (the key locations of the space's type, every frame
- * checked). With the type's capture profile, the missing ones are split into
- * those usually there and those only "if there is one".
+ * `coverage.checklist` (the key locations every frame was checked for). With the
+ * capture profile of the space's type, and only when it matches the checklist,
+ * the missing ones are split into those usually there and those only "if there
+ * is one".
  */
 export function summarizeCoverage(
   document: { coverage?: { checklist?: SpaceCoverageCheck[] | null } | null },
@@ -98,9 +114,12 @@ export function summarizeCoverage(
   const checklist = document.coverage?.checklist ?? [];
   const seen = checklist.filter((check) => check.seen).map((check) => check.kind);
   const missing = checklist.filter((check) => !check.seen).map((check) => check.kind);
-  const expected = new Set(profile?.key_locations.filter((entry) => entry.expected).map((entry) => entry.kind) ?? []);
+  const known = new Set(profile?.key_locations.map((entry) => entry.kind) ?? []);
+  const byProfile = Boolean(profile) && checklist.length > 0 && checklist.every((check) => known.has(check.kind));
+  const expected = new Set(byProfile ? profile!.key_locations.filter((entry) => entry.expected).map((entry) => entry.kind) : []);
   return {
     checked: checklist.length > 0,
+    byProfile,
     seen,
     missing,
     missingExpected: missing.filter((kind) => expected.has(kind)),

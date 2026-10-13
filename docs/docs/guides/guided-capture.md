@@ -29,7 +29,7 @@ Key locations in **bold** are usually there (worth a reminder when not filmed); 
 | `boat` | **Electrical panel**, **battery and isolator**, **instrument panel**, **engine**, **fire extinguisher**, **safety equipment**, bilge pump, seacocks, fuel shut-off, gas shut-off, first-aid kit, identification plate | Deck, cockpit, cabin, galley, bathroom, engine room, outside |
 | `appliance` | **Identification plate** (rating plate), **control panel**, filter, connections, water shut-off | — |
 
-`GET /capture-profiles` returns them all and `GET /capture-profiles/{space_type}` one, with labels and hints in `en`, `it`, `es`, `fr`, `de`, `pt` or `nl` (`?language=`). They are public: no key, the same for everyone, cached for an hour.
+`GET /capture-profiles` returns them all and `GET /capture-profiles/{space_type}` one, with labels and hints in `en`, `it`, `es`, `fr`, `de`, `pt` or `nl` (`?language=`). A hint says what to film for that type of space: the identification plate of a car is its VIN plate, of an appliance its rating plate. They are public: no key, the same for everyone, cached for an hour.
 
 ```bash
 curl "$API/capture-profiles/vehicle?language=en"
@@ -41,7 +41,7 @@ curl "$API/capture-profiles/vehicle?language=en"
   "space_type": "vehicle",
   "language": "en",
   "key_locations": [
-    { "kind": "identification_plate", "label": "Identification plate", "hint": "Film the plate with the VIN, serial or model number up close, holding still.", "expected": true },
+    { "kind": "identification_plate", "label": "Identification plate", "hint": "Film the VIN plate (door pillar, under the bonnet or through the windscreen) up close, holding still.", "expected": true },
     { "kind": "instrument_panel", "label": "Instrument panel", "hint": "Film the dashboard switched on, with the odometer visible.", "expected": true }
   ],
   "areas": [{ "value": "exterior_front", "label": "Front (outside)" }]
@@ -133,4 +133,4 @@ Scans run the same check on every frame, with the profile of the space's type: u
 
 ## How accurate it is
 
-Measured on 2026-10-13 on 187 hand-labelled photos (Wikimedia Commons, `gpt-6-luna`, threshold 0.7): precision 1.00 on the frames of their own type of space for every new key location with labelled examples, except safety equipment (0.89); "connections" has no labelled examples yet. The question "does it show the space" asked per type accepts 96% of real vehicle photos, 96% of boat photos, 88% of camper photos and all appliance photos, and refuses all nine drawings, plans, documents and screenshots; the building-only question used before called 34 of 102 such real photos "not a space". The eight key locations of a home were measured on 2026-10-06 (best F1 0.94 at 0.7 on 456 labelled answers).
+Measured on 2026-10-13 on 191 hand-labelled photos (Wikimedia Commons, `gpt-6-luna`, threshold 0.7): precision 1.00 on the frames of their own type of space for every new key location with labelled examples, except safety equipment (0.89); "connections" has no labelled examples yet. The question "does it show the space" asked per type accepts 96% of real vehicle photos, 96% of boat photos, 88% of camper photos and all appliance photos, and refuses all nine drawings, plans, documents and screenshots; the building-only question used before called 34 of 102 such real photos "not a space". The eight key locations of a home were measured on 2026-10-06 (best F1 0.94 at 0.7 on 456 labelled answers).

@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SpaceContext } from '../src/index.js';
+import { fetchCaptureProfile, SPACE_TYPES, SpaceContext, summarizeCoverage, summarizeVerification } from '../src/index.js';
 
 // Against a real deployment, with a TEST key (free, the demo space): every
 // operation a developer meets in the first hour, end to end. Skipped unless
@@ -97,5 +97,31 @@ describe.skipIf(!KEY || !BASE)('the API, through the SDK, on a real host', () =>
     const check = await sc().frames.check(JPEG, 'image/jpeg');
     expect(typeof check.usable).toBe('boolean');
     expect(check.key_locations.length).toBeGreaterThan(0);
+  }, 30_000);
+
+  it('says what to film for every type of space, and checks a frame for one of them', async () => {
+    const api = sc();
+    const all = await api.captureProfiles.list();
+    expect(all.data.map((profile) => profile.space_type).sort()).toEqual([...SPACE_TYPES].sort());
+    const vehicle = await fetchCaptureProfile('vehicle', { baseUrl: BASE!, language: 'it' });
+    expect(vehicle.language).toBe('it');
+    expect(vehicle.key_locations.some((entry) => entry.expected)).toBe(true);
+    const check = await api.frames.check(JPEG, 'image/jpeg', { spaceType: 'vehicle' });
+    expect(check.space_type).toBe('vehicle');
+    expect(check.key_locations.map((entry) => entry.kind)).toEqual(vehicle.key_locations.map((entry) => entry.kind));
+  }, 30_000);
+
+  it('reads the demo with its coverage by profile and every record verified on its photo', async () => {
+    const api = sc();
+    const document = await api.spaces.get('spc_demo');
+    const profile = await api.captureProfiles.get(document.space.space_type ?? 'other');
+    expect(summarizeCoverage(document, profile).checked).toBe(true);
+    // The demo's verification was computed on its published frames.
+    const evidence = summarizeVerification(document);
+    expect(evidence.verified).toBeGreaterThan(0);
+    expect(evidence.unchecked).toBe(0);
+    for (const record of [...document.items, ...document.issues, ...document.key_locations]) {
+      if (record.verification?.status === 'verified') expect(record.evidence[0]?.frame_id).toBe(record.verification.frame_id);
+    }
   }, 30_000);
 });

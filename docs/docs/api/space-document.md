@@ -38,7 +38,7 @@ description: 'The JSON document a space becomes: areas, items, issues, key locat
 
 Every record that comes from the video carries `evidence`: a list of `{ frame_id, timestamp_ms }` pointing into `frames`, and a `confidence` between 0 and 1. Condition codes are `new`, `excellent`, `good`, `fair`, `poor`, `damaged`, `not_working` and `unknown`.
 
-Items, issues and key locations also carry `verification`: a second, independent check of the record on the frames it cites, `{ status, probability, frame_id }` with `status` `verified` (a frame clearly shows it), `unconfirmed` (its frames were checked and none clearly shows it) or `not_visual` (it cites no frame, or it is a fault or an absence no photo can show). `frame_id` is the frame that shows it best, also the first of its `evidence`. `null` where it was not computed. See [Verified evidence](../guides/verified-evidence.md).
+Items, issues and key locations also carry `verification`: a second, independent check of the record on the frames it cites, `{ status, probability, frame_id }` with `status` `verified` (a frame clearly shows it), `unconfirmed` (its frames were checked and none clearly shows it) or `not_visual` (it cites no frame, or it is a fault or an absence no photo can show). `frame_id` is the frame that shows it best, also the first of its `evidence`. `null` where it was not computed. The demo space carries it too, computed on its published frames. See [Verified evidence](../guides/verified-evidence.md).
 
 ## Evidence frames
 

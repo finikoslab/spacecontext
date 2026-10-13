@@ -1556,7 +1556,7 @@ describe('guided capture and verified evidence', () => {
       language: 'it',
       usually_there: [{ kind: 'identification_plate', label: 'Targhetta identificativa', hint: 'La targhetta del telaio, leggibile' }],
       if_there_is_one: [{ kind: 'spare_wheel', label: 'Ruota di scorta', hint: 'Nel bagagliaio' }],
-      areas: ['Bagagliaio'],
+      areas: [{ value: 'trunk', label: 'Bagagliaio' }],
     });
     expect(body.next).toContain('check_frame');
     const sent = backend.calls.find((entry) => entry.path === '/capture-profiles/vehicle')!;
@@ -1564,6 +1564,29 @@ describe('guided capture and verified evidence', () => {
     expect(sent.headers.get('Authorization')).toBeNull();
     const refused = await tool(accessToken, 'capture_checklist', { space_type: 'castle' });
     expect(refused.isError).toBe(true);
+  });
+
+  it('says an unknown type is a gap of the API version, never an id or a key to check', async () => {
+    backend = fakeBackend({ 'GET /capture-profiles/vehicle': () => respond({ error: { code: 'NOT_FOUND', message: 'Unknown type of space', request_id: 'r' } }, 404) });
+    const { accessToken } = await connect();
+    await initialize(accessToken);
+    const result = await tool(accessToken, 'capture_checklist', { space_type: 'vehicle' });
+    expect(result.isError).toBe(true);
+    const message = result.content[0]!.text!;
+    expect(message).toContain('does not know this type of space');
+    expect(message).not.toContain('list_spaces');
+    expect(message).not.toMatch(/\bkey\b/);
+  });
+
+  it('warns when the API ignored the space type of a photo check (an API older than the server)', async () => {
+    backend = fakeBackend();
+    const { accessToken } = await connect({ scans: true });
+    await initialize(accessToken);
+    const image = btoa(String.fromCharCode(0xff, 0xd8, 0xff, 0xe0));
+    const checked = JSON.parse((await tool(accessToken, 'check_frame', { image_base64: image, mime_type: 'image/jpeg', space_type: 'boat' })).content[0]!.text!);
+    expect(checked.warning).toContain('did not check for a boat');
+    const plain = JSON.parse((await tool(accessToken, 'check_frame', { image_base64: image, mime_type: 'image/jpeg' })).content[0]!.text!);
+    expect(plain.warning).toBeUndefined();
   });
 
   it('checks a photo for a type of space: its key locations and the area, shown from 0.6', async () => {
@@ -1586,6 +1609,7 @@ describe('guided capture and verified evidence', () => {
     const image = btoa(String.fromCharCode(0xff, 0xd8, 0xff, 0xe0));
     const checked = JSON.parse((await tool(accessToken, 'check_frame', { image_base64: image, mime_type: 'image/jpeg', space_type: 'vehicle' })).content[0]!.text!);
     expect(checked).toMatchObject({ space_type: 'vehicle', area: { value: 'trunk', probability: 0.83 }, key_locations_seen: ['spare_wheel'], key_locations_not_seen: ['identification_plate'] });
+    expect(checked.warning).toBeUndefined();
     expect(backend.calls.find((entry) => entry.path === '/frames/check')!.search.get('space_type')).toBe('vehicle');
     probability = 0.4;
     const vague = JSON.parse((await tool(accessToken, 'check_frame', { image_base64: image, mime_type: 'image/jpeg', space_type: 'vehicle' })).content[0]!.text!);
@@ -1607,6 +1631,7 @@ describe('guided capture and verified evidence', () => {
     const init = await initialize(accessToken);
     expect(init.instructions).toContain('unconfirmed');
     expect(init.instructions).toContain('capture_checklist');
+    expect(init.instructions).toContain('asked to hedge');
     const full = JSON.parse((await tool(accessToken, 'get_space', { space_id: 'app_p1' })).content[0]!.text!);
     expect(full.items.map((item: { verification?: string }) => item.verification)).toEqual(['verified', 'unconfirmed']);
     expect(full.key_locations[0].verification).toBe('not_visual');

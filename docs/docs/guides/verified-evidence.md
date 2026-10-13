@@ -24,6 +24,7 @@ The analysis that writes a Space Document is generative: it can name an object t
 - Up to four of the frames a record cites are asked; a frame it does not cite is never asked, and never added to it.
 - `verification` is `null` where it was not computed: the base level of a space, documents made before the check existed, or a check that could not run. The check never makes a scan fail.
 - It is numbers only, so keys without `spaces:sensitive` see it too; a record withheld from them stays withheld.
+- The demo space (`spc_demo`, read with test keys) carries it too, computed on its published frames: at check-in 34 records verified and 4 unconfirmed, at check-out 41 verified, 1 unconfirmed and 2 not visual. A test key shows exactly what a live document looks like.
 
 ## What is asked
 
@@ -40,13 +41,13 @@ Measured on 2026-10-13 on the real check-out of the demo space (38 items, 4 issu
 - items: 38 of 38 verified on one of the frames they cite, and 0 false confirmations out of 227 room-specific items (toilet, bed, fridge, sofa…) asked on frames of other rooms. Asking "clearly shows *name*" instead verified 33 of 38 (2 of 227 false); asking the generic name alone verified 38 of 38 but confirmed 16 of 227 falsely;
 - asking only the first frame a record cites missed 13 of 38: some of those were real citation mistakes of the analysis (a toilet cited on a frame that does not show it), which taking the best of its frames corrects;
 - issues: 3 of 4 verified at 0.95–0.96; the fourth, written as a possibility ("Possible shower-frame darkening"), got 0.59 and stays `unconfirmed`, the honest answer;
-- key locations: precision 1.00 at 0.7 (measures of 2026-10-06 and 2026-10-13).
+- key locations: the definitions of the frame check, precision 1.00 at 0.7 except safety equipment (0.89); "connections" (behind an appliance) is not measured yet (measures of 2026-10-06 and 2026-10-13).
 
 ## Where it shows
 
-- **API**: `verification` on `items`, `issues` and `key_locations` of every [Space Document](../api/space-document.md); a scan shows `stage: verifying` for the few seconds it takes.
+- **API**: `verification` on `items`, `issues` and `key_locations` of every [Space Document](../api/space-document.md); a scan shows `stage: verifying` ("Verifying the evidence" in the SDK, CLI and MCP) for the few seconds it takes.
 - **Markdown and Skill**: a "Photo check" line on every record and a summary ("31 of 36 records verified on photo…"); the Skill tells the agent how to read it.
 - **Search and ask**: each record's text says its photo check, and `ask` says when an answer rests on an unconfirmed record.
 - **SDK**: `summarizeVerification(document)` counts verified, unconfirmed, not visual and unchecked records.
-- **CLI**: `spacecontext space` prints "Evidence: 31 of 36 records verified on their photo · 3 unconfirmed · 2 not visual", and marks unconfirmed issues and key locations.
-- **MCP**: `get_space` gives each record's `verification` and an `evidence_check` count; the server tells the assistant to prefer verified records and hedge unconfirmed ones.
+- **CLI**: `spacecontext space` and `spacecontext scan` print "Evidence: 31 of 36 records verified on their photo · 3 unconfirmed · 2 not visual (from the narration, or a fault)", and mark unconfirmed issues and key locations ("(unconfirmed on its photo)").
+- **MCP**: `get_space` gives each record's `verification` and an `evidence_check` count (`verified`, `unconfirmed`, `not_visual`, and `not_checked` when some records were not checked); the server tells the assistant to prefer verified records and hedge unconfirmed ones, and `ask_space`'s answer is asked to hedge on them.

@@ -108,6 +108,43 @@ describe('guided capture', () => {
     expect(calls.at(-1)!.url).toBe('https://staging.example.test/v1/capture-profiles');
   });
 
+  it('a profile that is not JSON, or whose body is too slow, is a failed answer with a stable code', async () => {
+    const notJson = vi.fn(async () => new Response('<html>gateway</html>', { status: 200, headers: { 'Content-Type': 'text/html' } })) as unknown as typeof globalThis.fetch;
+    await expect(fetchCaptureProfile('vehicle', { baseUrl: BASE, fetch: notJson })).rejects.toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
+
+    const slow = vi.fn(async (_input: RequestInfo | URL, init: RequestInit = {}) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"object":'));
+          init.signal?.addEventListener('abort', () => controller.error(init.signal!.reason));
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as unknown as typeof globalThis.fetch;
+    const error = await fetchCaptureProfiles({ baseUrl: BASE, fetch: slow, timeoutMs: 50 }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SpaceContextError);
+    expect(error).toMatchObject({ code: 'TIMEOUT', status: 0 });
+  });
+
+  it('ignores a profile that does not match the checklist (a document checked before profiles): one list', () => {
+    const older = {
+      coverage: {
+        checklist: [
+          { kind: 'electrical_panel', seen: false, probability: 0.1, evidence: [] },
+          { kind: 'instrument_panel', seen: true, probability: 0.9, evidence: [] },
+        ],
+      },
+    } as Parameters<typeof summarizeCoverage>[0];
+    expect(summarizeCoverage(older, VEHICLE)).toEqual({
+      checked: true,
+      byProfile: false,
+      seen: ['instrument_panel'],
+      missing: ['electrical_panel'],
+      missingExpected: [],
+      missingOptional: ['electrical_panel'],
+    });
+  });
+
   it('summarises the coverage, split by the profile into usually there and if there is one', () => {
     const document = {
       coverage: {
@@ -122,6 +159,7 @@ describe('guided capture', () => {
     } as Parameters<typeof summarizeCoverage>[0];
     expect(summarizeCoverage(document, VEHICLE)).toEqual({
       checked: true,
+      byProfile: true,
       seen: ['instrument_panel', 'engine_bay'],
       missing: ['identification_plate', 'spare_wheel', 'first_aid'],
       missingExpected: ['identification_plate'],
@@ -129,7 +167,8 @@ describe('guided capture', () => {
     });
     expect(summarizeCoverage(document).missingOptional).toEqual(['identification_plate', 'spare_wheel', 'first_aid']);
     expect(summarizeCoverage(document).missingExpected).toEqual([]);
-    expect(summarizeCoverage({ coverage: { checklist: [] } })).toMatchObject({ checked: false, seen: [], missing: [] });
+    expect(summarizeCoverage({ coverage: { checklist: [] } })).toMatchObject({ checked: false, byProfile: false, seen: [], missing: [] });
+    expect(summarizeCoverage(document).byProfile).toBe(false);
   });
 
   it('counts the records confirmed on their own photo', () => {

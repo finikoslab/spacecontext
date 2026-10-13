@@ -87,9 +87,8 @@ describe('checklist', () => {
   it('lists every type, prints JSON as the API sent it, and takes a language', async () => {
     const h = harness([profiles]);
     expect(await main(['checklist'], h.io)).toBe(0);
-    expect(h.stdout()).toMatch(/TYPE\s+KEY LOCATIONS TO FILM/);
-    expect(h.stdout()).toMatch(/vehicle\s+Identification plate, Dashboard, Engine bay, Spare wheel/);
-    expect(h.stdout()).toContain('boat');
+    expect(h.stdout()).toContain('vehicle\n  Usually there: Identification plate, Dashboard, Engine bay\n  If there is one: Spare wheel');
+    expect(h.stdout()).toContain('boat\n  Usually there: Identification plate');
 
     const j = harness([profiles]);
     expect(await main(['checklist', '--type', 'vehicle', '--language', 'it', '--json'], j.io)).toBe(0);
@@ -219,5 +218,168 @@ describe('space: coverage by profile and verified evidence', () => {
     expect(await main(['space', SPACE_ID, '--json'], h.io)).toBe(0);
     expect(JSON.parse(h.stdout()).items[0].verification).toEqual({ status: 'verified', probability: 0.95, frame_id: 'frame-1' });
     expect(h.calls.some((call) => call.path.startsWith('/capture-profiles'))).toBe(false);
+  });
+});
+
+describe('review: hostile values, colourless output, the API of the key, older APIs', () => {
+  const HOSTILE_KIND = 'engine\u001b]52;c;cGF5\u0007_bay‮';
+  const hostileCheck = (spaceType: string | null) =>
+    json({
+      object: 'frame_check',
+      livemode: true,
+      space_type: spaceType,
+      usable: true,
+      quality: { score: 2, level: 'good\u001b[2J' },
+      shows_space: 0.97,
+      area: spaceType ? { value: 'boot\u009b31m⁦', probability: 0.9 } : null,
+      key_locations: [
+        { kind: HOSTILE_KIND, probability: 0.95, seen: true },
+        { kind: `spare\u001b[H_wheel`, probability: 0.1, seen: false },
+      ],
+    });
+
+  async function onePhoto(): Promise<void> {
+    await mkdir(path.join(directory, 'car'), { recursive: true });
+    await writeFile(path.join(directory, 'car', 'a.jpg'), new Uint8Array([0xff, 0xd8, 1]));
+  }
+
+  it('check never prints the controls hidden in kinds, areas or labels, without --type', async () => {
+    await onePhoto();
+    const h = harness([(call) => (call.path === '/frames/check' ? hostileCheck(null) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['check', 'car'], h.io), h.stderr()).toBe(0);
+    expect(h.stdout()).not.toMatch(UNSAFE);
+    expect(h.stdout()).toContain('Seen: engine]52;c;cGF5 bay (a.jpg)');
+    expect(h.stdout()).toContain('Not seen yet: spare[H wheel.');
+  });
+
+  it('check --type never prints them either, from the profile or the answer', async () => {
+    await onePhoto();
+    const profile = { ...VEHICLE, key_locations: [{ kind: HOSTILE_KIND, label: 'Engine\u001b]0;pwn\u0007 bay‮', hint: 'x', expected: true }], areas: [{ value: 'trunk', label: 'Boot\u009b2J' }] };
+    const h = harness([
+      (call) => (call.path === '/capture-profiles/vehicle' ? json(profile) : undefined),
+      (call) => (call.path === '/frames/check' ? hostileCheck('vehicle') : undefined),
+    ], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['check', 'car', '--type', 'vehicle'], h.io), h.stderr()).toBe(0);
+    expect(h.stdout()).not.toMatch(UNSAFE);
+    expect(h.stderr()).not.toMatch(UNSAFE);
+    expect(h.stdout()).toContain('Engine]0;pwn bay');
+    expect(h.stdout()).toContain('boot31m');
+  });
+
+  it('check --type says so when the API ignored the type (an API older than the CLI)', async () => {
+    await onePhoto();
+    const h = harness([profiles, (call) => (call.path === '/frames/check' ? json({ object: 'frame_check', livemode: true, usable: true, quality: { score: 2, level: 'good' }, shows_space: 0.9, key_locations: [{ kind: 'electrical_panel', probability: 0.9, seen: true }] }) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['check', 'car', '--type', 'vehicle'], h.io), h.stderr()).toBe(0);
+    expect(h.stderr()).toContain('The API did not check for a vehicle (it may be older than this CLI)');
+    expect(h.stdout()).not.toContain('AREA');
+    expect(h.stdout()).toContain('Seen: electrical panel (a.jpg)');
+  });
+
+  it('checklist without --type says "usually there" and "if there is one" in words, never cut, without colour', async () => {
+    const long = { ...VEHICLE, key_locations: [...VEHICLE.key_locations, { kind: 'first_aid', label: 'A first-aid kit with a very long label that a narrow table would cut', hint: 'h', expected: false }] };
+    const h = harness([(call) => (call.path === '/capture-profiles' ? json({ object: 'list', data: [long] }) : undefined)]);
+    h.io.terminal = { stdin: false, stdout: false, stderr: false };
+    h.io.columns = 40;
+    expect(await main(['checklist'], h.io), h.stderr()).toBe(0);
+    const out = h.stdout();
+    expect(out).not.toContain('\u001b[');
+    expect(out).toContain('vehicle\n  Usually there: Identification plate, Dashboard, Engine bay\n  If there is one: Spare wheel, A first-aid kit with a very long label that a narrow table would cut');
+    expect(out).toContain('spacecontext checklist --type <type> gives a hint for each');
+    expect(out).not.toContain('Dimmed');
+  });
+
+  it('checklist reads the API of the saved key only when that key is the one in use', async () => {
+    await mkdir(path.join(directory, 'config'), { recursive: true });
+    await writeFile(path.join(directory, 'config', 'config.json'), JSON.stringify({ apiKey: KEY, baseUrl: 'https://other.example.test/v1' }), { mode: 0o600 });
+    const urls: string[] = [];
+    const answer = (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return Promise.resolve(json(VEHICLE));
+    };
+    const saved = harness([]);
+    saved.io.fetch = answer as typeof fetch;
+    saved.io.env = { SPACECONTEXT_CONFIG_DIR: path.join(directory, 'config') };
+    expect(await main(['checklist', '--type', 'vehicle'], saved.io), saved.stderr()).toBe(0);
+    expect(urls.at(-1)).toMatch(/^https:\/\/other\.example\.test\/v1\/capture-profiles\/vehicle/);
+
+    const fromEnv = harness([]);
+    fromEnv.io.fetch = answer as typeof fetch;
+    fromEnv.io.env = { SPACECONTEXT_CONFIG_DIR: path.join(directory, 'config'), SPACECONTEXT_API_KEY: 'sc_live_anotherkey123' };
+    expect(await main(['checklist', '--type', 'vehicle'], fromEnv.io), fromEnv.stderr()).toBe(0);
+    expect(urls.at(-1)).toMatch(/^https:\/\/api\.spacecontext\.app\/v1\/capture-profiles\/vehicle/);
+
+    const fromFlag = harness([]);
+    fromFlag.io.fetch = answer as typeof fetch;
+    fromFlag.io.env = { SPACECONTEXT_CONFIG_DIR: path.join(directory, 'config') };
+    expect(await main(['checklist', '--type', 'vehicle', '--api-key', 'sc_live_anotherkey123'], fromFlag.io), fromFlag.stderr()).toBe(0);
+    expect(urls.at(-1)).toMatch(/^https:\/\/api\.spacecontext\.app\/v1\//);
+  });
+
+  it('checklist: an unknown type on the API is a version gap, not an id or a key to check', async () => {
+    const h = harness([(call) => (call.path === '/capture-profiles/vehicle' ? json({ error: { code: 'NOT_FOUND', message: 'Unknown type', request_id: 'r' } }, 404) : undefined)]);
+    expect(await main(['checklist', '--type', 'vehicle'], h.io)).toBe(1);
+    expect(h.stderr()).toContain('The API does not know this type of space: it may be older than this CLI');
+    expect(h.stderr()).not.toContain('spacecontext spaces');
+  });
+
+  it('space: a document checked before capture profiles keeps one list, even with a profile', async () => {
+    const older = {
+      object: 'space_document',
+      space: { id: SPACE_ID, source: 'app', name: 'Car', space_type: 'vehicle' },
+      scan: { id: 'scn_1', analyzed_at: null },
+      enrichment: { level: 'deep', status: 'complete' },
+      summary: null,
+      stats: { areas: 0, items: 0, issues: 0, key_locations: 0, facts: 0 },
+      areas: [],
+      items: [],
+      issues: [],
+      key_locations: [],
+      coverage: { warnings: [], not_documented: [], checklist: [{ kind: 'electrical_panel', seen: false, probability: 0.1, evidence: [] }, { kind: 'router', seen: true, probability: 0.9, evidence: [] }] },
+    };
+    const h = harness([profiles, (call) => (call.path === `/spaces/${SPACE_ID}` ? json(older) : undefined)], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['space', SPACE_ID], h.io), h.stderr()).toBe(0);
+    expect(h.stdout()).toContain('Key locations filmed: router\nNot filmed: electrical panel');
+    expect(h.stdout()).not.toContain('usually there');
+  });
+
+  it('scan: the summary at the end shows the coverage by profile and the verified evidence', async () => {
+    const frames = path.join(directory, 'frames');
+    await mkdir(frames);
+    await writeFile(path.join(frames, 'frame-1.jpg'), new Uint8Array([0xff, 0xd8, 1]));
+    const SCAN_ID = `scn_${'c'.repeat(32)}`;
+    const scanState = (status: string, extra: Record<string, unknown> = {}) => ({
+      object: 'scan', id: SCAN_ID, space_id: SPACE_ID, livemode: true, status, stage: null,
+      input: { kind: 'frames', language: 'en', frame_count: 1, video: null, has_transcript: false },
+      charge: { kind: 'free_scan', price_cents: 100, refunded: false }, error: null, upload: null, created_at: null, started_at: null, completed_at: null, ...extra,
+    });
+    const events = (states: unknown[]) => new Response(states.map((state, index) => `event: scan\nid: ${index + 1}\ndata: ${JSON.stringify(state)}\n\n`).join(''), { headers: { 'Content-Type': 'text/event-stream' } });
+    const verified = { status: 'verified', probability: 0.95, frame_id: 'frame-0' };
+    const document = {
+      object: 'space_document',
+      space: { id: SPACE_ID, source: 'api', name: 'Company car', space_type: 'vehicle' },
+      scan: { id: SCAN_ID, analyzed_at: '2026-10-13T10:00:00.000Z' },
+      enrichment: { level: 'deep', status: 'complete' },
+      summary: null,
+      stats: { areas: 1, items: 1, issues: 0, key_locations: 1, facts: 0 },
+      areas: [{ id: 'area_1', name: 'Cabin' }],
+      items: [{ id: 'itm_1', area_id: 'area_1', name: 'Seats', verification: verified }],
+      issues: [],
+      key_locations: [{ id: 'kl_1', kind: 'instrument_panel', label: 'Dashboard', verification: { status: 'unconfirmed', probability: 0.4, frame_id: 'frame-0' } }],
+      coverage: { warnings: [], not_documented: [], checklist: VEHICLE.key_locations.map((entry) => ({ kind: entry.kind, seen: entry.kind === 'instrument_panel', probability: 0.5, evidence: [] })) },
+    };
+    const h = harness([
+      profiles,
+      (call) => (call.method === 'POST' && call.path === '/spaces' ? json({ object: 'space', id: SPACE_ID, name: 'Company car' }, 201) : undefined),
+      (call) => (call.method === 'POST' && call.path === `/spaces/${SPACE_ID}/scans` ? json(scanState('awaiting_upload'), 201) : undefined),
+      (call) => (call.method === 'PUT' && call.path.startsWith(`/scans/${SCAN_ID}/frames/`) ? json({ object: 'scan_frame', scan_id: SCAN_ID, bytes: 3 }) : undefined),
+      (call) => (call.method === 'POST' && call.path === `/scans/${SCAN_ID}/start` ? json(scanState('queued'), 202) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/scans/${SCAN_ID}/events` ? events([scanState('processing', { stage: 'verifying' }), scanState('complete')]) : undefined),
+      (call) => (call.method === 'GET' && call.path === `/spaces/${SPACE_ID}` ? json(document) : undefined),
+    ], { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['scan', 'frames', '--name', 'Company car', '--type', 'vehicle'], h.io), h.stderr()).toBe(0);
+    expect(h.stderr()).toContain('› Verifying the evidence…');
+    expect(h.stdout()).toContain('Key locations filmed: Dashboard\nNot filmed, usually there: Identification plate, Engine bay\nNot filmed, if there is one: Spare wheel');
+    expect(h.stdout()).toContain('Evidence: 1 of 2 records verified on their photo · 1 unconfirmed');
+    expect(h.stdout()).toContain('Dashboard (unconfirmed on its photo)');
   });
 });

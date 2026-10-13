@@ -39,11 +39,11 @@ The current document of a space, shaped for a model: area names instead of ids, 
 | `sections` | array of `areas`, `items`, `issues`, `key_locations`, `instructions`, `facts`, `qa`, `coverage` | Optional. Omit for all. Ask only for what you need on large spaces. |
 | `include_evidence` | boolean | Optional. Adds to each record its frames, with signed URLs for `get_evidence_photo`, the one that shows it best first. |
 
-Items, issues and key locations carry `verification`: `verified` (a photo it cites clearly shows it), `unconfirmed` (its photos do not clearly show it: say it is uncertain) or `not_visual` (from the narration, or a fault or absence no photo can show). `evidence_check` counts them (`verified`, `unconfirmed`, `not_visual`). Both are left out on documents made before the check existed. See [Verified evidence](../guides/verified-evidence.md).
+Items, issues and key locations carry `verification`: `verified` (a photo it cites clearly shows it), `unconfirmed` (its photos do not clearly show it: say it is uncertain) or `not_visual` (from the narration, or a fault or absence no photo can show). `evidence_check` counts them (`verified`, `unconfirmed`, `not_visual`, and `not_checked` when some records were not checked). Both are left out on documents made before the check existed. See [Verified evidence](../guides/verified-evidence.md).
 
 ## `ask_space`
 
-A short answer (one to three sentences) from the records of one space, with the records it cites and their evidence, or `documented: false` when the answer is not in the records.
+A short answer (one to three sentences) from the records of one space, with the records it cites and their evidence, or `documented: false` when the answer is not in the records. The answer is asked to say when a record it rests on is unconfirmed on its photo; `get_space` shows each cited record's `verification`.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -108,7 +108,7 @@ Waits for a running scan and returns where it is, in words (`label`, for example
 
 ## `check_frame`
 
-One photo checked as a scan would check it: `usable` (sharp, lit, showing the space), `quality` (`score` 0–3 and `level`), `shows_space`, and the key locations it shows (`key_locations_seen`) or not (`key_locations_not_seen`). Without `space_type`, those of a home: electrical panel, water shut-off, boiler, smoke detector, extinguisher, router, thermostat, gas meter. With it, those of that type of space (`capture_checklist` lists them) and the `area` the photo shows, from a probability of 0.6. Nothing is stored. Use it on a photo the user sends, or from a camera, to say what is still missing before a scan. Needs the scanning access.
+One photo checked as a scan would check it: `usable` (sharp, lit, showing the space), `quality` (`score` 0–3 and `level`), `shows_space`, and the key locations it shows (`key_locations_seen`) or not (`key_locations_not_seen`). Without `space_type`, those of a home: electrical panel, water shut-off, boiler, smoke detector, extinguisher, router, thermostat, gas meter. With it, those of that type of space (`capture_checklist` lists them) and the `area` the photo shows, from a probability of 0.6; when the API ignores `space_type` (an API older than the server), the result has a `warning` and the key locations are a home's. Nothing is stored. Use it on a photo the user sends, or from a camera, to say what is still missing before a scan. Needs the scanning access.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -118,7 +118,7 @@ One photo checked as a scan would check it: `usable` (sharp, lit, showing the sp
 
 ## `capture_checklist`
 
-What to film for a type of space, before a scan: its key locations, those usually there (`usually_there`) and those only if there is one (`if_there_is_one`), each with a `label` and a one-line `hint`, and its `areas`. Give it to the user before they film; `check_frame` with the same `space_type` then confirms each photo. Works on every connection; nothing is charged. See [Guided capture](../guides/guided-capture.md).
+What to film for a type of space, before a scan: its key locations, those usually there (`usually_there`) and those only if there is one (`if_there_is_one`), each with a `label` and a one-line `hint`, and its `areas` (`value`, `label`). Give it to the user before they film; `check_frame` with the same `space_type` then confirms each photo. Works on every connection; nothing is charged. See [Guided capture](../guides/guided-capture.md).
 
 | Argument | Type | |
 | --- | --- | --- |

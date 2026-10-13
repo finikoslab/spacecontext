@@ -65,6 +65,8 @@ export function hints(error: SpaceContextError, context: ErrorContext): string[]
       }
       return ['Ten scans of the account are already running: start again when one finishes'];
     case 'NOT_FOUND':
+      // A capture profile is public: no key is involved, only the API's version.
+      if (context.command === 'checklist') return ['The API does not know this type of space: it may be older than this CLI (`spacecontext checklist` lists the types it knows)'];
       if (context.keyMode === 'test') return ['A test key sees only the demo (spc_demo) and its own test spaces: `spacecontext spaces`'];
       if (['scan-status', 'cancel'].includes(context.command)) return ['Check the scan id: `spacecontext scans <space-id>` lists the scans of a space'];
       return ['`spacecontext spaces` lists the spaces this key can read (test and live keys see different ones)'];

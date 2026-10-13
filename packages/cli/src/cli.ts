@@ -247,11 +247,17 @@ async function profileOf(sc: SpaceContext, spaceType: SpaceType | null | undefin
     .catch(() => null);
 }
 
-/** The API the capture profiles are read from, with no key: --base-url, SPACECONTEXT_BASE_URL, the API of the saved key, or the default. */
+/**
+ * The API the capture profiles are read from, with no key: --base-url,
+ * SPACECONTEXT_BASE_URL, then the API of the saved key when that key is the
+ * one in use (not with --api-key or SPACECONTEXT_API_KEY, which may be for
+ * another API), else the default one.
+ */
 async function publicApi(context: Context): Promise<string> {
   const { io, values } = context;
   const requested = values['base-url'] ?? setting(io.env, 'SPACECONTEXT_BASE_URL');
   if (requested !== undefined) return apiUrl(requested);
+  if (values['api-key'] !== undefined || setting(io.env, 'SPACECONTEXT_API_KEY') !== undefined) return DEFAULT_API_URL;
   return apiUrl((await readConfig(configDirectory(io.env))).baseUrl);
 }
 
@@ -282,8 +288,9 @@ function stdoutWidth(io: Io): number | undefined {
   return io.terminal?.stdout ? io.columns : undefined;
 }
 
+/** A code from the API in words (`water_shutoff` → `water shutoff`), without the controls a terminal acts on. */
 function kindLabel(kind: string): string {
-  return kind.replaceAll('_', ' ');
+  return safe(kind).replaceAll('_', ' ');
 }
 
 /** A folder name for `--out` suggestions: `Seaside flat` → `seaside-flat`. */
@@ -327,7 +334,8 @@ function coverageLines(document: SpaceDocument, profile: CaptureProfile | null):
   if (!coverage.checked) return [];
   const names = (kinds: KeyLocationKind[]) => kinds.map((kind) => keyLocationName(kind, profile)).join(', ');
   const lines = [`Key locations filmed: ${names(coverage.seen) || 'none'}`];
-  if (!profile) {
+  // A document checked before capture profiles (or for another type) is not split by this profile.
+  if (!coverage.byProfile) {
     if (coverage.missing.length > 0) lines.push(`Not filmed: ${names(coverage.missing)}`);
     return lines;
   }
@@ -813,29 +821,35 @@ async function check(context: Context): Promise<void> {
   const notSeen = kinds.filter((kind) => !seen.some((entry) => entry.kind === kind));
   const usable = checked.filter(({ check }) => check.usable).length;
   const summary = { frames: checked.length, usable, seen, not_seen: notSeen };
-  const known = await profile;
+  // An API older than this CLI ignores space_type: its answer is a home's key locations, without area.
+  const ignoredType = spaceType !== undefined && checked.some(({ check }) => (check.space_type ?? null) !== spaceType);
+  if (ignoredType) {
+    io.stderr(`${context.err.warn} The API did not check for a ${spaceType} (it may be older than this CLI): these are the key locations of a home, without the area.\n`);
+  }
+  const known = ignoredType ? null : await profile;
 
-  print(io, values, { frames: checked.map(({ file, check }) => ({ file, ...check })), summary }, () => {
+  print(io, values, { frames: checked.map(({ file, check }) => ({ file, ...check })), summary }, (shown) => {
+    // Everything below comes from the API (and the person's file names): only the printable copy is used.
     const name = (kind: string) => keyLocationName(kind, known);
     const areaName = (value: string) => known?.areas.find((area) => area.value === value)?.label ?? kindLabel(value);
-    // File names are the person's own, but can still hold control characters.
-    const rows = printable(checked).map(({ file, check }) => {
+    const rows = shown.frames.map((check) => {
       // A frame can be sharp and still show nothing of the space (a drawing, a document, a screen).
       const quality = check.shows_space < 0.5 ? 'not the space' : `${check.quality.level}, ${check.quality.score.toFixed(2)}`;
       const shows = check.key_locations.filter((entry) => entry.seen).map((entry) => name(entry.kind));
-      const row = [file, check.usable ? `${s.ok} yes` : `${s.fail} no`, quality];
-      if (spaceType) row.push(check.area && check.area.probability >= AREA_SHOWN ? areaName(check.area.value) : s.dim('—'));
+      const row = [check.file, check.usable ? `${s.ok} yes` : `${s.fail} no`, quality];
+      if (spaceType && !ignoredType) row.push(check.area && check.area.probability >= AREA_SHOWN ? areaName(check.area.value) : s.dim('—'));
       return [...row, shows.join(', ')];
     });
-    const headers = spaceType ? ['FILE', 'USABLE', 'QUALITY', 'AREA', 'SHOWS'] : ['FILE', 'USABLE', 'QUALITY', 'SHOWS'];
+    const headers = spaceType && !ignoredType ? ['FILE', 'USABLE', 'QUALITY', 'AREA', 'SHOWS'] : ['FILE', 'USABLE', 'QUALITY', 'SHOWS'];
     const lines = [table(s, headers, rows, { shrink: 0, width: stdoutWidth(io) }).trimEnd()];
-    lines.push('', `Usable: ${usable} of ${plural(checked.length, 'frame')}`);
-    lines.push(`Seen: ${seen.length > 0 ? printable(seen).map((entry) => `${name(entry.kind)} (${entry.file})`).join(', ') : 'none'}`);
+    lines.push('', `Usable: ${shown.summary.usable} of ${plural(shown.summary.frames, 'frame')}`);
+    lines.push(`Seen: ${shown.summary.seen.length > 0 ? shown.summary.seen.map((entry) => `${name(entry.kind)} (${entry.file})`).join(', ') : 'none'}`);
     let text = `${lines.join('\n')}\n`;
-    if (notSeen.length > 0) {
+    const missing = shown.summary.not_seen;
+    if (missing.length > 0) {
       const expected = new Set(known?.key_locations.filter((entry) => entry.expected).map((entry) => entry.kind) ?? []);
-      const usual = notSeen.filter((kind) => expected.has(kind));
-      const other = notSeen.filter((kind) => !expected.has(kind));
+      const usual = missing.filter((kind) => expected.has(kind));
+      const other = missing.filter((kind) => !expected.has(kind));
       if (usual.length > 0) text += `Not seen yet, usually there: ${usual.map(name).join(', ')}.\n`;
       if (other.length > 0) text += `Not seen yet${known ? ', if there is one' : ''}: ${other.map(name).join(', ')}.\n`;
       text += nextLines(s, ['Film them before scanning, if the space has them'], '');
@@ -864,14 +878,18 @@ async function checklist(context: Context): Promise<void> {
   }
   const list = await busy(context, 'Reading the checklists', () => fetchCaptureProfiles(options));
   print(io, values, list, (list) => {
-    const rows = list.data.map((profile) => [
-      profile.space_type,
-      profile.key_locations.map((entry) => (entry.expected ? entry.label : s.dim(entry.label))).join(', '),
-    ]);
-    return (
-      table(s, ['TYPE', 'KEY LOCATIONS TO FILM'], rows, { shrink: 1, width: stdoutWidth(io) }) +
-      s.dim('\nDimmed: only if there is one. spacecontext checklist --type <type> gives a hint for each.\n')
-    );
+    // Said in words, not only with colour: the split must survive a pipe and NO_COLOR, and nothing is cut.
+    const width = stdoutWidth(io);
+    const lines: string[] = [];
+    for (const profile of list.data) {
+      const usual = profile.key_locations.filter((entry) => entry.expected).map((entry) => entry.label);
+      const other = profile.key_locations.filter((entry) => !entry.expected).map((entry) => entry.label);
+      lines.push('', s.bold(profile.space_type));
+      if (usual.length > 0) lines.push(wrap(`Usually there: ${usual.join(', ')}`, width, '  '));
+      if (other.length > 0) lines.push(wrap(`If there is one: ${other.join(', ')}`, width, '  '));
+    }
+    lines.push('', s.dim('spacecontext checklist --type <type> gives a hint for each, and the areas.'));
+    return `${lines.slice(1).join('\n')}\n`;
   });
 }
 
