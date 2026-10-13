@@ -610,6 +610,43 @@ describe('authorization', () => {
     expect(old.status).toBe(401);
   });
 
+  it('reconnects the same client at the key limit, revoking the key it replaces first', async () => {
+    // An account at its limit (here 1 key): the key of the grant being replaced makes room.
+    let active = 0;
+    let created = 0;
+    const atLimit = () => new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'API key limit reached', request_id: 'r' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    backend = fakeBackend({
+      'POST /keys': (call) => {
+        if (active >= 1) return atLimit();
+        active += 1;
+        created += 1;
+        return new Response(JSON.stringify({ id: `key_${created}`, key: API_KEY, scopes: (call.body as { scopes: string[] }).scopes, source: 'oauth' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      },
+      'DELETE /keys/key_1': () => {
+        active -= 1;
+        return new Response(null, { status: 204 });
+      },
+    });
+    const first = await connect();
+    const second = await connect({ clientId: first.clientId });
+    expect(second.accessToken).toBeTruthy();
+    const keyCalls = backend.calls.filter((entry) => entry.path.startsWith('/keys')).map((entry) => `${entry.method} ${entry.path}`);
+    // Refused once, the replaced key revoked (once), then created.
+    expect(keyCalls).toEqual(['POST /keys', 'POST /keys', 'DELETE /keys/key_1', 'POST /keys']);
+    expect(backend.calls.find((entry) => entry.method === 'DELETE' && entry.path === '/keys/key_1')!.headers.get('Authorization')).toBe('Bearer scs_session');
+    // The first grant is gone with its key.
+    const old = await call(new Request(`${ORIGIN}/mcp`, { method: 'POST', headers: { Authorization: `Bearer ${first.accessToken}`, 'Content-Type': 'application/json', Host: new URL(ORIGIN).host }, body: '{}' }));
+    expect(old.status).toBe(401);
+
+    // Another client replaces nothing: the limit is said as before, and nothing is revoked.
+    const other = await openAuthorize(await registerClient('Cursor'));
+    await post('/authorize/code', { handle: other.handle, oauth: other.oauth, email: 'owner@example.com' }, other.cookie);
+    const refused = await post('/authorize/approve', { handle: other.handle, oauth: other.oauth, email: 'owner@example.com', code: CODE, action: 'approve' }, other.cookie);
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain('Too many API keys');
+    expect(backend.calls.filter((entry) => entry.method === 'DELETE' && entry.path.startsWith('/keys/'))).toHaveLength(1);
+  });
+
   it('revokes only the keys of the grants the library replaces: same client, same resource, same installation', async () => {
     const RESOURCE = `${ORIGIN}/mcp`;
     const CIMD = 'https://assistant.example/oauth/client.json';

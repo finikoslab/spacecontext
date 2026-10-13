@@ -511,6 +511,8 @@ async function approve(request: Request, env: Env): Promise<Response> {
   let key: CreatedKey | null = null;
   // Kept only when the consent is asked again (see below): a one-time ticket then holds it.
   let keepSession = false;
+  const revokeKey = (keyId: string) =>
+    backendJson(env, `/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
   try {
     // 2. Consent: the handle works once and only in the browser that opened the page.
     const sensitive = form.sensitive === '1';
@@ -526,14 +528,33 @@ async function approve(request: Request, env: Env): Promise<Response> {
     const scopes = [...KEY_SCOPES, ...(sensitive ? ['spaces:sensitive'] : []), ...(scanning ? ['scans:write'] : [])];
 
     // 3. A key for this grant only, labelled as such in the console.
-    try {
-      key = await backendJson<CreatedKey>(env, '/keys', {
+    const createKey = () =>
+      backendJson<CreatedKey>(env, '/keys', {
         method: 'POST',
         sessionToken: session.session_token,
         clientIp: clientIp(request),
         body: { name: `MCP · ${described.consent.clientName}`.slice(0, 60), mode: 'live', scopes, source: 'oauth' },
-      });
-    } catch (error) {
+      }).then(
+        (created) => ({ created }),
+        (error: unknown) => ({ error })
+      );
+    let attempt = await createKey();
+    // Keys of the grants this one replaces, revoked before it is complete.
+    let revokedFirst: string[] = [];
+    if ('error' in attempt && isKeyLimit(attempt.error)) {
+      // At the limit, connecting the same client again would be refused although
+      // completing it revokes the key of the grant it replaces: that key goes
+      // first, to make room, and the key is asked for once more. The user is
+      // replacing that connection anyway; its grant, if this one is not
+      // completed, ends on its next call, when the API refuses the key.
+      revokedFirst = await keysOfReplacedGrants(env, session.user.id, approved.request);
+      if (revokedFirst.length > 0) {
+        for (const keyId of revokedFirst) await revokeKey(keyId);
+        attempt = await createKey();
+      }
+    }
+    if ('error' in attempt) {
+      const { error } = attempt;
       // Nothing was created: a key revoked in the console makes room. The used
       // handle's cookie is cleared.
       if (isKeyLimit(error)) return keyLimitPage(approved.headers);
@@ -551,6 +572,7 @@ async function approve(request: Request, env: Env): Promise<Response> {
       for (const cookie of approved.headers.getSetCookie()) headers.append('Set-Cookie', cookie);
       return cardRequiredPage({ consent: described.consent, handle: transaction.handle, oauth: form.oauth ?? '', email: session.user.email, ticket: ticketId, sensitive }, headers);
     }
+    key = attempt.created;
 
     if (typeof key?.key !== 'string' || !/^sc_live_[A-Za-z0-9_-]+$/.test(key.key) || !Array.isArray(key.scopes)) {
       throw new Error('The API did not return a usable key');
@@ -567,17 +589,13 @@ async function approve(request: Request, env: Env): Promise<Response> {
       scope: approved.request.scope,
       props,
     });
-    for (const keyId of replaced) {
-      await backendJson(env, `/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
-    }
+    for (const keyId of replaced) if (!revokedFirst.includes(keyId)) await revokeKey(keyId);
     const headers = new Headers(approved.headers);
     headers.set('Location', redirectTo);
     return new Response(null, { status: 302, headers });
   } catch {
     // A key without a grant would be a credential nobody holds: revoke it.
-    if (key) {
-      await backendJson(env, `/keys/${encodeURIComponent(key.id)}`, { method: 'DELETE', sessionToken: session.session_token, clientIp: clientIp(request) }).catch(() => undefined);
-    }
+    if (key) await revokeKey(key.id);
     return errorPage('Something went wrong', 'The connection could not be completed. Start again from your assistant.', 502);
   } finally {
     // The console session was only needed to create the key.
