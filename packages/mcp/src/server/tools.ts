@@ -22,8 +22,9 @@ const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_FRAMES = 120;
 /**
  * The largest video a scan can declare: 4 GiB (and 10 minutes), where the API
- * reads videos with its own ffmpeg. A deployment that takes less refuses a
- * bigger one when the scan is created, saying its limit, and a space made for
+ * reads videos with its own ffmpeg. The limit that holds is the API's own
+ * (`limits.max_video_bytes` of `GET /v1`): a deployment that takes less refuses
+ * a bigger one when the scan is created, saying its limit, and a space made for
  * it is deleted. No tool takes a video's bytes: the video goes to the upload URL.
  */
 const MAX_VIDEO_BYTES = 4 * 1024 ** 3;
@@ -345,7 +346,7 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}, origin 
     {
       title: 'Create a scan',
       description:
-        'Declares a new scan of a space (an existing one, or a space created now). Frames (up to 120 images): then send each image with upload_frame (index 0…n-1). Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes on api.spacecontext.app, the API states its own limit in GET /v1): the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
+        'Declares a new scan of a space (an existing one, or a space created now). Frames (up to 120 images): then send each image with upload_frame (index 0…n-1). Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes on api.spacecontext.app; the limit that holds is the one the API states in GET /v1, limits.max_video_bytes, and a bigger video is refused when the scan is created, with the limit in the error): the answer holds a one-off upload URL for this scan; when it points at storage (headers given, no key needed) PUT the bytes there, when it points at the API it needs the user\'s own API key, so ask the user to upload the video with the CLI or the console instead. Then call start_scan; nothing is charged before that. Needs the scanning access.',
       inputSchema: z.object({
         space_id: spaceId.optional().describe('Scan this existing space again (the new scan is checked against the previous one).'),
         new_space: z
@@ -360,10 +361,10 @@ export function createServer(api: SpaceContext, hooks: ServerHooks = {}, origin 
               .describe(
                 'The container: video/mp4, video/quicktime (MOV), video/x-m4v, video/3gpp (3GP), video/webm, or video/x-matroska / video/matroska (MKV). Other containers (AVI, MPEG-TS…) are refused: convert to MP4 first. A WebM recorded in a browser states no duration: where the API reads videos with its own ffmpeg (limits.max_video_bytes of GET /v1 above 100 MiB) it is measured and read; elsewhere it fails with VIDEO_UNREADABLE, refunded (remux it first: ffmpeg -i in.webm -c copy out.webm).'
               ),
-            content_length: z.number().int().min(1).max(MAX_VIDEO_BYTES).describe('Exact size in bytes: up to 4 GB (4294967296) on api.spacecontext.app. The API states its own limit in GET /v1 and refuses a bigger video when the scan is created.'),
+            content_length: z.number().int().min(1).max(MAX_VIDEO_BYTES).describe('Exact size in bytes: up to 4 GB (4294967296) on api.spacecontext.app. The limit that holds is the one the API states in GET /v1 (limits.max_video_bytes): a bigger video is refused when the scan is created, and the error says the limit.'),
           })
           .optional()
-          .describe('With source video: up to 4 GB and 10 minutes on api.spacecontext.app (the API states its limit in GET /v1).'),
+          .describe('With source video: up to 4 GB and 10 minutes on api.spacecontext.app. The limit that holds is limits.max_video_bytes of GET /v1; a bigger video is refused when the scan is created, with the limit in the error.'),
         frames: z.object({ count: z.number().int().min(1).max(MAX_FRAMES) }).optional().describe('With source frames: how many images will be uploaded.'),
         language: z
           .enum(REPORT_LANGUAGES)

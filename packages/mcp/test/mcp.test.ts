@@ -1107,8 +1107,14 @@ describe('MCP tools: the whole space, photos and scanning', () => {
     await initialize(accessToken);
     const listed = (await rpc(accessToken, 'tools/list')).result.tools as Array<{ name: string; description: string; inputSchema: any }>;
     const createScan = listed.find((entry) => entry.name === 'create_scan')!;
-    expect(createScan.description).toContain('Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes on api.spacecontext.app, the API states its own limit in GET /v1)');
-    expect(createScan.inputSchema.properties.video.description).toBe('With source video: up to 4 GB and 10 minutes on api.spacecontext.app (the API states its limit in GET /v1).');
+    // 4 GB on the hosted API, and the limit that holds is the one the API states, and says when it refuses.
+    expect(createScan.description).toContain(
+      'Video (MP4, MOV, M4V, 3GP, WebM or Matroska; up to 4 GB and 10 minutes on api.spacecontext.app; the limit that holds is the one the API states in GET /v1, limits.max_video_bytes, and a bigger video is refused when the scan is created, with the limit in the error)'
+    );
+    expect(createScan.inputSchema.properties.video.description).toBe(
+      'With source video: up to 4 GB and 10 minutes on api.spacecontext.app. The limit that holds is limits.max_video_bytes of GET /v1; a bigger video is refused when the scan is created, with the limit in the error.'
+    );
+    expect(createScan.inputSchema.properties.video.properties.content_length.description).toContain('The limit that holds is the one the API states in GET /v1 (limits.max_video_bytes)');
     // A browser's WebM fails only where the API has no ffmpeg of its own.
     expect(createScan.inputSchema.properties.video.properties.content_type.description).toContain('where the API reads videos with its own ffmpeg (limits.max_video_bytes of GET /v1 above 100 MiB) it is measured and read; elsewhere it fails with VIDEO_UNREADABLE');
     expect(createScan.inputSchema.properties.video.properties.content_length.maximum).toBe(4 * GB);
