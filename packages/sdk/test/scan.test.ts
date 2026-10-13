@@ -3,7 +3,7 @@ import { mkdtemp, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SCAN_LIMITS, describeScan, fileBody, parseServerSentEvents, SpaceContext, SpaceContextError, type Scan, type ScanProgress } from '../src/index.js';
+import { DEFAULT_SCAN_LIMITS, describeScan, fileBody, parseServerSentEvents, SpaceContext, SpaceContextError, TEST_MODE_MAX_VIDEO_BYTES, type Scan, type ScanProgress } from '../src/index.js';
 
 // `sc.scan()` in one call, the event stream under it, and the Markdown export.
 
@@ -832,6 +832,19 @@ describe('limits()', () => {
     await old.limits();
     expect(older.calls).toHaveLength(1);
     expect(DEFAULT_SCAN_LIMITS).toEqual({ maxVideoBytes: 100 * MB, maxVideoSeconds: 600, maxPhotos: 120 });
+  });
+
+  it('caps a test key at 95 MiB of video, which the API takes through itself and does not keep', async () => {
+    const { fetch } = fakeFetch(() => descriptor({ max_video_bytes: 4 * GB, max_video_seconds: 600, max_photos: 120 }));
+    const test = new SpaceContext({ apiKey: 'sc_test_abcdefghijklmnop', baseUrl: BASE, fetch, maxRetries: 0 });
+    expect(await test.limits()).toEqual({ maxVideoBytes: TEST_MODE_MAX_VIDEO_BYTES, maxVideoSeconds: 600, maxPhotos: 120 });
+    expect(TEST_MODE_MAX_VIDEO_BYTES).toBe(95 * MB);
+    // A deployment that takes less keeps its own limit; a live key keeps the deployment's.
+    const small = fakeFetch(() => descriptor({ max_video_bytes: 50 * MB }));
+    expect((await new SpaceContext({ apiKey: 'sc_test_abcdefghijklmnop', baseUrl: BASE, fetch: small.fetch }).limits())!.maxVideoBytes).toBe(50 * MB);
+    expect((await client(fetch).limits())!.maxVideoBytes).toBe(4 * GB);
+    // scan() refuses a bigger test video before creating anything.
+    await expect(test.scan(sizedVideo(200 * MB), { space: SPACE_ID })).rejects.toThrow('over the 95 MB this API takes');
   });
 
   it("is null when the descriptor cannot be read, never a guess, tries again next time, and throws only for the caller's own abort", async () => {

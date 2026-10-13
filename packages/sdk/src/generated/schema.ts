@@ -133,7 +133,7 @@ export interface paths {
         put?: never;
         /**
          * Create a scan of a space created through the API
-         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language of the report (`en`, `it`, `es`, `fr`, `de`, `pt`, `nl`; the narration can be in any language) and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). An account holds at most 20 scans created and not started (both modes): past that, 429 `SCANS_IN_PROGRESS` (`max_open_scans`) until some are started or cancelled. A test scan keeps only whether it had a transcript, never its text (its result is the demo). Needs `scans:write`.
+         * @description Declares what will be uploaded (frames with their timestamps, or one video), the language of the report (`en`, `it`, `es`, `fr`, `de`, `pt`, `nl`; the narration can be in any language) and the optional transcript. The response says how to upload in `upload`; then call `POST /scans/{id}/start`. A live scan needs a card on file, asked here, before any upload link: 402 `PAYMENT_METHOD_REQUIRED` (added in the console, nothing charged), 503 `PAYMENTS_UNAVAILABLE` where payments are not configured; the same rule as the start. A test scan never needs one; its uploads go through the API (a video of at most 95 MiB) and are counted, never stored. The same `Idempotency-Key` returns the same scan. An account creates at most 500 scans a day in each mode (by default, test keys included; a replay does not count): past that, 429 `RATE_LIMIT_EXCEEDED` with `Retry-After` (seconds to midnight UTC). An account holds at most 20 scans created and not started (both modes): past that, 429 `SCANS_IN_PROGRESS` (`max_open_scans`) until some are started or cancelled. A test scan keeps only whether it had a transcript, never its text (its result is the demo). Needs `scans:write`.
          */
         post: operations["createScan"];
         delete?: never;
@@ -271,7 +271,7 @@ export interface paths {
         };
         /**
          * What this key has to spend
-         * @description For agents: the balance, the free scans left, the price of a scan and whether a card is on file (`card_on_file`: live scans need one). Needs the `scans:read` scope.
+         * @description For agents: the balance, the free scans left, the price of a scan and whether a card is on file (`card_on_file`: live scans need one). A test key reads a fixed test-mode wallet instead (balance 0, no free scan, `card_on_file` false, automatic recharge off, the live price): test scans cost nothing and need no card. Needs the `scans:read` scope.
          */
         get: operations["getWallet"];
         put?: never;
@@ -336,7 +336,7 @@ export interface paths {
         get?: never;
         /**
          * Upload one frame of a frames scan
-         * @description The raw image as the body: JPEG, PNG or WebP (recognised by its bytes), at most 2 MB. Sending a frame again replaces it. Needs `scans:write`.
+         * @description The raw image as the body: JPEG, PNG or WebP (recognised by its bytes), at most 2 MB. Sending a frame again replaces it. A test scan checks the frame the same way and only records that it arrived: nothing of a test scan is stored (its result is the demo). Needs `scans:write`.
          */
         put: operations["uploadScanFrame"];
         post?: never;
@@ -356,7 +356,7 @@ export interface paths {
         get?: never;
         /**
          * Upload the video of a video scan through the API
-         * @description Only when `upload.url` points here (no direct upload link available). `Content-Length` and `Content-Type` must match what was declared. At most 99614720 bytes (95 MiB): a bigger video answers 413 `FILE_TOO_LARGE` and goes to the direct upload link instead. Needs `scans:write`.
+         * @description Only when `upload.url` points here (no direct upload link available; always for a test scan, whose video is counted and dropped, never stored). `Content-Length` and `Content-Type` must match what was declared, and the body must be that size. At most 99614720 bytes (95 MiB): a bigger video answers 413 `FILE_TOO_LARGE` and goes to the direct upload link instead. Needs `scans:write`.
          */
         put: operations["uploadScanVideo"];
         post?: never;
@@ -397,7 +397,7 @@ export interface paths {
         put?: never;
         /**
          * Check one frame while filming
-         * @description For apps that capture a space: is this frame usable, and which key locations (electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter) does it show. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`. Errors: 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`.
+         * @description For apps that capture a space: is this frame usable, and which key locations (electrical_panel, water_shutoff, water_heater, smoke_detector, fire_extinguisher, router, heating_control, gas_meter) does it show. The raw image as the body: JPEG, PNG or WebP, at most 2 MB. About half a second; nothing is stored. Free within a daily allowance per account (429 when used up). Test keys get a fixed answer. Needs `scans:write`; a live check needs a card on file, like a live scan. Errors: 402 `PAYMENT_METHOD_REQUIRED` (live, no card on file: added in the console, nothing charged), 415 `INVALID_CONTENT_TYPE`, 503 `FRAME_CHECK_UNAVAILABLE`, 503 `PAYMENTS_UNAVAILABLE` (live, where payments are not configured).
          */
         post: operations["checkFrame"];
         delete?: never;
@@ -1188,7 +1188,7 @@ export interface components {
                      * @enum {string}
                      */
                     content_type: "video/mp4" | "video/quicktime" | "video/x-m4v" | "video/3gpp" | "video/webm" | "video/x-matroska" | "video/matroska";
-                    /** @description The size of the file in bytes. Up to 4294967296 (4 GiB) where the API reads videos with its own ffmpeg ingest, 104857600 (100 MiB) otherwise; `limits.max_video_bytes` of `GET /` says which. Larger is refused here with 400 `VALIDATION_ERROR`. Above 99614720 (95 MiB) the video can only be sent to the direct upload link (`upload.url`). */
+                    /** @description The size of the file in bytes. Up to 4294967296 (4 GiB) where the API reads videos with its own ffmpeg ingest, 104857600 (100 MiB) otherwise; `limits.max_video_bytes` of `GET /` says which. A test scan takes at most 99614720 (95 MiB): it uploads through the API. Larger is refused here with 400 `VALIDATION_ERROR`. Above 99614720 (95 MiB) the video can only be sent to the direct upload link (`upload.url`). */
                     content_length: number;
                 };
                 transcript?: {
@@ -1254,7 +1254,10 @@ export interface components {
                 frame_count?: number;
                 max_bytes?: number;
                 content_types?: string[];
-                /** Format: date-time */
+                /**
+                 * Format: date-time
+                 * @description Direct upload links only: the link must be used (the PUT started) within 15 minutes; an upload begun in time completes. Past it, `GET /scans/{id}` (with `scans:write`) gives a fresh link while the scan waits for its upload.
+                 */
                 expires_at?: string;
             } | null;
             /** Format: date-time */
@@ -1763,10 +1766,12 @@ export interface operations {
             };
             400: components["responses"]["ErrorResponse"];
             401: components["responses"]["ErrorResponse"];
+            402: components["responses"]["ErrorResponse"];
             403: components["responses"]["ErrorResponse"];
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["ErrorResponse"];
         };
     };
     getSpaceScan: {
@@ -2215,6 +2220,7 @@ export interface operations {
             };
             400: components["responses"]["ErrorResponse"];
             401: components["responses"]["ErrorResponse"];
+            402: components["responses"]["ErrorResponse"];
             403: components["responses"]["ErrorResponse"];
             413: components["responses"]["ErrorResponse"];
             415: components["responses"]["ErrorResponse"];

@@ -47,7 +47,7 @@ A live key with `scans:write` (one of the default scopes) can be created only on
 
 Without a card, creating such a key answers `402 PAYMENT_METHOD_REQUIRED`, whether you create it in the console, approve it for `spacecontext login` or allow scanning when you connect an assistant. Test keys and live keys without `scans:write` (read-only) never need a card. Removing the card later does not revoke the keys you already have.
 
-The same rule applies when a **live scan starts**, whoever starts it (a key, the console or an assistant): an account with no card saved and no top-up paid gets `402 PAYMENT_METHOD_REQUIRED` and nothing is charged, its free scan included. Test scans never need a card.
+The same rule applies when a **live scan is created or starts**, and to a live frame check (`POST /frames/check`), whoever asks (a key, the console or an assistant): an account with no card saved and no top-up paid gets `402 PAYMENT_METHOD_REQUIRED` before any upload link is given, and nothing is charged, its free scan included. Test scans never need a card. A test scan's video is at most 95 MB: it is uploaded through the API and nothing of it is kept (its result is the demo).
 
 ## Monthly spending cap
 

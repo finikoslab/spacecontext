@@ -94,6 +94,12 @@ export interface ScanLimits {
  */
 export const DEFAULT_SCAN_LIMITS: Readonly<ScanLimits> = Object.freeze({ maxVideoBytes: 100 * 1024 * 1024, maxVideoSeconds: 600, maxPhotos: 120 });
 
+/**
+ * The largest video of a test scan (95 MiB): it is uploaded through the API,
+ * never to storage, and nothing of it is kept (a test scan's result is the demo).
+ */
+export const TEST_MODE_MAX_VIDEO_BYTES = 95 * 1024 * 1024;
+
 /** The limits in the API's descriptor; a field missing or malformed keeps its default. */
 function scanLimits(descriptor: unknown): ScanLimits {
   const limits =
@@ -547,7 +553,9 @@ export class SpaceContext {
    * public): the largest video (4 GiB where the API reads videos with its own
    * ffmpeg, 100 MiB without it, 95 MiB where it issues no direct upload link),
    * the longest, and the most photos. A deployment older than the `limits`
-   * field gives `DEFAULT_SCAN_LIMITS`. Kept for an hour.
+   * field gives `DEFAULT_SCAN_LIMITS`. Kept for an hour. With a test key the
+   * largest video is at most `TEST_MODE_MAX_VIDEO_BYTES` (95 MiB), whatever the
+   * deployment takes live.
    *
    * `null` when the descriptor could not be read (no answer, an error, a page
    * that is not the descriptor): the limits are unknown, never guessed, and the
@@ -555,7 +563,7 @@ export class SpaceContext {
    * `scan()` checks a source against known limits before creating anything.
    */
   async limits(options: RequestOptions = {}): Promise<ScanLimits | null> {
-    if (this.knownLimits && Date.now() - this.knownLimits.at < LIMITS_TTL_MS) return { ...this.knownLimits.limits };
+    if (this.knownLimits && Date.now() - this.knownLimits.at < LIMITS_TTL_MS) return this.forMode(this.knownLimits.limits);
     let descriptor: unknown;
     try {
       // `/v1`, not `/v1/`: the API redirects the latter, and redirects are never followed.
@@ -574,7 +582,12 @@ export class SpaceContext {
     // A proxy's or a gateway's JSON is not the API saying anything.
     if (typeof descriptor !== 'object' || descriptor === null || (descriptor as { name?: unknown }).name !== 'space-context-api') return null;
     this.knownLimits = { limits: scanLimits(descriptor), at: Date.now() };
-    return { ...this.knownLimits.limits };
+    return this.forMode(this.knownLimits.limits);
+  }
+
+  /** The deployment's limits as this key meets them: a test scan's video is at most 95 MiB. */
+  private forMode(limits: ScanLimits): ScanLimits {
+    return this.mode === 'test' ? { ...limits, maxVideoBytes: Math.min(limits.maxVideoBytes, TEST_MODE_MAX_VIDEO_BYTES) } : { ...limits };
   }
 
   // ---------------------------------------------------------------- account
