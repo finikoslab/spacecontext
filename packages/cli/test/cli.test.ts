@@ -144,7 +144,7 @@ describe('spacecontext CLI', () => {
     expect(keyed.calls).toEqual([]);
   });
 
-  it('removes escape sequences from what the API sends before printing it at a terminal, and keeps --json as sent', async () => {
+  it('removes escape sequences from what the API sends before printing it at a terminal, and keeps --json as sent but escaped', async () => {
     const hostile = 'Flat\u001b]52;c;cGF5bG9hZA==\u0007\u001b]8;;https://evil.example/\u001b\\link\u001b]8;;\u001b\\\u001b[2J\u009b31m\u202eredli\u2066';
     const space = { ...document, space: { ...document.space, name: hostile }, items: [{ id: 'itm_1', area_id: 'area_1', name: `Oven${'\u001b'}[H` }] };
     const h = harness([
@@ -167,7 +167,14 @@ describe('spacecontext CLI', () => {
 
     const raw = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
     expect(await main(['space', SPACE_ID, '--json'], raw.io)).toBe(0);
+    const listed = harness(h.routes, { SPACECONTEXT_API_KEY: KEY });
+    expect(await main(['spaces', '--json'], listed.io)).toBe(0);
+    // JSON.stringify leaves DEL, C1 and the bidi controls as they are: written as \uXXXX, the data is the same once parsed.
+    for (const out of [raw.stdout(), listed.stdout()]) {
+      expect(out).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/);
+    }
     expect(JSON.parse(raw.stdout()).space.name).toBe(hostile);
+    expect(JSON.parse(listed.stdout())[0].name).toBe(hostile);
   });
 
   it('logs in with a key it has checked, stores it for the owner only, and logs out', async () => {

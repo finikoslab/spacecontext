@@ -563,6 +563,36 @@ describe('authorization', () => {
     expect(page.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
   });
 
+  it("lets Cursor receive the code on its own scheme, shown as an app with a warning", async () => {
+    const cursor = 'cursor://anysphere.cursor-mcp/oauth/callback';
+    const page = await openAuthorize(await registerClient('Cursor', cursor), cursor);
+    const who = /<div class="who">([\s\S]*?)<\/div>/.exec(page.html)![1]!;
+    expect(who.startsWith('<p>The assistant will receive access at <strong class="host">cursor://anysphere.cursor-mcp</strong></p>')).toBe(true);
+    expect(who).toContain('The access goes to the app that opens cursor: links on this device.');
+  });
+
+  it('never sends a code to any other app scheme, even a registered one', async () => {
+    for (const redirect of ['ms-msdt:/id PCWDiagnostic', 'evilapp://accounts.google.com/callback', 'com.example.app:/oauth']) {
+      const clientId = await registerClient('Claude', redirect);
+      const query = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: redirect,
+        scope: 'spaces:read',
+        state: 'state-123',
+        code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+        code_challenge_method: 'S256',
+        resource: `${ORIGIN}/mcp`,
+      });
+      const response = await call(new Request(`${ORIGIN}/authorize?${query}`, { redirect: 'manual' }));
+      expect(response.status, redirect).toBe(400);
+      expect(response.headers.get('Location')).toBeNull();
+      const html = await response.text();
+      expect(html).not.toContain('name="handle"');
+      expect(html).toContain('does not send to');
+    }
+  });
+
   it('leads with where the access goes, and shows the name a client chose capped and marked as not verified', async () => {
     const page = await openAuthorize(await registerClient(`Claude ${'A'.repeat(200)}`));
     const who = /<div class="who">([\s\S]*?)<\/div>/.exec(page.html)![1]!;

@@ -14,7 +14,7 @@ import { BILLING_URL, DEFAULT_API_URL, KEYS_URL } from './lib/links.js';
 import { setup } from './commands/setup.js';
 import { deviceLogin } from './commands/signin.js';
 import type { Runner } from './lib/system.js';
-import { brandLine, closest, duration, plural, printable, safe, size, sizeLimit, spinning, Status, styleFor, table, tildePath, visibleWidth, type Style } from './terminal/ui.js';
+import { brandLine, closest, duration, plural, printable, safe, size, sizeLimit, spinning, Status, styleFor, table, tildePath, toJson, visibleWidth, type Style } from './terminal/ui.js';
 
 export const VERSION = '0.2.0';
 
@@ -99,7 +99,7 @@ function busy<T>(context: Context, text: string, work: () => Promise<T>): Promis
  * carry escape sequences a terminal would run).
  */
 function print<T>(io: Io, values: Values, json: T, text: (shown: T) => string): void {
-  io.stdout(values.json ? `${JSON.stringify(json, null, 2)}\n` : text(printable(json)));
+  io.stdout(values.json ? `${toJson(json, 2)}\n` : text(printable(json)));
 }
 
 function money(cents: number): string {
@@ -380,10 +380,10 @@ async function exportMarkdown(context: Context, sc: SpaceContext, id: string, pa
   if (values.out) {
     const file = path.resolve(io.cwd, values.out);
     await writeFile(file, page);
-    if (values.json) io.stdout(`${JSON.stringify({ file }, null, 2)}\n`);
+    if (values.json) io.stdout(`${toJson({ file }, 2)}\n`);
     else io.stderr(`${err.ok} Written to ${safe(tildePath(io, file))}\n`);
   } else if (values.json) {
-    io.stdout(`${JSON.stringify({ markdown: page }, null, 2)}\n`);
+    io.stdout(`${toJson({ markdown: page }, 2)}\n`);
   } else {
     io.stdout(safe(page));
   }
@@ -674,7 +674,7 @@ async function scanStatus(context: Context): Promise<void> {
   let last: Scan | null = null;
   for await (const scan of sc.scans.events(id)) {
     last = scan;
-    if (values.json) io.stdout(`${JSON.stringify(scan)}\n`);
+    if (values.json) io.stdout(`${toJson(scan)}\n`);
     else io.stdout(`${scanLine(out, printable(scan))}\n`);
   }
   if (last && last.status !== 'complete') {
@@ -984,7 +984,7 @@ async function scan(context: Context): Promise<void> {
   if (output === 'skill') return exportSkill(context, sc, spaceId, { enrich: 'none' });
   const document = await sc.spaces.get(spaceId, { enrich: 'none' });
   if (output === 'json') {
-    io.stdout(`${JSON.stringify(document, null, 2)}\n`);
+    io.stdout(`${toJson(document, 2)}\n`);
     return;
   }
   print(io, values, document, (document) => {

@@ -47,6 +47,10 @@ function provider(publicUrl: string): OAuthProvider<Env> {
     tokenEndpoint: '/token',
     clientRegistrationEndpoint: '/register',
     clientIdMetadataDocumentEnabled: true,
+    // Codes may go to an app's own URL scheme (RFC 8252), which the authorize
+    // pages then limit to known apps (NATIVE_REDIRECT_SCHEMES): Cursor falls
+    // back to `cursor://` when its loopback port is taken. PKCE stays required.
+    allowPrivateUseRedirectUris: true,
     scopesSupported: SCOPES_SUPPORTED,
     resourceMetadata: { resource: `${origin}/mcp`, authorization_servers: [origin], resource_name: 'Space Context' },
     requiredScopes: REQUIRED_SCOPES,

@@ -34,9 +34,28 @@ function sameOrigin(request: Request, env: Env): boolean {
   return request.headers.get('Sec-Fetch-Site') === 'same-origin';
 }
 
+/**
+ * Apps that receive the code on their own URL scheme (RFC 8252 private-use
+ * URIs): Cursor, when its loopback port is taken, uses
+ * `cursor://anysphere.cursor-mcp/oauth/callback`. No other scheme: after Approve
+ * the browser opens the redirect URI, and whoever registers a client chooses it,
+ * so a scheme of the operating system (`ms-msdt:`, `search-ms:`…) must never be
+ * one click away.
+ */
+export const NATIVE_REDIRECT_SCHEMES: ReadonlySet<string> = new Set(['cursor:']);
+
+/** A redirect URI this server sends codes to: https, http on loopback (both checked by the library), or a known app's scheme. */
+export function redirectAllowed(redirectUri: string): boolean {
+  const { protocol } = new URL(redirectUri);
+  return protocol === 'https:' || protocol === 'http:' || NATIVE_REDIRECT_SCHEMES.has(protocol);
+}
+
 /** The authorization request and what the page must show about it, from the original query. */
 async function describe(env: Env, request: Request, oauth: string): Promise<{ authRequest: AuthRequest; consent: ConsentDescription }> {
   const authRequest = await env.OAUTH_PROVIDER.parseAuthRequest(new Request(`${new URL(request.url).origin}/authorize?${oauth}`));
+  if (!redirectAllowed(authRequest.redirectUri)) {
+    throw new AuthorizationError('invalid_request', { description: 'This app asks to receive access on a link this server does not send to. Use an https or loopback redirect URI.' });
+  }
   return { authRequest, consent: await env.OAUTH_PROVIDER.describeConsent(authRequest) };
 }
 

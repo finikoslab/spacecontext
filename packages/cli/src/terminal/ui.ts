@@ -169,8 +169,23 @@ export function safe(text: string): string {
 }
 
 /**
+ * Characters `JSON.stringify` writes as they are but a terminal acts on: DEL, C1
+ * and the bidirectional overrides and isolates (C0 it already escapes).
+ */
+const UNESCAPED_IN_JSON = /[\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
+
+/**
+ * JSON for stdout: the data exactly as the API sent it once parsed, with every
+ * character a terminal would act on written as `\uXXXX`. They can only appear
+ * inside strings, where the escape means the same character.
+ */
+export function toJson(value: unknown, indent?: number): string {
+  return JSON.stringify(value, null, indent).replace(UNESCAPED_IN_JSON, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+/**
  * A copy of an API response with every string made `safe`, for human output
- * (JSON output is escaped by `JSON.stringify` and stays as the API sent it).
+ * (JSON output goes through `toJson` and stays as the API sent it).
  */
 export function printable<T>(value: T): T {
   if (typeof value === 'string') return safe(value) as T;

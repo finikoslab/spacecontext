@@ -76,15 +76,31 @@ function shownName(name: string): string {
  * only for a client known by its metadata URL (CIMD), so any other is marked
  * as not verified.
  */
+/** A redirect to an app's own URL scheme: the scheme, and the target as `scheme://host`. */
+function nativeApp(redirectUri: string): { scheme: string; target: string } | null {
+  try {
+    const url = new URL(redirectUri);
+    if (url.protocol === 'https:' || url.protocol === 'http:') return null;
+    return { scheme: url.protocol, target: url.host ? `${url.protocol}//${url.host}` : url.protocol };
+  } catch {
+    return null;
+  }
+}
+
 function requester(consent: ConsentDescription): string {
   const name = `<strong>${escapeHtml(shownName(consent.clientName))}</strong>`;
   const who = consent.clientDomain
     ? `It is ${name}, as published by <strong>${escapeHtml(consent.clientDomain)}</strong>.`
     : `It calls itself ${name} (name not verified).`;
-  const loopback = consent.redirectIsLoopback
-    ? '<p class="warn">The access goes to a program on this computer. Approve only if you started this connection yourself.</p>'
-    : '';
-  return `<div class="who"><p>The assistant will receive access at <strong class="host">${escapeHtml(consent.redirectHost)}</strong></p><p class="muted">${who}</p>${loopback}</div>`;
+  const app = nativeApp(consent.redirectUri);
+  const warning = app
+    ? `<p class="warn">The access goes to the app that opens ${escapeHtml(app.scheme)} links on this device. Approve only if you started this connection from it yourself.</p>`
+    : consent.redirectIsLoopback
+      ? '<p class="warn">The access goes to a program on this computer. Approve only if you started this connection yourself.</p>'
+      : '';
+  // An app's link has a host of its own choosing (`cursor://anysphere.cursor-mcp`), which must not read as a website.
+  const target = app ? app.target : consent.redirectHost;
+  return `<div class="who"><p>The assistant will receive access at <strong class="host">${escapeHtml(target)}</strong></p><p class="muted">${who}</p>${warning}</div>`;
 }
 
 function hidden(fields: Record<string, string>): string {
