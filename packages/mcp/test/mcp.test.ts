@@ -144,12 +144,12 @@ function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
-async function registerClient(name = 'Claude') {
+async function registerClient(name = 'Claude', redirect = REDIRECT) {
   const response = await call(
     new Request(`${ORIGIN}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ redirect_uris: [REDIRECT], client_name: name, token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }),
+      body: JSON.stringify({ redirect_uris: [redirect], client_name: name, token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }),
     })
   );
   expect(response.status).toBe(201);
@@ -626,6 +626,20 @@ describe('authorization', () => {
     const response = await call(new Request(`${ORIGIN}/authorize?response_type=code&client_id=nope&redirect_uri=${encodeURIComponent(REDIRECT)}`));
     expect(response.status).toBe(400);
     expect(response.headers.get('Location')).toBeNull();
+  });
+
+  it('shows a refused request on its own page, never redirecting to the URI a client registered', async () => {
+    // Registration is anonymous: anyone can register any redirect URI, so an
+    // error redirect to it would be an open redirect through this server.
+    const clientId = await registerClient('Anything', 'https://evil.example/landing');
+    // Without PKCE the library refuses the request, with a redirect it deems safe.
+    const query = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: 'https://evil.example/landing', state: 'x' });
+    const response = await call(new Request(`${ORIGIN}/authorize?${query}`, { redirect: 'manual' }));
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Location')).toBeNull();
+    const html = await response.text();
+    expect(html).toContain('Invalid request');
+    expect(html).not.toContain('evil.example');
   });
 });
 

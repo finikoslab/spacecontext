@@ -41,14 +41,14 @@ async function describe(env: Env, request: Request, oauth: string): Promise<{ au
 }
 
 /**
- * A request the library refused. Back to the client when its redirect URI is
- * validated, otherwise on this page. Anything else (a KV outage, a bug) is not
- * the user's doing and surfaces as a 500.
+ * A request the library refused, shown on this page. Never sent back to the
+ * client, even when its redirect URI is validated: anyone can register a client
+ * with any redirect URI, so an error redirect would make this server an open
+ * redirector (RFC 9700 §4.11.2). Deny still goes back to the client, through
+ * `denyConsent`. Anything else (a KV outage, a bug) is not the user's doing and
+ * surfaces as a 500.
  */
 function refused(error: unknown): Response {
-  if (error instanceof AuthorizationError && error.redirectTo) {
-    return new Response(null, { status: 302, headers: { Location: error.redirectTo } });
-  }
   if (error instanceof AuthorizationError) return errorPage('Invalid request', error.description, 400);
   if (error instanceof CimdFetchError) return errorPage('Unknown app', 'This app could not be verified. Start again from your assistant.', 400);
   throw error;
