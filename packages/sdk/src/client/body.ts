@@ -26,7 +26,7 @@ export function formatSize(bytes: number, whole = false): string {
 export type NodeFs = {
   promises: {
     stat(target: string): Promise<{ size: number; isDirectory(): boolean }>;
-    readdir(target: string): Promise<string[]>;
+    readdir(target: string, options: { withFileTypes: true }): Promise<Array<{ name: string; isFile(): boolean }>>;
     open(target: string, flags: string): Promise<NodeFileHandle>;
   };
   openAsBlob(target: string): Promise<Blob>;

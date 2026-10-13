@@ -198,8 +198,11 @@ async function resolvePath(target: string): Promise<Resolved> {
     throw invalid(`${target}: no such file or directory`);
   }
   if (info.isDirectory()) {
-    const names = (await fs.promises.readdir(target))
-      .filter((name) => IMAGE_TYPES[extension(name)])
+    // Regular files only, and no hidden ones: a symlink can point anywhere, and a
+    // volume formatted on another system brings `._IMG_0001.jpg` files that are not photos.
+    const names = (await fs.promises.readdir(target, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && !entry.name.startsWith('.') && IMAGE_TYPES[extension(entry.name)])
+      .map((entry) => entry.name)
       .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
     if (names.length === 0) throw invalid(`${target}: no .jpg, .png or .webp image in the folder`);
     const frames: ScanFrame[] = [];
@@ -251,6 +254,41 @@ export async function runScan<Format extends ScanFormat = 'document'>(
   checkLimits(resolved, await sc.limits(request));
   const report = options.onProgress ?? (() => undefined);
 
+  // What exists on the account so far, filled in as the flow goes.
+  const made: Made = { spaceId: options.space ?? null, scanId: null };
+  try {
+    return await scanInto(sc, resolved, options, request, report, made);
+  } catch (error) {
+    // Past this point something may exist on the account (a space, a scan, a
+    // charge): the error says which, so that the caller finds them instead of
+    // scanning again and paying twice.
+    throw withScanIds(error, made);
+  }
+}
+
+type Made = { spaceId: string | null; scanId: string | null };
+
+/** The same error, with the space and scan it concerns in `details` (`space_id`, `scan_id`). */
+function withScanIds(error: unknown, made: Made): unknown {
+  if (!(error instanceof SpaceContextError) || (made.spaceId === null && made.scanId === null)) return error;
+  const details = {
+    ...error.details,
+    ...(made.spaceId !== null ? { space_id: made.spaceId } : {}),
+    ...(made.scanId !== null ? { scan_id: made.scanId } : {}),
+  };
+  const copy = new SpaceContextError(error.message, error.status, error.code, error.requestId, details, error.retryAfter);
+  copy.stack = error.stack;
+  return copy;
+}
+
+async function scanInto<Format extends ScanFormat>(
+  sc: SpaceContext,
+  resolved: Resolved,
+  options: ScanOptions<Format>,
+  request: { signal: AbortSignal | undefined },
+  report: (event: ScanProgress) => void,
+  made: Made
+): Promise<ScanResult<Format>> {
   let spaceId = options.space!;
   if (options.name) {
     const created = await sc.spaces.create(
@@ -262,6 +300,7 @@ export async function runScan<Format extends ScanFormat = 'document'>(
       request
     );
     spaceId = created.id;
+    made.spaceId = spaceId;
     report({ type: 'space_created', spaceId });
   }
 
@@ -273,7 +312,11 @@ export async function runScan<Format extends ScanFormat = 'document'>(
   let started: Scan;
   if (resolved.kind === 'video') {
     report({ type: 'uploading', part: 1, parts: 1, bytes: byteLength(resolved.data) });
-    started = await sc.scans.fromVideo(spaceId, { data: resolved.data, contentType: resolved.contentType, ...common }, request);
+    started = await sc.scans.fromVideo(
+      spaceId,
+      { data: resolved.data, contentType: resolved.contentType, ...common, onCreated: (scan) => (made.scanId = scan.id) },
+      request
+    );
   } else {
     const total = resolved.frames.reduce((sum, frame) => sum + byteLength(frame.data), 0);
     started = await sc.scans.fromFrames(
@@ -283,6 +326,7 @@ export async function runScan<Format extends ScanFormat = 'document'>(
         ...common,
         ...(options.transcript ? { transcript: options.transcript } : {}),
         onUpload: (index) => report({ type: 'uploading', part: index + 1, parts: resolved.frames.length, bytes: total }),
+        onCreated: (scan) => (made.scanId = scan.id),
       },
       request
     );

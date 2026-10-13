@@ -2,9 +2,18 @@
 export type ServerSentEvent = { event: string; id: string | null; data: string };
 
 /**
+ * The most an event (with the line being read) may hold, in characters: a
+ * stream that never ends a line or an event is not read without bound. Past
+ * it the reading fails, which the caller takes as a dropped connection.
+ */
+const MAX_EVENT_CHARS = 1024 * 1024;
+
+/**
  * Reads a `text/event-stream` body event by event, as it arrives. Follows the
- * SSE format: fields separated by newlines, events by a blank line, comment
- * lines (`:`) ignored, several `data:` lines joined with newlines.
+ * SSE format: lines end with CRLF, LF or CR; events end with a blank line;
+ * comment lines (`:`) are ignored; several `data:` lines are joined with
+ * newlines. An event the stream ends in the middle of is dropped, as the format
+ * says: a connection cut mid-event never yields half an event.
  *
  * `signal` ends the reading at once, even when nothing arrives (a stream that
  * only sends pings, a body that ignores the request's abort): the events read so
@@ -18,54 +27,67 @@ export async function* parseServerSentEvents(body: ReadableStream<Uint8Array>, s
   else signal?.addEventListener('abort', stop, { once: true });
   const decoder = new TextDecoder();
   let buffer = '';
+  let pending = emptyEvent();
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      let boundary = findBoundary(buffer);
-      while (boundary) {
-        const block = buffer.slice(0, boundary.index);
-        buffer = buffer.slice(boundary.index + boundary.length);
-        const event = parseBlock(block);
+      let start = 0;
+      for (let end = lineEnd(buffer, start); end; end = lineEnd(buffer, start)) {
+        const line = buffer.slice(start, end.index);
+        start = end.index + end.length;
+        if (line !== '') {
+          addLine(pending, line);
+          continue;
+        }
+        const event = pending.seen ? { event: pending.event, id: pending.id, data: pending.data.join('\n') } : null;
+        pending = emptyEvent();
         if (event) yield event;
-        boundary = findBoundary(buffer);
       }
+      buffer = buffer.slice(start);
+      if (buffer.length + pending.size > MAX_EVENT_CHARS) throw new Error('An event of the stream is too large');
     }
-    if (signal?.aborted) return;
-    const last = parseBlock(buffer);
-    if (last) yield last;
   } finally {
     signal?.removeEventListener('abort', stop);
     await reader.cancel().catch(() => undefined);
   }
 }
 
-/** The first blank line (`\n\n` or `\r\n\r\n`), whichever comes first. */
-function findBoundary(text: string): { index: number; length: number } | null {
-  const lf = text.indexOf('\n\n');
-  const crlf = text.indexOf('\r\n\r\n');
-  if (lf === -1 && crlf === -1) return null;
-  if (crlf !== -1 && (lf === -1 || crlf < lf)) return { index: crlf, length: 4 };
-  return { index: lf, length: 2 };
+type PendingEvent = { event: string; id: string | null; data: string[]; seen: boolean; size: number };
+
+function emptyEvent(): PendingEvent {
+  return { event: 'message', id: null, data: [], seen: false, size: 0 };
 }
 
-function parseBlock(block: string): ServerSentEvent | null {
-  const lines = block.split(/\r?\n/);
-  let event = 'message';
-  let id: string | null = null;
-  const data: string[] = [];
-  let seen = false;
-  for (const line of lines) {
-    if (line === '' || line.startsWith(':')) continue;
-    seen = true;
-    const colon = line.indexOf(':');
-    const field = colon === -1 ? line : line.slice(0, colon);
-    let value = colon === -1 ? '' : line.slice(colon + 1);
-    if (value.startsWith(' ')) value = value.slice(1);
-    if (field === 'event') event = value;
-    else if (field === 'id') id = value;
-    else if (field === 'data') data.push(value);
+/**
+ * Where the first line from `from` ends (CRLF, LF or CR), or null when it has
+ * not ended yet. A CR at the very end waits for the next chunk: it may be the
+ * first half of a CRLF.
+ */
+function lineEnd(text: string, from: number): { index: number; length: number } | null {
+  for (let index = from; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (code === 10) return { index, length: 1 };
+    if (code === 13) {
+      if (index + 1 === text.length) return null;
+      return { index, length: text.charCodeAt(index + 1) === 10 ? 2 : 1 };
+    }
   }
-  return seen ? { event, id, data: data.join('\n') } : null;
+  return null;
+}
+
+function addLine(event: PendingEvent, line: string): void {
+  if (line.startsWith(':')) return;
+  event.seen = true;
+  const colon = line.indexOf(':');
+  const field = colon === -1 ? line : line.slice(0, colon);
+  let value = colon === -1 ? '' : line.slice(colon + 1);
+  if (value.startsWith(' ')) value = value.slice(1);
+  if (field === 'event') event.event = value;
+  else if (field === 'id') event.id = value;
+  else if (field === 'data') {
+    event.data.push(value);
+    event.size += value.length + 1;
+  }
 }

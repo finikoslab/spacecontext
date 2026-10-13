@@ -102,6 +102,22 @@ describe('device sign-in', () => {
     await expect(waitForDeviceSignIn({ ...started, expires_in: 0 }, { baseUrl: BASE, fetch: gone.fetch })).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
   });
 
+  it('polls again after a poll refused for load (429) or by a failing gateway (5xx), no sooner than asked', async () => {
+    vi.useFakeTimers();
+    const { fetch, calls } = fakeFetch((call, index) => {
+      if (call.url.endsWith('/auth/device')) return json(started, 201);
+      if (index === 1) return new Response(JSON.stringify({ error: { code: 'RATE_LIMIT_EXCEEDED', message: 'slow', request_id: 'r' } }), { status: 429, headers: { 'Retry-After': '30' } });
+      if (index === 2) return new Response('bad gateway', { status: 503 });
+      return json(token);
+    });
+    const result = deviceSignIn({ baseUrl: BASE, fetch, onCode: () => undefined });
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await result).toEqual(token);
+    expect(calls).toHaveLength(4);
+  });
+
   it('gives up when the code outlives its time, and refuses a plain-http API', async () => {
     const { fetch } = fakeFetch(() => apiError(400, 'AUTHORIZATION_PENDING'));
     await expect(waitForDeviceSignIn({ ...started, expires_in: 0 }, { baseUrl: BASE, fetch })).rejects.toMatchObject({ code: 'DEVICE_CODE_EXPIRED' });

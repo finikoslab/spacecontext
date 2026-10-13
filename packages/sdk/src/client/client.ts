@@ -256,7 +256,10 @@ async function* untilDropped(events: AsyncGenerator<ServerSentEvent>, signal: Ab
 export class SpaceContext {
   readonly baseUrl: string;
   readonly mode: 'live' | 'test';
-  private readonly apiKey: string;
+  // An ES private field, not a TypeScript `private`: it never shows in
+  // `console.log(client)`, `util.inspect` or `JSON.stringify`, so a logged client
+  // never puts the key in the logs.
+  readonly #apiKey: string;
   private readonly fetcher: typeof fetch;
   private readonly maxRetries: number;
   private readonly timeoutMs: number;
@@ -274,7 +277,7 @@ export class SpaceContext {
         null
       );
     }
-    this.apiKey = apiKey;
+    this.#apiKey = apiKey;
     this.mode = apiKey.startsWith('sc_test_') ? 'test' : 'live';
     const baseUrl = (options.baseUrl ?? environment('SPACECONTEXT_BASE_URL') ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
     const parsed = new URL(baseUrl);
@@ -499,10 +502,14 @@ export class SpaceContext {
     wait: (id: string, params: { intervalMs?: number; timeoutMs?: number; onProgress?: (scan: Scan) => void } = {}, options: RequestOptions = {}) =>
       this.waitForScan(id, params, options),
 
-    /** Creates, uploads and starts a video scan; cancels it if the upload fails. Does not wait for the result. */
+    /**
+     * Creates, uploads and starts a video scan; cancels it if the upload fails.
+     * Does not wait for the result. `onCreated` gets the scan as soon as it
+     * exists, so that a caller stopped during the upload can name it.
+     */
     fromVideo: (
       spaceId: string,
-      video: { data: UploadBody; contentType: VideoContentType; language?: ReportLanguage; recordedAt?: string; device?: string },
+      video: { data: UploadBody; contentType: VideoContentType; language?: ReportLanguage; recordedAt?: string; device?: string; onCreated?: (scan: Scan) => void },
       options: RequestOptions = {}
     ) => this.scanFromVideo(spaceId, video, options),
 
@@ -510,7 +517,7 @@ export class SpaceContext {
     fromFrames: (
       spaceId: string,
       frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
-      params: { language?: ReportLanguage; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void } = {},
+      params: { language?: ReportLanguage; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void; onCreated?: (scan: Scan) => void } = {},
       options: RequestOptions = {}
     ) => this.scanFromFrames(spaceId, frames, params, options),
   };
@@ -525,6 +532,11 @@ export class SpaceContext {
    * ```ts
    * const { document } = await sc.scan('./flat.mp4', { name: 'Seaside flat', onProgress: (p) => console.log(p.type) });
    * ```
+   *
+   * An error thrown once the space or the scan exists carries their ids in
+   * `details.space_id` and `details.scan_id`. An error after the scan started
+   * does not mean it was not charged (it may have completed, and a failed scan
+   * is refunded): read it with `scans.get(details.scan_id)` before scanning again.
    */
   scan<Format extends ScanFormat = 'document'>(source: ScanSource, options: ScanOptions<Format> = {}): Promise<ScanResult<Format>> {
     return runScan(this, source, options);
@@ -588,8 +600,10 @@ export class SpaceContext {
       throw new SpaceContextError('Not an evidence URL of this API', 0, 'INVALID_URL', null);
     }
     // The URL is signed: the key is not needed, so it is not sent.
-    const response = await this.send(url, { method: 'GET', path: '', headers: {}, withAuth: false, idempotent: true, signal: options.signal });
-    return { contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', data: await response.arrayBuffer() };
+    return this.send(url, { method: 'GET', path: '', headers: {}, withAuth: false, idempotent: true, signal: options.signal }, async (response) => ({
+      contentType: response.headers.get('Content-Type') ?? 'application/octet-stream',
+      data: await response.arrayBuffer(),
+    }));
   }
 
   // ---------------------------------------------------------------- internals
@@ -620,31 +634,51 @@ export class SpaceContext {
     if (typeof upload.max_bytes === 'number' && size > upload.max_bytes) {
       // Through the API a request is bounded (95 MiB): a bigger video needs the
       // signed link to storage, which this deployment did not give.
+      // Refused here, before anything is sent: status 0, the code the API uses for the same refusal.
       throw new SpaceContextError(
         toApi
           ? `The video is ${formatSize(size)}, and this API takes at most ${formatSize(upload.max_bytes, true)} (${upload.max_bytes} bytes) through itself: ` +
               'it offers no direct upload link to storage, which a bigger video needs. Compress or trim the video'
           : `The video is larger than this upload accepts (${upload.max_bytes} bytes)`,
-        413,
-        'PAYLOAD_TOO_LARGE',
+        0,
+        'FILE_TOO_LARGE',
         null,
         { max_bytes: upload.max_bytes }
       );
     }
     const contentType = (upload.headers as Record<string, string> | undefined)?.['Content-Type'] ?? scan.input.video?.content_type;
     const headers: Record<string, string> = contentType ? { 'Content-Type': contentType } : {};
-    const response = await this.send(upload.url, {
-      method: 'PUT',
-      path: '',
-      body: data,
-      headers,
-      withAuth: toApi,
-      idempotent: true,
-      noTimeout: true,
-      signal: options.signal,
-    });
-    // Storage answers with an empty body; the API with a ScanUpload.
-    await response.arrayBuffer();
+    let url = upload.url;
+    let expiry = upload.expires_at;
+    for (let renewed = 0; ; renewed++) {
+      try {
+        // Storage answers with an empty body; the API with a ScanUpload.
+        await this.send(url, { method: 'PUT', path: '', body: data, headers, withAuth: toApi, idempotent: true, noTimeout: true, signal: options.signal }, (response) =>
+          response.arrayBuffer()
+        );
+        return;
+      } catch (error) {
+        // A direct link to storage is valid for minutes: an upload sent again after
+        // it expired (a long upload that dropped) is refused (403) or fails. The
+        // scan gives a fresh link while it waits for its video.
+        const expiresAt = Date.parse(expiry ?? '');
+        const renewable =
+          !toApi &&
+          renewed < 2 &&
+          !options.signal?.aborted &&
+          Number.isFinite(expiresAt) &&
+          Date.now() >= expiresAt &&
+          error instanceof SpaceContextError &&
+          error.code !== 'FILE_READ_ERROR' &&
+          (error.status === 403 || error.status === 0);
+        if (!renewable) throw error;
+        // When the scan cannot be read, the upload's own error is the one that says what happened.
+        const fresh = (await this.scans.get(scan.id, options).catch(() => null))?.upload;
+        if (!fresh?.url || fresh.url === url || this.isApiUrl(fresh.url)) throw error;
+        url = fresh.url;
+        expiry = fresh.expires_at;
+      }
+    }
   }
 
   private async waitForScan(
@@ -735,7 +769,14 @@ export class SpaceContext {
         if (body === null) break;
         for await (const event of untilDropped(parseServerSentEvents(body, signal), signal)) {
           if (event.event !== 'scan' || !event.data) continue;
-          const scan = JSON.parse(event.data) as Scan;
+          let scan: Scan;
+          try {
+            scan = JSON.parse(event.data) as Scan;
+          } catch {
+            // A garbled event: taken as a dropped connection. The stream is opened
+            // again, and the API sends the scan as it is now first.
+            break;
+          }
           if (fresh(scan)) yield scan;
           if (FINAL_SCAN_STATUSES.has(scan.status)) return;
         }
@@ -776,7 +817,7 @@ export class SpaceContext {
 
   private async scanFromVideo(
     spaceId: string,
-    video: { data: UploadBody; contentType: VideoContentType; language?: ReportLanguage; recordedAt?: string; device?: string },
+    video: { data: UploadBody; contentType: VideoContentType; language?: ReportLanguage; recordedAt?: string; device?: string; onCreated?: (scan: Scan) => void },
     options: RequestOptions
   ): Promise<Scan> {
     const scan = await this.scans.create(
@@ -790,6 +831,7 @@ export class SpaceContext {
       },
       options
     );
+    video.onCreated?.(scan);
     await this.uploadOrCancel(scan, () => this.uploadVideo(scan, video.data, options));
     return this.startOrCancel(scan, options);
   }
@@ -822,7 +864,7 @@ export class SpaceContext {
   private async scanFromFrames(
     spaceId: string,
     frames: Array<{ data: UploadBody; contentType: FrameContentType; timestampMs?: number | null }>,
-    params: { language?: ReportLanguage; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void },
+    params: { language?: ReportLanguage; transcript?: ScanInput['transcript']; onUpload?: (index: number) => void; onCreated?: (scan: Scan) => void },
     options: RequestOptions
   ): Promise<Scan> {
     if (frames.length === 0) throw new SpaceContextError('At least one frame is required', 0, 'VALIDATION_ERROR', null);
@@ -836,11 +878,12 @@ export class SpaceContext {
       },
       options
     );
+    params.onCreated?.(scan);
     await this.uploadOrCancel(scan, async () => {
       const maxBytes = scan.upload?.max_bytes;
       const oversized = frames.findIndex((frame) => typeof maxBytes === 'number' && byteLength(frame.data) > maxBytes);
       if (oversized !== -1) {
-        throw new SpaceContextError(`Frame ${oversized} is larger than ${maxBytes} bytes`, 413, 'PAYLOAD_TOO_LARGE', null, { index: oversized });
+        throw new SpaceContextError(`Frame ${oversized} is larger than ${maxBytes} bytes`, 0, 'FILE_TOO_LARGE', null, { index: oversized, max_bytes: maxBytes });
       }
       for (const [index, frame] of frames.entries()) {
         params.onUpload?.(index);
@@ -860,19 +903,18 @@ export class SpaceContext {
     }
   }
 
-  private async json<T>(spec: RequestSpec): Promise<T> {
-    const response = await this.send(this.url(spec.path, spec.query), spec);
-    return (await response.json()) as T;
+  private json<T>(spec: RequestSpec): Promise<T> {
+    return this.send(this.url(spec.path, spec.query), spec, async (response) => (await response.json()) as T);
   }
 
-  private async text(spec: RequestSpec): Promise<string> {
-    const response = await this.send(this.url(spec.path, spec.query), spec);
-    return response.text();
+  private text(spec: RequestSpec): Promise<string> {
+    return this.send(this.url(spec.path, spec.query), spec, (response) => response.text());
   }
 
-  private async empty(spec: RequestSpec): Promise<void> {
-    const response = await this.send(this.url(spec.path, spec.query), spec);
-    await response.arrayBuffer();
+  private empty(spec: RequestSpec): Promise<void> {
+    return this.send(this.url(spec.path, spec.query), spec, async (response) => {
+      await response.arrayBuffer();
+    });
   }
 
   private url(path: string, query?: Query): string {
@@ -883,9 +925,21 @@ export class SpaceContext {
     return url.toString();
   }
 
-  private async send(url: string, spec: RequestSpec & { withAuth?: boolean }): Promise<Response> {
+  /**
+   * Sends the request and reads its answer with `read` (the response itself
+   * when not given). Reading is part of the attempt: a body cut short or timed
+   * out is a NETWORK_ERROR or a TIMEOUT like a request that got no answer, and
+   * an idempotent request is sent again.
+   */
+  private async send(url: string, spec: RequestSpec & { withAuth?: boolean }): Promise<Response>;
+  private async send<R>(url: string, spec: RequestSpec & { withAuth?: boolean }, read: (response: Response) => Promise<R>): Promise<R>;
+  private async send<R>(
+    url: string,
+    spec: RequestSpec & { withAuth?: boolean },
+    read: (response: Response) => Promise<R | Response> = async (response) => response
+  ): Promise<R | Response> {
     const headers: Record<string, string> = { Accept: 'application/json', ...spec.headers };
-    if (spec.withAuth !== false && this.isApiUrl(url)) headers.Authorization = `Bearer ${this.apiKey}`;
+    if (spec.withAuth !== false && this.isApiUrl(url)) headers.Authorization = `Bearer ${this.#apiKey}`;
     let body: BodyInit | undefined;
     // A stream is opened anew for each attempt, with its length said: storage
     // refuses an upload without one.
@@ -935,7 +989,24 @@ export class SpaceContext {
         );
       }
 
-      if (response.ok) return response;
+      if (response.ok) {
+        try {
+          return await read(response);
+        } catch (error) {
+          if (spec.signal?.aborted) throw spec.signal.reason;
+          if (spec.idempotent && attempt < this.maxRetries) {
+            await sleep(this.backoff(attempt, null), spec.signal);
+            continue;
+          }
+          const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+          throw new SpaceContextError(
+            timedOut ? 'The answer timed out while it was being read' : `The answer could not be read: ${failure(error)}`,
+            0,
+            timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
+            null
+          );
+        }
+      }
       const error = await errorFromResponse(response);
       // A rate limit was refused before any work: always safe to retry, unless the
       // wait is long (a daily limit). Another 429 (`SCANS_IN_PROGRESS`: ten scans

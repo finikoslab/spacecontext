@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { inspect } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { REPORT_LANGUAGES, SpaceContext, SpaceContextError, VIDEO_CONTENT_TYPES, type Scan } from '../src/index.js';
 
@@ -88,6 +89,42 @@ describe('SpaceContext client', () => {
     expect(new SpaceContext({ apiKey: LIVE, baseUrl: `${BASE}/` }).baseUrl).toBe(BASE);
     expect(() => new SpaceContext({ apiKey: LIVE, baseUrl: 'http://api.example.test/v1' })).toThrow(/https/);
     expect(new SpaceContext({ apiKey: LIVE, baseUrl: 'http://localhost:8787/v1' }).baseUrl).toBe('http://localhost:8787/v1');
+  });
+
+  it('never shows the key when the client is logged or serialised', () => {
+    const sc = client(fakeFetch(() => json({})).fetch);
+    expect(inspect(sc, { depth: 5 })).not.toContain(LIVE);
+    expect(JSON.stringify(sc)).not.toContain(LIVE);
+    expect(Object.values(sc)).not.toContain(LIVE);
+  });
+
+  it('reads an answer as part of the attempt: a body cut short is sent again when safe, else a NETWORK_ERROR', async () => {
+    const cut = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"object":"wal'));
+            controller.error(new TypeError('terminated'));
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    const flaky = fakeFetch((_call, index) => (index === 0 ? cut() : json({ object: 'wallet', balance_cents: 0 })));
+    vi.useFakeTimers();
+    const wallet = client(flaky.fetch, { maxRetries: 1 }).wallet();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await wallet).toMatchObject({ object: 'wallet' });
+    expect(flaky.calls).toHaveLength(2);
+    vi.useRealTimers();
+
+    // Not safe to send twice (a space is created): one request, an error of the client.
+    const once = fakeFetch(() => cut());
+    const error = await client(once.fetch, { maxRetries: 2 })
+      .spaces.create({ name: 'Flat' })
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SpaceContextError);
+    expect(error).toMatchObject({ status: 0, code: 'NETWORK_ERROR' });
+    expect(once.calls).toHaveLength(1);
   });
 
   it('sends the key to the API only, with the query it was given', async () => {
@@ -222,6 +259,32 @@ describe('SpaceContext client', () => {
     expect(calls[2]!.headers.authorization).toBeUndefined();
   });
 
+  it('asks the scan for a fresh storage link when the one it had expired, and only then', async () => {
+    const expired = scan({
+      upload: { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=old', expires_at: '2020-01-01T00:00:00.000Z' } as Scan['upload'],
+    });
+    const renewed = scan({
+      upload: { kind: 'video', method: 'PUT', url: 'https://bucket.r2.example/key?X-Amz-Signature=new', expires_at: '2999-01-01T00:00:00.000Z' } as Scan['upload'],
+    });
+    const { fetch, calls } = fakeFetch((call) => {
+      if (call.method === 'GET') return json(renewed);
+      return call.url.endsWith('=old') ? new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 }) : new Response(null, { status: 200 });
+    });
+    await client(fetch, { maxRetries: 0 }).scans.uploadVideo(expired, new Uint8Array([1, 2, 3, 4]));
+    expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+      'PUT https://bucket.r2.example/key?X-Amz-Signature=old',
+      `GET ${BASE}/scans/${expired.id}`,
+      'PUT https://bucket.r2.example/key?X-Amz-Signature=new',
+    ]);
+    // The key goes to the API's own GET, never to storage.
+    expect(calls[2]!.headers.authorization).toBeUndefined();
+
+    // A link still valid that storage refuses is a real refusal: no new link is asked for.
+    const refused = fakeFetch(() => new Response('<Error/>', { status: 403 }));
+    await expect(client(refused.fetch, { maxRetries: 0 }).scans.uploadVideo(renewed, new Uint8Array([1, 2, 3, 4]))).rejects.toMatchObject({ status: 403 });
+    expect(refused.calls).toHaveLength(1);
+  });
+
   it('sends a stream with its length, opening it again for a retry', async () => {
     let opened = 0;
     const body = {
@@ -254,7 +317,8 @@ describe('SpaceContext client', () => {
     const { fetch, calls } = fakeFetch(() => json({}));
     await expect(client(fetch).scans.uploadVideo(scan(), new Uint8Array(5))).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     const small = scan({ input: { ...scan().input, video: { content_type: 'video/mp4', content_length: 200 } } });
-    await expect(client(fetch).scans.uploadVideo(small, new Uint8Array(200))).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE' });
+    // Refused before anything is sent: status 0, the code the API uses for the same refusal.
+    await expect(client(fetch).scans.uploadVideo(small, new Uint8Array(200))).rejects.toMatchObject({ status: 0, code: 'FILE_TOO_LARGE' });
     await expect(client(fetch).scans.uploadVideo(scan({ upload: null }), new Uint8Array(4))).rejects.toMatchObject({ code: 'INVALID_STATE' });
     expect(calls).toEqual([]);
   });
@@ -318,7 +382,7 @@ describe('SpaceContext client', () => {
         { data: new Uint8Array(4), contentType: 'image/jpeg' },
         { data: new Uint8Array(5), contentType: 'image/jpeg' },
       ])
-    ).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE', details: { index: 1 } });
+    ).rejects.toMatchObject({ status: 0, code: 'FILE_TOO_LARGE', details: { index: 1, max_bytes: 4 } });
     expect(big.calls.map((call) => `${call.method} ${new URL(call.url).pathname}`)).toEqual(['POST /v1/spaces/spc_1/scans', `DELETE /v1/scans/${created.id}`]);
 
     const failing = fakeFetch((call) =>

@@ -112,8 +112,9 @@ export async function startDeviceSignIn(options: Omit<DeviceSignInOptions, 'onCo
 /**
  * Polls a started sign-in until the person decides. Resolves with the key and
  * its account; rejects with `ACCESS_DENIED`, `DEVICE_CODE_EXPIRED` or
- * `DEVICE_CODE_INVALID` as the API answers them. A poll that gets no answer is
- * made again; `NETWORK_ERROR` only once the code has expired.
+ * `DEVICE_CODE_INVALID` as the API answers them. A poll that gets no answer,
+ * or is refused for load (429) or by a failing gateway (5xx), is made again;
+ * those errors only once the code has expired.
  */
 export async function waitForDeviceSignIn(
   started: Pick<DeviceStart, 'device_code' | 'interval' | 'expires_in'>,
@@ -136,6 +137,15 @@ export async function waitForDeviceSignIn(
     }
     if (response.ok) return (await response.json()) as DeviceToken;
     const error = await errorFromResponse(response);
+    // Refused for load (the per-minute limit, which an office's terminals share)
+    // or a gateway failing for a moment: asked again, no sooner than the API says,
+    // until the code expires. Giving up would lose a key the person may approve now.
+    if (response.status === 429 || response.status >= 500) {
+      if (Date.now() >= deadline) throw error;
+      const wait = error.retryAfter ?? (typeof error.details.retry_after === 'number' ? error.details.retry_after : 0);
+      await sleep(Math.min(Math.max(0, wait - interval), 60) * 1000, options.signal);
+      continue;
+    }
     if (error.code === 'AUTHORIZATION_PENDING' || error.code === 'SLOW_DOWN') {
       if (error.code === 'SLOW_DOWN') interval = Math.min(60, interval + 5);
       options.onWaiting?.();

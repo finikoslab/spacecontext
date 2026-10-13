@@ -146,7 +146,17 @@ afterEach(() => {
 describe('parseServerSentEvents', () => {
   it('reads events as they arrive, whatever the chunking and the line endings', async () => {
     const encoder = new TextEncoder();
-    const chunks = ['event: scan\r\nid: 1\r\ndata: {"a":1}\r\n\r\n: a comment\n\ndata: first\ndata: second\n\n', 'event: pi', 'ng\ndata: \n\n', 'data: tail'];
+    // A CR alone ends a line too, also split from the LF of a CRLF across chunks; an
+    // event the stream ends in the middle of ('data: tail') is dropped.
+    const chunks = [
+      'event: scan\r\nid: 1\r\ndata: {"a":1}\r\n\r\n: a comment\n\ndata: first\ndata: second\n\n',
+      'event: pi',
+      'ng\ndata: \n\n',
+      'data: cr\r\r',
+      'data: split\r',
+      '\n\r\n',
+      'data: tail',
+    ];
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
@@ -159,8 +169,28 @@ describe('parseServerSentEvents', () => {
       { event: 'scan', id: '1', data: '{"a":1}' },
       { event: 'message', id: null, data: 'first\nsecond' },
       { event: 'ping', id: null, data: '' },
-      { event: 'message', id: null, data: 'tail' },
+      { event: 'message', id: null, data: 'cr' },
+      { event: 'message', id: null, data: 'split' },
     ]);
+  });
+
+  it('stops reading a stream that never ends an event, instead of buffering it without bound', async () => {
+    const line = new TextEncoder().encode(`data: ${'x'.repeat(64 * 1024)}`);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += 1;
+        controller.enqueue(line);
+      },
+    });
+    const events: unknown[] = [];
+    await expect(
+      (async () => {
+        for await (const event of parseServerSentEvents(body)) events.push(event);
+      })()
+    ).rejects.toThrow('too large');
+    expect(events).toEqual([]);
+    expect(sent).toBeLessThan(40);
   });
 });
 
@@ -215,6 +245,19 @@ describe('scans.events and scans.wait', () => {
     expect((await done).status).toBe('complete');
     expect(calls.map((call) => call.url)).toEqual(Array(3).fill(`${BASE}/scans/${SCAN_ID}/events`));
     expect(seen).toEqual(['queued', 'observing', 'complete']);
+  });
+
+  it('opens the stream again after a garbled event, instead of failing', async () => {
+    vi.useFakeTimers();
+    const garbled = () => {
+      const text = `event: scan\nid: 1\ndata: ${JSON.stringify(scan({ status: 'queued' }))}\n\nevent: scan\nid: 2\ndata: {"object":"sc\n\n`;
+      return new Response(text, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    };
+    const { fetch, calls } = fakeFetch((_call, index) => (index === 0 ? garbled() : sse([scan({ status: 'complete' })])));
+    const done = client(fetch).scans.wait(SCAN_ID);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect((await done).status).toBe('complete');
+    expect(calls).toHaveLength(2);
   });
 
   it("throws the caller's abort instead of opening the stream again", async () => {
@@ -520,6 +563,18 @@ describe('scan() in one call', () => {
     expect(calls.filter((call) => call.url.endsWith(`/scans/${SCAN_ID}`) && call.method === 'GET')).toHaveLength(2);
   });
 
+  it('names the space and the scan when it fails after the scan started, so that nobody pays twice', async () => {
+    const base = flow();
+    const failing = fakeFetch((call, index) =>
+      routeOf(call) === `GET /spaces/${SPACE_ID}` ? apiError(503, 'UNAVAILABLE') : (base.fetch as unknown as (u: string, i: RequestInit) => Promise<Response>)(call.url, { method: call.method, headers: call.headers, body: call.body as BodyInit })
+    );
+    const error = await client(failing.fetch)
+      .scan({ video: new Uint8Array(4), contentType: 'video/mp4' }, { name: 'Flat' })
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SpaceContextError);
+    expect(error).toMatchObject({ status: 503, code: 'UNAVAILABLE', details: { space_id: SPACE_ID, scan_id: SCAN_ID } });
+  });
+
   it('throws the scan error when the scan fails, with the scan attached', async () => {
     const { fetch } = flow({ fail: true });
     const error = await client(fetch)
@@ -615,10 +670,12 @@ describe('scan() in one call', () => {
     const { fetch, calls } = flow({ descriptor: () => descriptor(), upload: throughApi });
     const error = await client(fetch).scan(sizedVideo(150 * MB), { space: SPACE_ID }).catch((caught: unknown) => caught);
     expect(error).toMatchObject({
-      code: 'PAYLOAD_TOO_LARGE',
+      status: 0,
+      code: 'FILE_TOO_LARGE',
       message:
         'The video is 150.0 MB, and this API takes at most 95 MB (99614720 bytes) through itself: it offers no direct upload link to storage, which a bigger video needs. Compress or trim the video',
-      details: { max_bytes: 95 * MB },
+      // The scan existed when the upload was refused: the error names it (it was cancelled).
+      details: { max_bytes: 95 * MB, space_id: SPACE_ID, scan_id: SCAN_ID },
     });
     expect(calls.map(routeOf)).toEqual(['GET ', `POST /spaces/${SPACE_ID}/scans`, `DELETE /scans/${SCAN_ID}`]);
   });
