@@ -1,0 +1,82 @@
+name: Release
+
+# Publishes @spacecontext/sdk and spacecontext to npm with trusted publishing (the
+# workflow's OIDC identity, no npm token stored anywhere) and provenance, then the
+# MCP server's server.json to the official MCP Registry.
+#
+# To release: bump "version" in packages/sdk/package.json, packages/cli/package.json
+# (and its @spacecontext/sdk dependency) and server.json to the same X.Y.Z, merge to
+# main, then push the tag vX.Y.Z from main. The "release" environment can require an
+# approval before anything is published.
+#
+# On npmjs.com each package has a trusted publisher: GitHub Actions, organisation
+# finikoslab, repository spacecontext, workflow release.yml, environment release.
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24 # npm 11.5.1 or later is needed for trusted publishing
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: The tag, the packages and server.json carry the same version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          sdk=$(node -p "require('./packages/sdk/package.json').version")
+          cli=$(node -p "require('./packages/cli/package.json').version")
+          dep=$(node -p "require('./packages/cli/package.json').dependencies['@spacecontext/sdk']")
+          srv=$(node -p "require('./server.json').version")
+          echo "tag $tag, sdk $sdk, cli $cli, cli's sdk $dep, server.json $srv"
+          for v in "$sdk" "$cli" "$dep" "$srv"; do
+            if [ "$v" != "$tag" ]; then echo "::error::every version must be $tag"; exit 1; fi
+          done
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "::error::tag a commit that is the head of main"; exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run check
+
+      - name: Publish @spacecontext/sdk
+        run: |
+          v=$(node -p "require('./packages/sdk/package.json').version")
+          if npm view "@spacecontext/sdk@$v" version >/dev/null 2>&1; then echo "@spacecontext/sdk@$v is already on npm"; else npm publish -w @spacecontext/sdk --provenance --access public; fi
+
+      - name: Publish spacecontext (CLI)
+        run: |
+          v=$(node -p "require('./packages/cli/package.json').version")
+          if npm view "spacecontext@$v" version >/dev/null 2>&1; then echo "spacecontext@$v is already on npm"; else npm publish -w spacecontext --provenance --access public; fi
+
+      - name: Publish server.json to the MCP Registry
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+        run: |
+          v=$(node -p "require('./server.json').version")
+          listed=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=app.spacecontext/spacecontext" \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const d=JSON.parse(s);console.log((d.servers||[]).some(x=>(x.server||x).name==='app.spacecontext/spacecontext'&&(x.server||x).version===process.argv[1])?'yes':'no')})" "$v")
+          if [ "$listed" = yes ]; then echo "app.spacecontext/spacecontext $v is already in the registry"; exit 0; fi
+          # A fixed release of the publisher, not "latest".
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher login dns --domain spacecontext.app --private-key "$MCP_REGISTRY_PRIVATE_KEY"
+          ./mcp-publisher publish
