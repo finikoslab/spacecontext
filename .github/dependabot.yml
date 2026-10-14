@@ -1,0 +1,29 @@
+# Weekly update checks for the workspaces' npm dependencies, the docs site and the
+# GitHub Actions the workflows use. Minor and patch updates come grouped in one pull
+# request per ecosystem; majors come one by one. Security updates are separate and
+# immediate (enable Dependabot alerts and security updates in the repository settings).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
