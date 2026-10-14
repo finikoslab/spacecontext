@@ -1,6 +1,6 @@
 {
   "name": "spacecontext",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Your filmed spaces in Claude: inventory by room, key locations, how-tos, issues and photo evidence. Ask, search and compare scans through the Space Context MCP server (OAuth sign-in; read-only unless you allow scanning).",
   "author": {
     "name": "Space Context",

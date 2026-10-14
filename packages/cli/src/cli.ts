@@ -35,7 +35,7 @@ import { deviceLogin } from './commands/signin.js';
 import type { Runner } from './lib/system.js';
 import { brandLine, closest, duration, plural, printable, safe, size, sizeLimit, spinning, Status, styleFor, table, tildePath, toJson, visibleWidth, type Style } from './terminal/ui.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 
 export type Io = {
   stdout: (text: string) => void;

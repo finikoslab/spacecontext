@@ -2,6 +2,12 @@
 
 All packages of this repository share a version.
 
+## 0.2.1 — 2026-10-15
+
+- The SDK and the CLI are built and published from this repository's GitHub Actions (`release.yml`), with npm provenance: npm shows which commit and workflow built each version. The workflow publishes with trusted publishing, so no npm token is stored anywhere. It only stages a version, and a maintainer makes it public with 2FA. The SDK and the CLI code are the same as in 0.2.0.
+- The MCP server is in the official MCP Registry as `app.spacecontext/spacecontext`, and the release workflow updates that entry too.
+- MCP server: `agents` 0.28.1 with `@modelcontextprotocol/server` 2.3.1, `@cloudflare/workers-oauth-provider` 1.2.3, `zod` 4.6.7.
+
 ## 0.2.0 — 2026-10-10
 
 ### Before the first publish

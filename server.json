@@ -3,7 +3,7 @@
   "name": "app.spacecontext/spacecontext",
   "title": "Space Context",
   "description": "The context layer for the physical world: filmed spaces as cited context for agents.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "websiteUrl": "https://spacecontext.app/developers/",
   "icons": [
     {
