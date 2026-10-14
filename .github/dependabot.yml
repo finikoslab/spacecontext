@@ -10,8 +10,24 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # `agents` pins the exact @modelcontextprotocol/server it is built on (0.28.0 a
+      # dependency on 2.0.0, 0.28.1 a peer on 2.3.1): moved apart, the MCP server ends
+      # up with two copies whose types do not match. They move together.
+      mcp-stack:
+        patterns: ['agents', '@modelcontextprotocol/*']
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # openapi-typescript, which generates the SDK's types, needs TypeScript 5
+      # (TypeScript 7 has no compiler API in JavaScript).
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # @cloudflare/vitest-pool-workers, which runs the MCP server's tests, needs Vitest 4.
+      - dependency-name: vitest
+        update-types: ['version-update:semver-major']
+      # The packages support Node 22.12 and later: the types stay on the oldest one.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: npm
     directory: /docs
     schedule:
