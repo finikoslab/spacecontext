@@ -1,6 +1,6 @@
 {
   "name": "@spacecontext/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "TypeScript client for the Space Context API: spaces, scans, search and questions about physical spaces.",
   "license": "MIT",
   "author": "Finikos S.r.l.",

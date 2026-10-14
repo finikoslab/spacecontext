@@ -105,7 +105,7 @@ describe('help', () => {
     const h = harness([]);
     expect(await main([], h.io)).toBe(2);
     const help = h.stdout();
-    expect(help.split('\n')[0]).toBe('◆ Space Context  CLI 0.2.0');
+    expect(help.split('\n')[0]).toBe('◆ Space Context  CLI 0.2.1');
     for (const group of ['Get started', 'Scan a space', 'Read a space', 'Export', 'Account', 'Examples', 'Options']) expect(help).toContain(`\n${group}\n`);
     for (const [name, command] of Object.entries(COMMAND_HELP)) {
       expect(help).toContain(`  ${name.padEnd(12)}  ${command.summary}\n`);
