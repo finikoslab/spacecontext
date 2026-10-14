@@ -22,16 +22,16 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20261004.1",
-    "wrangler": "^4.147.0"
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "@cloudflare/workers-types": "^5.20261011.1",
+    "wrangler": "^4.149.0"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "^1.2.1",
-    "@modelcontextprotocol/server": "2.0.0",
+    "@cloudflare/workers-oauth-provider": "^1.2.3",
+    "@modelcontextprotocol/server": "2.3.1",
     "@spacecontext/sdk": "0.2.0",
-    "agents": "^0.26.0",
-    "zod": "^4.4.3"
+    "agents": "^0.28.0",
+    "zod": "^4.6.5"
   },
   "keywords": [
     "spacecontext",
